@@ -1,0 +1,425 @@
+"""Test di base: python -m unittest -v"""
+from __future__ import annotations
+
+import copy
+import queue
+import unittest
+from typing import Any
+from datetime import datetime
+from pathlib import Path
+
+from PIL import Image, ImageChops
+
+from dash.config import DEFAULTS, ConfigError, _merge, validate
+from dash.display.base import Display
+from dash.inputs import Event
+from dash.main import App
+from dash.widgets import WIDGET_NAMES
+from dash.widgets.alarm import AlarmWidget
+from dash.widgets.timer import TimerState, TimerWidget
+from dash.widgets.weather import (beaufort, describe, moon_illumination, moon_phase,
+                                  rosa, vento_nome)
+
+
+class FakeClock:
+    def __init__(self) -> None:
+        self.t = 1000.0
+
+    def __call__(self) -> float:
+        return self.t
+
+
+class MemDisplay(Display):
+    def __init__(self, w: int, h: int) -> None:
+        super().__init__(w, h)
+        self.frames: list[Image.Image] = []
+
+    def show(self, img: Image.Image) -> None:
+        self.frames.append(img)
+
+
+def make_cfg(**over: object) -> dict:
+    cfg = copy.deepcopy(DEFAULTS)
+    cfg["weather"]["demo"] = True
+    cfg["pages"] = [
+        {"name": "Home", "widget": "clock"},
+        {"name": "Meteo", "widget": "weather"},
+        {"name": "Timer", "widget": "timer"},
+        {"name": "Sveglia", "widget": "alarm"},
+        {"name": "Sistema", "widget": "system"},
+    ]
+    return _merge(cfg, over)
+
+
+class TestConfig(unittest.TestCase):
+    def test_default_valid(self) -> None:
+        validate(make_cfg(), WIDGET_NAMES)
+
+    def test_unknown_widget(self) -> None:
+        cfg = make_cfg()
+        cfg["pages"][0]["widget"] = "inesistente"
+        with self.assertRaises(ConfigError):
+            validate(cfg, WIDGET_NAMES)
+
+    def test_page_needs_a_name(self) -> None:
+        cfg = make_cfg()
+        cfg["pages"][0]["name"] = " "
+        with self.assertRaises(ConfigError):
+            validate(cfg, WIDGET_NAMES)
+
+    def test_shipped_config_valid(self) -> None:
+        from dash.config import load_config
+        cfg = load_config(Path(__file__).parent.parent / "config.json", WIDGET_NAMES)
+        self.assertEqual(cfg["display"]["driver"], "fb")
+        self.assertEqual([p["name"] for p in cfg["pages"]],
+                         ["Home", "Meteo", "Timer", "Sveglia", "Sistema"])
+
+    def test_bad_alarm(self) -> None:
+        cfg = make_cfg()
+        cfg["alarm"]["alarms"] = [{"time": "25:00"}]
+        with self.assertRaises(ConfigError):
+            validate(cfg, WIDGET_NAMES)
+
+
+class TestTimer(unittest.TestCase):
+    def test_cycle(self) -> None:
+        clk = FakeClock()
+        t = TimerWidget({"presets_s": [60], "step_s": 10}, clock=clk)
+        now = datetime.now()
+        t.on_action(now)
+        self.assertIs(t.state, TimerState.RUNNING)
+        clk.t += 25
+        self.assertEqual(t.shown_remaining(), 40)  # 35 s arrotondati al passo
+        t.on_action(now)
+        self.assertIs(t.state, TimerState.PAUSED)
+        clk.t += 100
+        self.assertAlmostEqual(t.remaining(), 35)
+        t.on_action(now)
+        clk.t += 36
+        t.update(now)
+        self.assertIs(t.state, TimerState.DONE)
+        self.assertIsNotNone(t.alert())
+        t.on_action(now)
+        self.assertIs(t.state, TimerState.IDLE)
+
+    def test_back_cycles_preset(self) -> None:
+        t = TimerWidget({"presets_s": [60, 300]})
+        t.on_back(datetime.now())
+        self.assertEqual(t.duration, 300)
+
+
+class TestAlarm(unittest.TestCase):
+    def test_rings_once(self) -> None:
+        a = AlarmWidget({"alarms": [{"time": "07:00", "days": [2]}]})  # mercoledì
+        wed = datetime(2026, 9, 23, 7, 0, 10)
+        a.update(wed)
+        self.assertIsNotNone(a.alert())
+        a.on_action(wed)
+        self.assertIsNone(a.alert())
+        a.update(wed)  # stesso minuto: non deve risuonare
+        self.assertIsNone(a.alert())
+
+    def test_not_on_other_days(self) -> None:
+        a = AlarmWidget({"alarms": [{"time": "07:00", "days": [0]}]})
+        a.update(datetime(2026, 9, 23, 7, 0))
+        self.assertIsNone(a.alert())
+
+    def test_next_alarm(self) -> None:
+        a = AlarmWidget({"alarms": [{"time": "07:00", "days": [0, 1, 2, 3, 4]}]})
+        nxt = a.next_alarm(datetime(2026, 9, 25, 8, 0))  # venerdì dopo le 7
+        assert nxt is not None
+        self.assertEqual(nxt[1], datetime(2026, 9, 28, 7, 0))  # lunedì
+
+
+class TestLocation(unittest.TestCase):
+    def _loc(self, mode: str, **extra: object) -> Any:
+        from dash.location import Location
+        import tempfile
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        cfg = {"mode": mode, "name": "Ventotene", "lat": 40.796, "lon": 13.436, **extra}
+        return Location(cfg, cache_dir=tmp.name)
+
+    def test_fixed(self) -> None:
+        loc = self._loc("fixed")
+        self.assertFalse(loc.refresh(force=True))
+        self.assertEqual(loc.snapshot(), ("Ventotene", 40.796, 13.436))
+
+    def test_ip_fallback_to_second_service(self) -> None:
+        from unittest import mock
+        import urllib.error
+        from dash import location as L
+        answers = [urllib.error.URLError("giù"),
+                   {"status": "success", "lat": 41.26, "lon": 13.61, "city": "Formia"}]
+
+        def fake(url: str, timeout: float = 10) -> dict:
+            a = answers.pop(0)
+            if isinstance(a, Exception):
+                raise a
+            return a
+        loc = self._loc("ip")
+        with mock.patch.object(L, "_get_json", side_effect=fake):
+            self.assertTrue(loc.refresh(force=True))
+        self.assertEqual(loc.snapshot(), ("Formia", 41.26, 13.61))
+        self.assertTrue(loc.source.startswith("ip:"))
+
+    def test_ip_all_fail_keeps_fixed(self) -> None:
+        from unittest import mock
+        from dash import location as L
+        loc = self._loc("ip")
+        with mock.patch.object(L, "_get_json", return_value={"latitude": "Sign up to access"}):
+            self.assertFalse(loc.refresh(force=True))
+        self.assertEqual(loc.snapshot()[1:], (40.796, 13.436))
+
+    def test_city(self) -> None:
+        from unittest import mock
+        from dash import location as L
+        loc = self._loc("city", city="Gaeta")
+        res = {"results": [{"name": "Gaeta", "latitude": 41.21, "longitude": 13.57}]}
+        with mock.patch.object(L, "_get_json", return_value=res):
+            loc.refresh(force=True)
+        self.assertEqual(loc.snapshot(), ("Gaeta", 41.21, 13.57))
+
+
+class TestClockAndSystem(unittest.TestCase):
+    def test_progress_modes(self) -> None:
+        from dash.location import Location
+        from dash.widgets.clock import ClockWidget
+        loc = Location({"mode": "fixed", "lat": 40.796, "lon": 13.436})
+        noon = datetime(2026, 9, 23, 12, 0)
+        self.assertAlmostEqual(ClockWidget({"progress": "day"}, loc).progress(noon)[1], 0.5)
+        self.assertAlmostEqual(ClockWidget({"progress": "hour"}, loc).progress(
+            datetime(2026, 9, 23, 12, 30))[1], 0.5)
+        _, f = ClockWidget({"progress": "daylight"}, loc).progress(datetime(2026, 9, 23, 3, 0))
+        self.assertEqual(f, 0.0)
+
+    def test_system_widget_samples(self) -> None:
+        from dash.sysinfo import Stats
+        from dash.widgets.system import SystemWidget
+
+        class FakeSampler:
+            def sample(self) -> Stats:
+                return Stats(cpu=0.37, ram_used=2 * 1024 ** 3, ram_total=4 * 1024 ** 3,
+                             disk_used=30 * 1024 ** 3, disk_total=58 * 1024 ** 3,
+                             temp_c=51.2, uptime_s=90061, ip="192.168.1.20")
+        w = SystemWidget({"sample_s": 60, "refresh_s": 60}, sampler=FakeSampler())  # type: ignore[arg-type]
+        w.update(datetime.now())
+        w.close()
+        st, _ = w.snapshot()
+        self.assertAlmostEqual(st.temp_c or 0, 51.2, places=1)
+
+    def test_sampler_real(self) -> None:
+        import time as _t
+        from dash.sysinfo import Sampler
+        s = Sampler()
+        s.sample()
+        _t.sleep(0.2)
+        st = s.sample()
+        self.assertIsNotNone(st.ram_frac)
+        self.assertIsNotNone(st.disk_frac)
+        if st.cpu is not None:
+            self.assertTrue(0.0 <= st.cpu <= 1.0)
+
+
+class TestAstro(unittest.TestCase):
+    def test_sun_times_ventotene(self) -> None:
+        """Riferimenti alpenglowapp.com (Europe/Rome, CEST = UTC+2), tolleranza 2 min."""
+        from datetime import date, timedelta, timezone
+        from dash.astro import _event_utc
+        cest = timezone(timedelta(hours=2))
+        cases = [(date(2026, 8, 5), True, "06:05"), (date(2026, 6, 8), True, "05:34"),
+                 (date(2026, 8, 4), False, "20:18"), (date(2026, 6, 20), False, "20:41")]
+        for d, rising, ref in cases:
+            got = _event_utc(d, 40.796, 13.436, rising)
+            assert got is not None
+            ref_dt = datetime.combine(d, datetime.strptime(ref, "%H:%M").time(), cest)
+            self.assertLessEqual(abs((got - ref_dt).total_seconds()), 120, (d, ref, got.astimezone(cest)))
+
+    def test_polar_night(self) -> None:
+        from datetime import date
+        from dash.astro import sun_times
+        self.assertEqual(sun_times(date(2026, 12, 21), 80.0, 15.0), (None, None))
+
+
+class TestWeatherHelpers(unittest.TestCase):
+    def test_beaufort(self) -> None:
+        self.assertEqual(beaufort(0.4), 0)
+        self.assertEqual(beaufort(14), 4)
+        self.assertEqual(beaufort(35), 8)
+        self.assertEqual(beaufort(70), 12)
+
+    def test_directions(self) -> None:
+        self.assertEqual(rosa(0), "N")
+        self.assertEqual(rosa(315), "NW")
+        self.assertEqual(vento_nome(135), "SCIROCCO")
+        self.assertEqual(vento_nome(225), "LIBECCIO")
+
+    def test_moon(self) -> None:
+        # Luna piena del 7 settembre 2025 (eclissi totale), ~18:09 UTC.
+        from datetime import timezone
+        p = moon_phase(datetime(2025, 9, 7, 18, 9, tzinfo=timezone.utc))
+        self.assertAlmostEqual(p, 0.5, delta=0.03)
+        self.assertGreater(moon_illumination(p), 0.98)
+
+    def test_describe_unknown(self) -> None:
+        self.assertEqual(describe(0)[0], "SERENO")
+        self.assertEqual(describe(1234)[1], "unknown")
+
+
+class TestFramebufferAndTouch(unittest.TestCase):
+    def test_pack_rgb565_and_xrgb(self) -> None:
+        from dash.display.fb import pack
+        img = Image.new("RGB", (2, 1))
+        img.putpixel((0, 0), (255, 0, 0))
+        img.putpixel((1, 0), (0, 0, 255))
+        self.assertEqual(pack(img, 16), bytes([0x00, 0xF8, 0x1F, 0x00]))   # rosso, blu (LE)
+        img2 = Image.new("RGB", (2, 1))
+        img2.putpixel((0, 0), (1, 2, 3))
+        img2.putpixel((1, 0), (4, 5, 6))
+        self.assertEqual(pack(img2, 32), bytes([3, 2, 1, 255, 6, 5, 4, 255]))  # B G R X
+
+    def test_framebuffer_display_writes(self) -> None:
+        import tempfile
+        from unittest import mock
+        from dash.display import fb as FB
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sysd = root / "sys" / "fb1"
+            sysd.mkdir(parents=True)
+            (sysd / "name").write_text("ili9486drmfb\n")
+            (sysd / "virtual_size").write_text("480,320\n")
+            (sysd / "bits_per_pixel").write_text("16\n")
+            (sysd / "stride").write_text("960\n")
+            (root / "dev").mkdir()
+            (root / "dev" / "fb1").write_bytes(bytes(480 * 320 * 2))
+            with mock.patch.object(FB, "SYS_FB", root / "sys"), \
+                    mock.patch.object(FB, "DEV_DIR", root / "dev"):
+                d = FB.FramebufferDisplay("auto", "auto", {"console_off": False})
+                self.assertEqual((d.width, d.height), (480, 320))
+                d.show(Image.new("RGB", (480, 320), (0, 0, 0)))
+                d.close()
+            data = (root / "dev" / "fb1").read_bytes()
+            self.assertEqual(len(data), 480 * 320 * 2)
+            self.assertEqual(set(data), {0})  # schermo nero
+
+    def test_find_touch_device(self) -> None:
+        from dash.inputs import find_touch_device
+        text = ('I: Bus=0000\nN: Name="vc4-hdmi"\nH: Handlers=kbd event0\n\n'
+                'I: Bus=0000\nN: Name="ADS7846 Touchscreen"\nH: Handlers=mouse0 event1\n')
+        self.assertEqual(find_touch_device(text), "/dev/input/event1")
+
+    def test_calibration(self) -> None:
+        from dash.inputs import ABS_X, ABS_Y, TouchCalibration
+        cal = TouchCalibration({"x_min": 200, "x_max": 3900, "invert_y": True},
+                               {ABS_X: (0, 4095), ABS_Y: (0, 4095)})
+        t = cal.map(200, 0)
+        self.assertEqual((t.x, t.y), (0.0, 1.0))
+
+    def _app(self, rotate: int = 0) -> App:
+        cfg = make_cfg(display={"width": 480, "height": 320, "rotate": rotate})
+        return App(cfg, MemDisplay(480, 320), queue.Queue())
+
+    def test_tap_on_content_runs_the_action(self) -> None:
+        """Tocco sul contenuto: avvia il timer; sulla linguetta: cambia pagina."""
+        from dash.inputs import Tap
+        from dash.widgets.timer import TimerState
+        app = self._app()
+        now = datetime(2026, 9, 23, 12, 0)
+        app.page_idx = [p.name for p in app.pages].index("Timer")
+        content = app.renderer.content_inner(app)
+        app.handle_tap(Tap((content.x + content.w / 2) / 480, (content.y + content.h / 2) / 320), now)
+        self.assertIs(app.widgets["timer"].state, TimerState.RUNNING)
+        tab = app.renderer.nav_rows(app)[1]
+        app.handle_tap(Tap((tab.x + tab.w / 2) / 480, (tab.y + tab.h / 2) / 320), now)
+        self.assertEqual(app.page.name, "Meteo")
+
+    def test_tap_rotation_matches_render(self) -> None:
+        """Il tocco nel punto del pannello dove appare un pixel torna allo stesso punto del fotogramma."""
+        for rot in (90, 180, 270):
+            img = Image.new("1", (320, 480), 1)       # fotogramma verticale
+            img.putpixel((40, 100), 0)
+            panel = img.rotate(-rot, expand=True)    # come App.render
+            bbox = ImageChops.invert(panel.convert("L")).getbbox()
+            assert bbox is not None
+            u, v = (bbox[0] + 0.5) / panel.width, (bbox[1] + 0.5) / panel.height
+            fx, fy = {0: (u, v), 90: (v, 1 - u), 180: (1 - u, 1 - v), 270: (1 - v, u)}[rot]
+            self.assertAlmostEqual(fx * 320, 40.5, delta=1.5, msg=f"rot {rot}")
+            self.assertAlmostEqual(fy * 480, 100.5, delta=1.5, msg=f"rot {rot}")
+
+
+class TestPages(unittest.TestCase):
+    """Le pagine sono composte dal renderer: schedario a linguette e pannelli a colori."""
+
+    def _app(self, w: int = 960, h: int = 540) -> App:
+        cfg = make_cfg(display={"width": w, "height": h},
+                       timer={"presets_s": [300], "labels": {"300": "partenza"}},
+                       alarm={"alarms": [{"time": "06:30", "days": [0, 1, 2, 3, 4, 5, 6]}]})
+        return App(cfg, MemDisplay(w, h), queue.Queue())
+
+    def test_every_page_is_drawn_in_colour(self) -> None:
+        for w, h in ((480, 320), (960, 540), (800, 480)):
+            app = self._app(w, h)
+            self.assertEqual([p.widget.name for p in app.pages],
+                             ["clock", "weather", "timer", "alarm", "system"])
+            for i in range(len(app.pages)):
+                app.page_idx = i
+                img = app.render(datetime(2026, 9, 24, 7, 42))
+                self.assertEqual((img.mode, img.size), ("RGB", (w, h)))
+                colours = {c for _, c in (img.resize((80, 45)).getcolors(8192) or [])}
+                self.assertGreater(len(colours), 3, f"pagina {app.page.name} senza pannelli")
+            app.close()
+
+    def test_one_tab_per_page_without_overlap(self) -> None:
+        from dash.inputs import Tap
+        app = self._app()
+        tabs = app.renderer.nav_rows(app)
+        self.assertEqual(len(tabs), len(app.pages))
+        for a, b in zip(tabs, tabs[1:]):
+            self.assertGreaterEqual(b.y, a.bottom - 1)
+        for i in (2, 4, 0):
+            t = tabs[i]
+            app.handle_tap(Tap((t.x + t.w / 2) / 960, (t.y + t.h / 2) / 540),
+                           datetime(2026, 9, 24, 7, 42))
+            self.assertEqual(app.page_idx, i)
+            tabs = app.renderer.nav_rows(app)
+        app.close()
+
+    def test_open_folder_is_attached_to_its_tab(self) -> None:
+        """Il contenuto parte dalla linguetta aperta: niente stacco fra linguetta e cartella."""
+        app = self._app()
+        for i in range(len(app.pages)):
+            app.page_idx = i
+            lay = app.renderer.layout(960, 540, len(app.pages), i)
+            self.assertEqual(lay.content.y, lay.tabs[i].bottom)
+        app.close()
+
+    def test_rotation_keeps_frame_size(self) -> None:
+        cfg = make_cfg(display={"width": 320, "height": 480, "rotate": 90})
+        app = App(cfg, MemDisplay(480, 320), queue.Queue())
+        self.assertEqual(app.render(datetime(2026, 9, 24, 7, 42)).size, (320, 480))
+        app.close()
+
+
+class TestLoop(unittest.TestCase):
+    def test_draws_once_when_nothing_changes(self) -> None:
+        disp = MemDisplay(480, 320)
+        app = App(make_cfg(), disp, queue.Queue())
+        app.run(once=True)
+        app.run(once=True)  # stesso minuto, nessun evento
+        self.assertEqual(len(disp.frames), 1)
+        app.close()
+
+    def test_page_change_redraws(self) -> None:
+        disp = MemDisplay(480, 320)
+        q: queue.Queue[Event] = queue.Queue()
+        app = App(make_cfg(), disp, q)
+        app.run(once=True)
+        q.put(Event.NEXT)
+        app.run(once=True)
+        self.assertEqual(len(disp.frames), 2)
+        self.assertEqual(app.page.name, "Meteo")
+        app.close()
+
+
+if __name__ == "__main__":
+    unittest.main()

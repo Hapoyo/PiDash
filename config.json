@@ -1,0 +1,114 @@
+{
+  "display": {
+    "driver": "fb",
+    "width": "auto",
+    "height": "auto",
+    "rotate": 0,
+    "tick_s": 0.5
+  },
+  "fb": {
+    "device": "auto",
+    "pixel_scale": 1,
+    "console_off": true
+  },
+  "sim": {
+    "out_dir": "out",
+    "scale": 2,
+    "keep_frames": false,
+    "web_host": "0.0.0.0",
+    "web_port": 0
+  },
+  "theme": {
+    "palette": {}
+  },
+  "location": {
+    "mode": "ip",
+    "city": "",
+    "name": "Ventotene",
+    "lat": 40.796,
+    "lon": 13.436,
+    "refresh_h": 6
+  },
+  "weather": {
+    "refresh_min": 30,
+    "cache_dir": "out",
+    "demo": false
+  },
+  "timer": {
+    "presets_s": [
+      300,
+      60,
+      600,
+      900
+    ],
+    "step_s": 1,
+    "labels": {
+      "300": "PARTENZA"
+    }
+  },
+  "alarm": {
+    "ring_max_min": 10,
+    "alarms": [
+      {
+        "time": "07:00",
+        "days": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "enabled": true
+      }
+    ]
+  },
+  "clock": {
+    "progress": "day"
+  },
+  "system": {
+    "sample_s": 2,
+    "refresh_s": 2,
+    "history": 90
+  },
+  "pages": [
+    {
+      "name": "Home",
+      "widget": "clock"
+    },
+    {
+      "name": "Meteo",
+      "widget": "weather"
+    },
+    {
+      "name": "Timer",
+      "widget": "timer"
+    },
+    {
+      "name": "Sveglia",
+      "widget": "alarm"
+    },
+    {
+      "name": "Sistema",
+      "widget": "system"
+    }
+  ],
+  "input": {
+    "keyboard": false,
+    "gpio": null,
+    "buzzer_pin": null,
+    "sound": false,
+    "touch": {
+      "enabled": true,
+      "device": "auto",
+      "swap_xy": false,
+      "invert_x": false,
+      "invert_y": false,
+      "x_min": null,
+      "x_max": null,
+      "y_min": null,
+      "y_max": null,
+      "debounce_s": 0.3,
+      "debug": false
+    }
+  }
+}

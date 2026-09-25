@@ -1,0 +1,91 @@
+# pi-dash — CLAUDE.md
+
+Versione 0.1.0 · 2026-09-25
+
+## 1. Scopo
+Dashboard da tavolo per Raspberry Pi 3 Model B con schermo SPI 3,5" 480×320 (ILI9486 + touch
+XPT2046): orologio, meteo e vento in nodi, timer di partenza regata, sveglia, statistiche del
+sistema. Cinque pagine, una per widget, presentate come le cartelle di uno schedario.
+Unico stile: pannelli arrotondati a colori su fondo scuro, numeri in Space Grotesk,
+microetichette in Space Mono.
+
+## 2. Struttura
+```
+README.md              presentazione per GitHub (anteprime in docs/img/)
+config.json            unica configurazione: display, posizione, pagine, sveglie, touch
+dash/main.py           loop, pagine, eventi, CLI
+dash/config.py         default + validazione (ConfigError)
+dash/cyber.py          tutto il disegno: schedario e una funzione per pagina (immagini RGB)
+dash/layout.py         Box e nomi di giorni/mesi
+dash/location.py       posizione condivisa: "ip" (IP pubblico), "city" (geocoding), "fixed"
+dash/astro.py          alba/tramonto calcolati in locale (NOAA semplificato, ±1–2 min)
+dash/sysinfo.py        CPU/RAM/disco/temperatura/uptime/IP da /proc e /sys
+dash/inputs.py         Event, tastiera (stdin), pulsanti GPIO, touch evdev, cicalino
+dash/display/          base.py, sim.py (PNG + pagina web), fb.py (/dev/fbN)
+dash/widgets/          dati e stato: clock, weather, timer, alarm, system (nessun disegno)
+docs/                  installazione.md (guida passo passo), hardware.md (pin, overlay, alimentazione)
+fonts/                 Space Grotesk, Space Mono (OFL) + licenze
+systemd/pi-dash.service  avvio automatico
+tests/                 unittest
+```
+
+## 3. Comandi
+- Setup sviluppo: `python3 -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt`
+- Simulatore: `python -m dash --demo --web 8080 --driver sim` → `http://localhost:8080`
+- Un fotogramma: `python -m dash --once --demo --driver sim --page 2` → `out/frame.png`
+- Test: `python -m unittest -v`
+- Installazione sul Raspberry: [docs/installazione.md](docs/installazione.md)
+- Calibrazione tocco: `.venv/bin/python -m dash --touch-debug`
+- Comandi: N pagina seguente · A azione (avvia/ferma timer, spegne sveglia) · B indietro/preset
+- Tocco: linguetta → apre quella cartella; contenuto → azione del widget della pagina
+
+## 4. Convenzioni
+- Python ≥ 3.11, type hints, docstring brevi, errori espliciti (nessun `except:` nudo).
+- Sola dipendenza obbligatoria: Pillow. gpiozero solo sul Pi, importato in modo lazy.
+- Testi a video in italiano minuscolo; vento in nodi (kn); temperature in °C; orari 24 h.
+- I widget forniscono **solo dati e stato**: niente disegno. Tutto il disegno sta in `cyber.py`.
+- Nuovo widget: sottoclasse di `Widget`, registrarlo in `widgets/__init__.py` (`WIDGET_NAMES` +
+  `build_widgets`), aggiungere il metodo `_<nome>` in `cyber.py` e la voce nella tabella di
+  `CyberRenderer.render`, più una pagina in `config.json` e un test.
+- Misure: tutto scala con `u = min(w/960, h/540)`; i numeri della stessa serie si dimensionano su
+  una stringa di riferimento (`_panel(ref=...)`), così "7%" e "100%" restano uguali.
+- Ogni widget implementa `state_key()`: se non cambia, il fotogramma non viene ridisegnato.
+- Commit: uno per intervento, messaggi in italiano all'imperativo.
+
+## 5. Vincoli hardware
+Pin, overlay `piscreen`, alimentazione, calibrazione del touch: [docs/hardware.md](docs/hardware.md).
+Leggerlo prima di toccare `display/fb.py` o `inputs.py`.
+
+## 6. Decisioni
+- Schedario: una linguetta numerata per pagina. Le pagine precedenti restano in pila in alto, le
+  successive in pila in basso; la cartella aperta parte dalla propria linguetta. Geometria unica in
+  `CyberRenderer.layout(w, h, n, current)`, usata sia dal disegno sia dal tocco.
+- Home: ora, data, luogo e coordinate, alba/tramonto, barra della giornata, settimana n:X,
+  giorno X/365 (366 negli anni bisestili).
+- Meteo: Open-Meteo (nessuna chiave), `wind_speed_unit=kn`, `timezone=auto`, 2 giorni orari;
+  cache in `out/weather_cache.json`, contatore di versione per il ridisegno. Fase lunare calcolata
+  localmente (mese sinodico medio).
+- Posizione: `location.mode` = `ip` (ipapi.co poi ip-api.com), `city` (geocoding Open-Meteo),
+  `fixed`. `name/lat/lon` fanno da ripiego; cache in `out/location.json`, aggiornata ogni
+  `refresh_h`. Cambio di posizione → dati meteo vecchi scartati.
+- Alba/tramonto della Home: calcolo locale (funziona senza rete), nel fuso del sistema, quindi il
+  Pi deve avere Europe/Rome. La pagina meteo usa i valori Open-Meteo.
+- Timer: etichette per preset `timer.labels` (es. 300 s → "PARTENZA"); B cambia preset.
+- Sistema: campioni ogni `system.sample_s`, storico della CPU su 48 colonne a larghezza fissa.
+- Driver `fb`: scrive nel framebuffer (RGB565 o XRGB8888), niente desktop; trova il pannello per
+  nome del driver (ili9486…). Con `console_off` mette la console in modalità grafica (KDSETMODE,
+  serve CAP_SYS_TTY_CONFIG: già nel servizio). Touch evdev senza dipendenze (`dash/inputs.py`).
+- Con allarme attivo (sveglia/timer) qualsiasi tocco o il tasto A lo spegne, ovunque ci si trovi.
+- Suono: cicalino su GPIO (`input.buzzer_pin`), altrimenti campanella del terminale (`input.sound`).
+- Simulatore web con pulsanti virtuali per sviluppo senza hardware.
+- Da collaudare sull'hardware: overlay e framebuffer, orientamento del touch, pulsanti GPIO, cicalino.
+
+## 7. Glossario
+- **WMO code**: codice meteo standard restituito da Open-Meteo (`weather_code`).
+- **kn**: nodi (1 kn = 1852 m/h ≈ 0,514 m/s).
+- **F (Beaufort)**: forza del vento 0–12, soglie in nodi in `widgets/weather.py`.
+- **Rosa dei venti**: 16 quarte (N…NNW) e 8 venti (Tramontana…Maestrale).
+- **Fase lunare**: 0 = luna nuova, 0,5 = piena; illuminazione in % del disco.
+- **SoC**: System on Chip del Raspberry (temperatura mostrata come "temp").
+- **Partenza**: sequenza di partenza di regata (conto alla rovescia di 5').
+- **Framebuffer**: `/dev/fb1`, memoria dello schermo scritta direttamente, senza desktop.
