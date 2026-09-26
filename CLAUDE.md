@@ -1,6 +1,6 @@
 # pi-dash — CLAUDE.md
 
-Versione 0.3.0 · 2026-09-26
+Versione 0.3.1 · 2026-09-26
 
 ## 1. Scopo
 Dashboard da tavolo per Raspberry Pi 3 Model B con schermo SPI 3,5" 480×320 (ILI9486 + touch
@@ -67,6 +67,8 @@ tests/                 unittest
   (altrimenti `aggiorna.sh` rifiuta l'aggiornamento e torna indietro).
 - Nuove voci di configurazione: default in `DEFAULTS` di `config.py`, così i `config.local.json`
   esistenti restano validi. Mai rendere obbligatoria una voce senza default.
+- I test non devono dipendere dal `config.local.json` della macchina: `aggiorna.sh` li esegue sul
+  Pi, dove quel file esiste ed è diverso. Per provare `config.json` copiarlo in una cartella vuota.
 
 ## 5. Vincoli hardware
 Pin, overlay `piscreen`, alimentazione, calibrazione del touch: [docs/hardware.md](docs/hardware.md).

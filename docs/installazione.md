@@ -1,6 +1,6 @@
 # pi-dash — Installazione
 
-Versione 0.3.0 · 2026-09-26
+Versione 0.3.1 · 2026-09-26
 
 Guida passo passo per chi è nuovo del Raspberry Pi. Si lavora dal PC Windows: il Raspberry non
 ha bisogno di monitor né di tastiera ("headless"). Le parti in `grassetto monospazio` si scrivono
@@ -208,6 +208,14 @@ sempre l'ultima e non si può togliere.
 Le schede elencate sono quelle di `new.tipi` (`timer`, `alarm`). Le pagine fisse — home, meteo,
 sistema — stanno in `pages`: si cambiano dal file, non dal dashboard.
 
+**Se vieni da una versione precedente** e il tuo `config.local.json` contiene `pages`, la scheda
+"+" non compare: quell'elenco sostituisce quello del progetto. Due rimedi, a scelta:
+1. togli tutto il blocco `pages` dal tuo `config.local.json` (`nano ~/pi-dash/config.local.json`):
+   riprendi lo schedario del progetto e aggiungi timer e sveglia dal "+";
+2. oppure aggiungi la scheda in fondo al tuo elenco: `{"name": "+", "widget": "new"}`.
+
+Poi `sudo systemctl restart pi-dash`. Nel log (`journalctl -u pi-dash -n 20`) l'avviso lo ricorda.
+
 ### 5.7 Le tue impostazioni: `config.local.json`
 `config.json` arriva da GitHub e viene sostituito a ogni aggiornamento. Le tue modifiche vanno in
 `config.local.json`, nella stessa cartella: contiene **solo le voci da cambiare** e prevale su
@@ -303,6 +311,7 @@ Se continui a installare dallo zip:
 | Il Raspberry non compare nella rete | rete a 5 GHz (serve 2,4 GHz) o password Wi-Fi errata; prova con il cavo Ethernet e controlla il § 1 |
 | Schermo 3,5" bianco | righe mancanti o scritte male in `config.txt` (§ 5.2) |
 | `aggiorna.sh`: "ci sono file modificati a mano" | l'elenco dice quali; salva le modifiche che ti servono in `config.local.json`, poi `git checkout -- <file>` |
+| Manca la scheda "+" dopo un aggiornamento | il tuo `config.local.json` contiene `pages`: § 5.6, in fondo |
 | `aggiorna.sh`: "test falliti" o "configurazione non valida" | la versione precedente è già ripristinata; manda l'output a chi sviluppa |
 | Schermo acceso ma dashboard assente | `sudo journalctl -u pi-dash -n 50` e leggi l'ultimo errore |
 | Tocco nel punto sbagliato | calibrazione (§ 5.4) |

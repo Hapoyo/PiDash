@@ -3,8 +3,11 @@ from __future__ import annotations
 
 import copy
 import json
+import logging
 from pathlib import Path
 from typing import Any
+
+log = logging.getLogger(__name__)
 
 DEFAULTS: dict[str, Any] = {
     "display": {"driver": "sim", "width": 480, "height": 320, "rotate": 0, "tick_s": 0.5},
@@ -125,4 +128,8 @@ def load_config(path: str | Path, known_widgets: set[str]) -> dict[str, Any]:
     if local.exists():
         cfg = _merge(cfg, _read_json(local))
     validate(cfg, known_widgets)
+    if not any(pg["widget"] == "new" for pg in cfg["pages"]):
+        # senza la scheda "+" non si possono aggiungere timer e sveglia dal dashboard
+        log.warning('nessuna scheda "+" in pages: aggiungi {"name": "+", "widget": "new"} '
+                    "in %s per gestire le schede dallo schermo", local if local.exists() else p)
     return cfg

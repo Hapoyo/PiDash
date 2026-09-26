@@ -71,11 +71,31 @@ class TestConfig(unittest.TestCase):
             validate(cfg, WIDGET_NAMES)
 
     def test_shipped_config_valid(self) -> None:
+        """Il config.json del progetto, letto da solo: il file locale del Pi non deve influire."""
         from dash.config import load_config
-        cfg = load_config(Path(__file__).parent.parent / "config.json", WIDGET_NAMES)
+        shipped = Path(__file__).parent.parent / "config.json"
+        with tempfile.TemporaryDirectory() as tmp:
+            copia = Path(tmp) / "config.json"
+            copia.write_bytes(shipped.read_bytes())
+            cfg = load_config(copia, WIDGET_NAMES)
         self.assertEqual(cfg["display"]["driver"], "fb")
         # timer e sveglia non ci sono: si aggiungono dalla scheda "+"
         self.assertEqual([p["name"] for p in cfg["pages"]], ["Home", "Meteo", "Sistema", "+"])
+
+    def test_local_pages_do_not_break_the_shipped_config(self) -> None:
+        """Uno schedario personale (senza "+") resta valido: solo un avviso nel log."""
+        from dash.config import load_config
+        shipped = Path(__file__).parent.parent / "config.json"
+        with tempfile.TemporaryDirectory() as tmp:
+            copia = Path(tmp) / "config.json"
+            copia.write_bytes(shipped.read_bytes())
+            (Path(tmp) / "config.local.json").write_text(
+                json.dumps({"pages": [{"name": "Home", "widget": "clock"},
+                                      {"name": "Timer", "widget": "timer"}]}), encoding="utf-8")
+            with self.assertLogs("dash.config", "WARNING") as log:
+                cfg = load_config(copia, WIDGET_NAMES)
+        self.assertEqual([p["name"] for p in cfg["pages"]], ["Home", "Timer"])
+        self.assertIn("+", log.output[0])
 
     def test_bad_alarm(self) -> None:
         cfg = make_cfg()

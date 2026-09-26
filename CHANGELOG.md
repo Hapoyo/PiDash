@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.1 — 2026-09-26
+- Corretto: `scripts/aggiorna.sh` falliva sul Raspberry quando `config.local.json` cambiava
+  `pages`, perché il test del `config.json` di progetto leggeva anche le impostazioni locali.
+  Ora quel test usa una copia isolata del file.
+- Chi aggiorna da uno schedario personale senza la scheda "+" trova nel log l'avviso con la riga
+  da aggiungere (`{"name": "+", "widget": "new"}`): senza quella scheda timer e sveglia non si
+  possono aggiungere dallo schermo.
+- 47 test.
+
 ## 0.3.0 — 2026-09-26
 - Schedario componibile: la scheda "+" elenca le schede opzionali (`new.tipi`: timer e sveglia) e
   ogni voce fa da interruttore — aggiunge la scheda se manca, la toglie se c'è. La scelta si salva
