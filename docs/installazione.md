@@ -1,6 +1,6 @@
 # pi-dash — Installazione
 
-Versione 0.1.0 · 2026-09-25
+Versione 0.2.0 · 2026-09-26
 
 Guida passo passo per chi è nuovo del Raspberry Pi. Si lavora dal PC Windows: il Raspberry non
 ha bisogno di monitor né di tastiera ("headless"). Le parti in `grassetto monospazio` si scrivono
@@ -115,10 +115,10 @@ App → Funzionalità facoltative → Aggiungi → **Client OpenSSH**.
 Il Raspberry scarica il progetto da solo, senza passare dal PC. Nel terminale SSH:
 ```
 sudo apt install -y git
-git clone https://github.com/UTENTE/pi-dash.git ~/pi-dash
+git clone https://github.com/Hapoyo/PiDash.git ~/pi-dash
 ls ~/pi-dash
 ```
-Al posto di `UTENTE` il nome del tuo account GitHub. Se il repository è privato, `git clone`
+Il progetto finisce in `~/pi-dash` qualunque sia il nome del repository. Se il repository è privato, `git clone`
 chiede nome utente e **token** (non la password del sito): si crea su GitHub → Settings →
 Developer settings → Personal access tokens.
 

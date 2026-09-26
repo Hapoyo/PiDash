@@ -421,5 +421,20 @@ class TestLoop(unittest.TestCase):
         app.close()
 
 
+class TestScreenshots(unittest.TestCase):
+    def test_one_png_per_page_offline(self) -> None:
+        import tempfile
+        from dash.main import save_screenshots
+        cfg = make_cfg(display={"width": "auto", "height": "auto"}, location={"mode": "ip"})
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = save_screenshots(cfg, Path(tmp))
+            self.assertEqual([p.name for p in paths], ["01-home.png", "02-meteo.png",
+                             "03-timer.png", "04-sveglia.png", "05-sistema.png"])
+            for p in paths:
+                with Image.open(p) as img:
+                    self.assertEqual(img.size, (480, 320))
+        self.assertEqual(cfg["location"]["mode"], "fixed")  # nessuna richiesta di rete
+
+
 if __name__ == "__main__":
     unittest.main()

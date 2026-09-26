@@ -1,6 +1,6 @@
 # pi-dash — CLAUDE.md
 
-Versione 0.1.0 · 2026-09-25
+Versione 0.2.0 · 2026-09-26
 
 ## 1. Scopo
 Dashboard da tavolo per Raspberry Pi 3 Model B con schermo SPI 3,5" 480×320 (ILI9486 + touch
@@ -11,7 +11,7 @@ microetichette in Space Mono.
 
 ## 2. Struttura
 ```
-README.md              presentazione per GitHub (anteprime in docs/img/)
+README.md              presentazione per GitHub (anteprime in docs/img/NN-pagina.png)
 config.json            unica configurazione: display, posizione, pagine, sveglie, touch
 dash/main.py           loop, pagine, eventi, CLI
 dash/config.py         default + validazione (ConfigError)
@@ -33,6 +33,9 @@ tests/                 unittest
 - Setup sviluppo: `python3 -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt`
 - Simulatore: `python -m dash --demo --web 8080 --driver sim` → `http://localhost:8080`
 - Un fotogramma: `python -m dash --once --demo --driver sim --page 2` → `out/frame.png`
+- Anteprime README: `TZ=Europe/Rome python -m dash --screenshots docs/img` → `docs/img/NN-pagina.png`
+  (dati demo, posizione fissa, istante 24/09/2026 07:42, nessuna rete). Rigenerarle quando cambia il disegno.
+- Repository: https://github.com/Hapoyo/PiDash
 - Test: `python -m unittest -v`
 - Installazione sul Raspberry: [docs/installazione.md](docs/installazione.md)
 - Calibrazione tocco: `.venv/bin/python -m dash --touch-debug`

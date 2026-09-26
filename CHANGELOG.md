@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.0 — 2026-09-26
+- README: anteprime di tutte e cinque le pagine (`docs/img/01-home.png` … `05-sistema.png`)
+  al posto dell'unica immagine `docs/img/home.png`.
+- Nuova opzione `--screenshots DIR`: salva un PNG per pagina con dati demo (meteo e sistema),
+  posizione fissa e istante fisso, senza rete; le anteprime restano allineate al codice.
+- Widget sistema: `load_demo()` con statistiche finte per le anteprime.
+- Indirizzo del repository (`Hapoyo/PiDash`) in README e guida di installazione.
+- 36 test.
+
 ## 0.1.0 — 2026-09-25
 Prima pubblicazione.
 
