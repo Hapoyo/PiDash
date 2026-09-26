@@ -9,9 +9,9 @@ Le pagine sono le cartelle di uno schedario: si tocca la linguetta numerata e la
 sotto di essa. Stesso stile ovunque — pannelli arrotondati a colori su fondo scuro, numeri in
 Space Grotesk, microetichette in Space Mono.
 
-Lo schedario si compone a piacere: la scheda **+** aggiunge e toglie pagine dal dashboard, anche
-più copie dello stesso tipo (due timer indipendenti, un secondo orologio). Le pagine scelte si
-salvano in `config.local.json` e tornano al riavvio.
+Lo schedario si compone a piacere: la scheda **+** elenca le schede opzionali — timer e sveglia —
+e ogni voce fa da interruttore: le aggiunge se mancano, le toglie se ci sono. La scelta si salva
+in `config.local.json` e torna al riavvio.
 
 ## 1. Pagine
 | # | Pagina | In partenza | Contenuto |
@@ -21,7 +21,7 @@ salvano in `config.local.json` e tornano al riavvio.
 | 003 | Timer | da aggiungere | conto alla rovescia con preset (5' = sequenza di partenza) |
 | 004 | Sveglia | da aggiungere | prossima sveglia, stato, elenco per giorno della settimana |
 | 005 | Sistema | sì | CPU, RAM, disco, storici di CPU e rete, host, IP, temperatura, uptime |
-| + | Nuova scheda | sì | catalogo: aggiunge o toglie le pagine dello schedario |
+| + | Nuova scheda | sì | elenco delle schede opzionali: le aggiunge o le toglie |
 
 ### 1.1 Anteprime
 | 001 · Home | 002 · Meteo |
@@ -30,7 +30,7 @@ salvano in `config.local.json` e tornano al riavvio.
 | **003 · Timer** | **004 · Sveglia** |
 | ![Timer: conto alla rovescia di partenza con preset](docs/img/03-timer.png) | ![Sveglia: orario, stato e prossima attivazione](docs/img/04-sveglia.png) |
 | **005 · Sistema** | **+ · Nuova scheda** |
-| ![Sistema: CPU, RAM, disco, storici di CPU e rete, host, IP, temperatura, uptime](docs/img/05-sistema.png) | ![Nuova scheda: catalogo delle pagine da aggiungere o togliere](docs/img/06-new.png) |
+| ![Sistema: CPU, RAM, disco, storici di CPU e rete, host, IP, temperatura, uptime](docs/img/05-sistema.png) | ![Nuova scheda: elenco delle schede opzionali, timer e sveglia](docs/img/06-new.png) |
 
 Le anteprime mostrano tutte le pagine, comprese quelle da aggiungere.
 Immagini a 480×320, risoluzione nativa dello schermo, generate dal codice con dati demo:
@@ -72,7 +72,8 @@ precedente. Dettagli e passaggio da un'installazione via zip: guida § 7.
 
 ## 4. Configurazione
 Lo schedario si cambia dalla scheda **+** senza toccare i file: B (o il tocco su una voce) sceglie,
-A (o il tocco sul "+") conferma. Le pagine finiscono in `config.local.json`.
+A (o il tocco sul "+") conferma. Le schede opzionali sono elencate in `new.tipi`; la scelta
+finisce in `config.local.json`.
 
 `config.json` (in Git) contiene i valori del progetto: posizione, sveglie, preset del timer,
 pagine, colori, touch. Le modifiche fatte sul Raspberry vanno in `config.local.json`
@@ -83,7 +84,7 @@ Schedario, voci, calibrazione del tocco e colori: guida § 5.6, § 5.7, § 5.4 e
 ```
 python -m dash --demo --driver sim --web 8080   # simulatore nel browser
 python -m dash --screenshots docs/img           # rigenera le anteprime del README
-python -m unittest -v                           # 45 test
+python -m unittest -v                           # 46 test
 ```
 Regole del progetto e decisioni: [CLAUDE.md](CLAUDE.md). Modifiche: [CHANGELOG.md](CHANGELOG.md).
 

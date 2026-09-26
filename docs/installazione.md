@@ -201,10 +201,12 @@ servono: apri il **+**, scegli la voce e conferma.
 |---|---|
 | tocca una voce per sceglierla, poi il riquadro "+" in alto per confermare | B passa alla voce seguente, A conferma |
 
-Le voci `+ nome` aggiungono una pagina, quelle `− nome` la tolgono. Si possono aggiungere più
-copie dello stesso tipo (due timer indipendenti: "Timer" e "Timer 2"). Lo schedario risultante
-viene salvato in `config.local.json` (§ 5.7) e torna al riavvio; la scheda "+" resta sempre
-l'ultima e non si può togliere.
+La stessa voce fa da interruttore: `+ timer` aggiunge la scheda, `− timer` la toglie. Lo schedario
+risultante viene salvato in `config.local.json` (§ 5.7) e torna al riavvio; la scheda "+" resta
+sempre l'ultima e non si può togliere.
+
+Le schede elencate sono quelle di `new.tipi` (`timer`, `alarm`). Le pagine fisse — home, meteo,
+sistema — stanno in `pages`: si cambiano dal file, non dal dashboard.
 
 ### 5.7 Le tue impostazioni: `config.local.json`
 `config.json` arriva da GitHub e viene sostituito a ogni aggiornamento. Le tue modifiche vanno in

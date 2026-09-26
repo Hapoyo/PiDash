@@ -79,12 +79,15 @@ Leggerlo prima di toccare `display/fb.py` o `inputs.py`.
 - Home: ora, data, luogo e coordinate, alba/tramonto, barra della giornata, settimana n:X,
   giorno X/365 (366 negli anni bisestili), tre anelli concentrici (anno arancio, mese ambra,
   settimana crema) con una sfera in testa all'arco: `ClockWidget.cycles`.
-- Schedario componibile: la scheda "+" (`widgets/new.py`) elenca i tipi da aggiungere e le pagine
-  da togliere; `App.add_page`/`remove_page` creano il widget e salvano `pages` in
-  `config.local.json`. Chiave della pagina `tipo` o `tipo#N`, sempre libera anche dopo una
-  rimozione. La scheda "+" resta ultima e non si può togliere.
-- Meteo: bussola con la direzione **da cui** soffia il vento (uso nautico) e gradi nella riga di
-  dettaglio; `_panel(reserve=...)` libera lo spazio a destra del numero.
+- Schedario componibile: la scheda "+" (`widgets/new.py`) elenca solo i tipi opzionali
+  (`new.tipi`, di norma timer e sveglia); ogni voce fa da interruttore, quindi una sola pagina
+  per tipo. `App.add_page`/`remove_page` creano il widget e salvano `pages` in
+  `config.local.json`; `App.page_kinds()` dice al widget cosa è già presente. Chiave della pagina
+  `tipo` o `tipo#N`, sempre libera anche dopo una rimozione (più copie restano possibili da
+  configurazione). La scheda "+" resta ultima e non si può togliere.
+- Meteo: bussola senza ago — riga dagli estremi arrotondati dal centro verso la direzione **da
+  cui** soffia il vento (uso nautico), gradi nell'etichetta del pannello; `_panel(reserve=...)`
+  libera lo spazio a destra del numero.
 - Rete: byte/s da `/proc/net/dev` (tutte le schede tranne `lo`), differenza fra due campioni;
   il primo campione dopo l'avvio vale None. Storico nel widget sistema, grafico in scala sul picco.
 - Meteo: Open-Meteo (nessuna chiave), `wind_speed_unit=kn`, `timezone=auto`, 2 giorni orari;

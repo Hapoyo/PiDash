@@ -71,6 +71,8 @@ def save_screenshots(cfg: dict[str, Any], out_dir: Path, now: datetime = SHOT_TI
         for widget in app.widgets.values():
             if isinstance(widget, SystemWidget):
                 widget.load_demo()
+            if isinstance(widget, NewWidget):
+                widget.pagine = dict  # anteprima: catalogo nello stato iniziale (tutto da aggiungere)
         for widget in app.widgets.values():
             widget.update(now)
         for i, page in enumerate(app.pages):
@@ -118,16 +120,16 @@ class App:
             key = f"{kind}#{n}"
         page = Page(name, self.factory.make(kind), key, kind)
         if isinstance(page.widget, NewWidget):  # la scheda "+" agisce sullo schedario
-            page.widget.pagine = self.removable
+            page.widget.pagine = self.page_kinds
             page.widget.aggiungi = self.add_page
             page.widget.togli = self.remove_page
         self.pages.insert(len(self.pages) if at is None else at, page)
         self.widgets[key] = page.widget
         return page
 
-    def removable(self) -> list[tuple[str, str]]:
-        """Pagine che la scheda "+" può togliere: tutte tranne sé stessa."""
-        return [(p.key, p.name) for p in self.pages if p.kind != "new"]
+    def page_kinds(self) -> dict[str, str]:
+        """{tipo: chiave} delle pagine presenti, per l'interruttore della scheda "+"."""
+        return {p.kind: p.key for p in self.pages if p.kind != "new"}
 
     def add_page(self, kind: str) -> None:
         """Aggiunge una pagina del tipo indicato prima della scheda "+" e ci si sposta."""

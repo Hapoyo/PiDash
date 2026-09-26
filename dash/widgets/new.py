@@ -1,7 +1,7 @@
-"""Scheda "+": aggiunge e toglie pagine senza modificare i file a mano.
+"""Scheda "+": elenco delle schede che si possono aggiungere (timer, sveglia).
 
-A: esegue la voce scelta (aggiunge o toglie una pagina).  B: passa alla voce seguente.
-Le voci sono costruite a ogni lettura dalle pagine esistenti, che l'app fornisce con i callback.
+Ogni voce fa da interruttore: se la scheda non c'è la aggiunge, se c'è la toglie — quindi una
+sola scheda per tipo. A esegue la voce scelta, B passa alla seguente.
 """
 from __future__ import annotations
 
@@ -20,12 +20,12 @@ ETICHETTE: dict[str, str] = {
     "weather": "Meteo",
     "system": "Sistema",
 }
-ORDINE = ("timer", "alarm", "clock", "weather", "system")
+ORDINE = ("timer", "alarm")  # schede opzionali: le altre pagine stanno in config.json
 
 
 @dataclass(frozen=True)
 class Voce:
-    """Una riga del catalogo: aggiunge un tipo di widget o toglie una pagina esistente."""
+    """Una riga del catalogo: aggiunge il tipo, oppure toglie la pagina già presente."""
     azione: str   # "add" oppure "del"
     valore: str   # tipo di widget ("timer") oppure chiave della pagina da togliere
     label: str
@@ -40,16 +40,16 @@ class NewWidget(Widget):
         tipi = [t for t in cfg.get("tipi") or ORDINE if t in ETICHETTE]
         self.tipi: list[str] = tipi or list(ORDINE)
         self.idx = 0
-        # Impostati da App: elenco delle pagine togglibili e azioni sulle pagine.
-        self.pagine: Callable[[], list[tuple[str, str]]] = list
+        # Impostati da App: pagine presenti ({tipo: chiave}) e azioni sullo schedario.
+        self.pagine: Callable[[], dict[str, str]] = dict
         self.aggiungi: Callable[[str], None] = lambda tipo: None
         self.togli: Callable[[str], None] = lambda chiave: None
 
     def voci(self) -> list[Voce]:
-        """Catalogo: prima i tipi da aggiungere, poi le pagine da togliere."""
-        voci = [Voce("add", t, ETICHETTE[t].lower()) for t in self.tipi]
-        voci += [Voce("del", chiave, nome.lower()) for chiave, nome in self.pagine()]
-        return voci
+        """Una voce per tipo: "aggiungi" se manca, "togli" se la scheda è già nello schedario."""
+        presenti = self.pagine()
+        return [Voce("del", presenti[t], ETICHETTE[t].lower()) if t in presenti
+                else Voce("add", t, ETICHETTE[t].lower()) for t in self.tipi]
 
     def scelta(self) -> Voce | None:
         voci = self.voci()
@@ -75,4 +75,4 @@ class NewWidget(Widget):
         self.idx = 0
 
     def state_key(self, now: datetime) -> Hashable:
-        return (self.idx, tuple(self.pagine()))
+        return (self.idx, tuple(sorted(self.pagine())))

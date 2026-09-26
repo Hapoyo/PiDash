@@ -434,37 +434,37 @@ class TestPageEditing(unittest.TestCase):
         cfg = make_cfg(pages=[{"name": "Home", "widget": "clock"}, {"name": "+", "widget": "new"}])
         return App(cfg, MemDisplay(480, 320), queue.Queue(), config_path=main)
 
-    def test_add_creates_page_before_the_plus_and_saves(self) -> None:
-        now = datetime(2026, 9, 24, 7, 42)
+    def test_catalogue_lists_only_the_optional_cards(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             app = self._app(tmp)
             plus = app.pages[-1].widget
-            plus.on_action(now)                       # prima voce del catalogo: timer
-            self.assertEqual([p.name for p in app.pages], ["Home", "Timer", "+"])
-            self.assertEqual(app.page_idx, 1)         # si apre la pagina appena creata
-            plus.on_action(now)                       # secondo timer, indipendente dal primo
-            self.assertEqual([p.name for p in app.pages], ["Home", "Timer", "Timer 2", "+"])
-            self.assertIsNot(app.pages[1].widget, app.pages[2].widget)
-            saved = json.loads((Path(tmp) / "config.local.json").read_text(encoding="utf-8"))
-            self.assertEqual([p["widget"] for p in saved["pages"]],
-                             ["clock", "timer", "timer", "new"])
+            self.assertEqual([v.label for v in plus.voci()], ["timer", "sveglia"])
+            self.assertEqual({v.azione for v in plus.voci()}, {"add"})
             app.close()
 
-    def test_remove_page_and_keep_the_plus(self) -> None:
+    def test_entry_toggles_add_then_remove_and_saves(self) -> None:
         now = datetime(2026, 9, 24, 7, 42)
         with tempfile.TemporaryDirectory() as tmp:
             app = self._app(tmp)
             plus = app.pages[-1].widget
-            plus.on_action(now)
-            voci = plus.voci()
-            idx = next(i for i, v in enumerate(voci) if v.azione == "del" and v.label == "timer")
-            plus.on_select(idx)
+            plus.on_action(now)                       # prima voce: aggiunge il timer
+            self.assertEqual([p.name for p in app.pages], ["Home", "Timer", "+"])
+            self.assertEqual(app.page_idx, 1)         # si apre la pagina appena creata
+            saved = json.loads((Path(tmp) / "config.local.json").read_text(encoding="utf-8"))
+            self.assertEqual([p["widget"] for p in saved["pages"]], ["clock", "timer", "new"])
+            self.assertEqual(plus.voci()[0].azione, "del")  # ora la stessa voce lo toglie
+            app.page_idx = 2
             plus.on_action(now)
             self.assertEqual([p.name for p in app.pages], ["Home", "+"])
-            self.assertIs(app.page.widget, plus)  # si resta sulla scheda "+"
-            # la scheda "+" non compare fra le voci da togliere: non si può eliminare da sola
-            self.assertNotIn("+", [v.label for v in plus.voci() if v.azione == "del"])
-            plus.togli("new")
+            self.assertIs(app.page.widget, plus)      # si resta sulla scheda "+"
+            saved = json.loads((Path(tmp) / "config.local.json").read_text(encoding="utf-8"))
+            self.assertEqual([p["widget"] for p in saved["pages"]], ["clock", "new"])
+            app.close()
+
+    def test_the_plus_card_cannot_remove_itself(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            app = self._app(tmp)
+            app.pages[-1].widget.togli("new")
             self.assertEqual([p.name for p in app.pages], ["Home", "+"])
             app.close()
 
@@ -475,10 +475,10 @@ class TestPageEditing(unittest.TestCase):
         app.page_idx = 1
         boxes = app.renderer.select_boxes(app)
         self.assertEqual(len(boxes), len(app.pages[-1].widget.voci()))
-        b = boxes[2]
+        b = boxes[1]
         app.handle_tap(Tap((b.x + b.w / 2) / 480, (b.y + b.h / 2) / 320),
                        datetime(2026, 9, 24, 7, 42))
-        self.assertEqual(app.pages[-1].widget.idx, 2)
+        self.assertEqual(app.pages[-1].widget.idx, 1)
         self.assertEqual(len(app.pages), 2)  # il tocco su una voce non crea nulla
         app.close()
 

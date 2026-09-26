@@ -110,10 +110,7 @@
   "new": {
     "tipi": [
       "timer",
-      "alarm",
-      "clock",
-      "weather",
-      "system"
+      "alarm"
     ]
   }
 }

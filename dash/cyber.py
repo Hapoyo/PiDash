@@ -194,17 +194,14 @@ class CyberRenderer:
             a = math.radians(45 * i + 22.5)
             d.line((cx + (r - 2 * u) * math.cos(a), cy + (r - 2 * u) * math.sin(a),
                     cx + r * math.cos(a), cy + r * math.sin(a)), fill=self.c[dim], width=lw)
-        a = math.radians(deg - 90)          # 0° = vento da nord
-        tip = r - 9 * u                     # punta dalla parte da cui viene il vento
-        tail = tip * 0.72
+        # riga dal centro al bordo, verso la parte da cui soffia il vento (0° = da nord)
+        a = math.radians(deg - 90)
+        tip = r - 7 * u
         px, py = cx + tip * math.cos(a), cy + tip * math.sin(a)
-        d.line((cx - tail * math.cos(a), cy - tail * math.sin(a), px, py), fill=self.c[fg],
-               width=max(2, round(3 * u)))
-        head = max(3.0, 5 * u)
-        d.polygon([(px, py),
-                   (px - head * math.cos(a - 0.5), py - head * math.sin(a - 0.5)),
-                   (px - head * math.cos(a + 0.5), py - head * math.sin(a + 0.5))],
-                  fill=self.c[fg])
+        bar = max(4, round(6 * u))
+        d.line((cx, cy, px, py), fill=self.c[fg], width=bar)
+        for ex, ey in ((cx, cy), (px, py)):  # estremi arrotondati come le barre delle altre pagine
+            d.ellipse((ex - bar / 2, ey - bar / 2, ex + bar / 2, ey + bar / 2), fill=self.c[fg])
 
     # --- schedario ---------------------------------------------------------
     def _folder(self, d: ImageDraw.ImageDraw, box: Box, fill: str, outline: str, lw: int,
@@ -366,8 +363,8 @@ class CyberRenderer:
         band_h = right.h - (band_y - right.y) - pad - round(22 * u)  # sopra la riga di dettaglio
         comp = min(band_h, round(right.w * 0.34))
         mostra = comp > round(26 * u)
-        self._panel(d, right, "orange", f"vento {vento_nome(deg).lower()}", f"{kn:.0f} kn",
-                    f"{rosa(deg).lower()} {deg:.0f}° · raf {gust:.0f} · f{beaufort(kn)}", u, r,
+        self._panel(d, right, "orange", f"vento {vento_nome(deg).lower()} {deg:.0f}°", f"{kn:.0f} kn",
+                    f"{rosa(deg).lower()} · raf {gust:.0f} · f{beaufort(kn)}", u, r,
                     reserve=comp + pad if mostra else 0)
         if mostra:
             self._compass(d, Box(right.right - pad - comp, band_y + (band_h - comp) // 2,
@@ -481,14 +478,15 @@ class CyberRenderer:
         self._rows(d, rows, lines, u, key_color="cream")
 
     @staticmethod
-    def chips(box: Box, n: int, u: float, per_row: int = 3) -> list[Box]:
+    def chips(box: Box, n: int, u: float, per_row: int = 0) -> list[Box]:
         """Riquadri del catalogo della scheda "+": stessa geometria per disegno e tocco."""
         if n <= 0:
             return []
+        per_row = per_row or min(3, n)
         g = round(10 * u)
         rows = max(1, -(-n // per_row))
         cw = (box.w - (per_row - 1) * g) / per_row
-        ch = (box.h - (rows - 1) * g) / rows
+        ch = min((box.h - (rows - 1) * g) / rows, 90 * u)  # riquadri alti al massimo come un tasto
         return [Box(round(box.x + (i % per_row) * (cw + g)), round(box.y + (i // per_row) * (ch + g)),
                     round(cw), round(ch)) for i in range(n)]
 
@@ -516,7 +514,7 @@ class CyberRenderer:
         r, pad, g = round(20 * u), max(4, round(11 * u)), round(10 * u)
         top = Box(b.x, b.y, b.w, round(b.h * 0.34))
         d.rounded_rectangle(top.rect, radius=r, fill=self.c["cream"])
-        self._micro(d, (top.x + pad, top.y + pad), "nuova scheda", u, "ink", "la", 12)
+        self._micro(d, (top.x + pad, top.y + pad), "schede da aggiungere", u, "ink", "la", 12)
         self._micro(d, (top.right - pad, top.y + pad),
                     "tocca il + per confermare" if app.touch else "a conferma · b scegli",
                     u, "ink", "ra", 11)
@@ -524,12 +522,17 @@ class CyberRenderer:
                   top.h - 2 * pad - round(14 * u))
         self._big(d, num, "+", "ink", 600, pos=(top.x + pad + num.w / 2, num.bottom), anchor="ms")
         if scelta is not None:
-            azione = "aggiungi" if scelta.azione == "add" else "togli"
+            azione = "aggiungi" if scelta.azione == "add" else "togli"  # la voce fa da interruttore
             f = self._fit(f"{azione} {scelta.label}", "grotesk", 500, top.w - num.w - 3 * pad,
                           num.h * 0.62)
             self._text(d, (top.right - pad, num.bottom), f"{azione} {scelta.label}", f, "ink", "rs")
         grid = self._new_grid(b, u)
-        for i, (voce, cb) in enumerate(zip(voci, self.chips(grid, len(voci), u))):
+        riquadri = self.chips(grid, len(voci), u)
+        if riquadri:  # sotto i riquadri: come funziona l'interruttore
+            self._micro(d, (b.x + b.w / 2, riquadri[-1].bottom + round(14 * u)),
+                        "la stessa voce toglie la scheda quando è già nello schedario",
+                        u, "tan", "ma", 11)
+        for i, (voce, cb) in enumerate(zip(voci, riquadri)):
             active = scelta is not None and i == widget.idx % len(voci)
             togli = voce.azione == "del"
             fill = "pink" if active else "panel"

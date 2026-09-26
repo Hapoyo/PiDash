@@ -18,7 +18,7 @@ DEFAULTS: dict[str, Any] = {
     "timer": {"presets_s": [60, 300, 600], "step_s": 10, "labels": {}},
     "alarm": {"ring_max_min": 10, "alarms": []},
     "pages": [{"name": "Home", "widget": "clock"}],
-    "new": {"tipi": ["timer", "alarm", "clock", "weather", "system"]},
+    "new": {"tipi": ["timer", "alarm"]},
     "fb": {"device": "auto", "pixel_scale": 1, "console_off": True},
     "input": {"keyboard": True, "gpio": None, "buzzer_pin": None, "sound": False,
               "touch": {"enabled": False, "device": "auto", "swap_xy": False, "invert_x": False,
