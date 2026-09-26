@@ -421,6 +421,34 @@ class TestLoop(unittest.TestCase):
         app.close()
 
 
+class TestLocalConfig(unittest.TestCase):
+    def test_local_file_overrides_main(self) -> None:
+        import json
+        import tempfile
+        from dash.config import load_config
+        with tempfile.TemporaryDirectory() as tmp:
+            main = Path(tmp) / "config.json"
+            main.write_text(json.dumps({"location": {"name": "Ventotene", "lat": 40.796}}),
+                            encoding="utf-8")
+            cfg = load_config(main, WIDGET_NAMES)
+            self.assertEqual(cfg["location"]["name"], "Ventotene")
+            (Path(tmp) / "config.local.json").write_text(
+                json.dumps({"location": {"name": "Gaeta"}}), encoding="utf-8")
+            cfg = load_config(main, WIDGET_NAMES)
+            self.assertEqual(cfg["location"]["name"], "Gaeta")
+            self.assertEqual(cfg["location"]["lat"], 40.796)  # le altre voci restano
+
+    def test_invalid_local_file_is_reported(self) -> None:
+        import tempfile
+        from dash.config import load_config
+        with tempfile.TemporaryDirectory() as tmp:
+            main = Path(tmp) / "config.json"
+            main.write_text("{}", encoding="utf-8")
+            (Path(tmp) / "config.local.json").write_text("{sbagliato", encoding="utf-8")
+            with self.assertRaises(ConfigError):
+                load_config(main, WIDGET_NAMES)
+
+
 class TestScreenshots(unittest.TestCase):
     def test_one_png_per_page_offline(self) -> None:
         import tempfile

@@ -7,7 +7,14 @@
   posizione fissa e istante fisso, senza rete; le anteprime restano allineate al codice.
 - Widget sistema: `load_demo()` con statistiche finte per le anteprime.
 - Indirizzo del repository (`Hapoyo/PiDash`) in README e guida di installazione.
-- 36 test.
+- Aggiornamento dal repository: `scripts/aggiorna.sh` scarica, aggiorna le dipendenze, esegue
+  test e verifica della configurazione, riavvia il servizio; se qualcosa fallisce torna alla
+  versione precedente. Guida § 7 riscritta, con passaggio dall'installazione via zip (§ 7.1).
+- Impostazioni del singolo Raspberry in `config.local.json` (fuori da Git, fuse sopra
+  `config.json`): `git pull` non trova più conflitti. Guida § 5.6.
+- `scripts/installa-servizio.sh` sostituisce il `sed` della guida, che trasformava anche
+  `/home/pi/pi-dash` in `/home/<utente>/<utente>-dash` e modificava un file in Git.
+- 38 test.
 
 ## 0.1.0 — 2026-09-25
 Prima pubblicazione.

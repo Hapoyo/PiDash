@@ -54,17 +54,27 @@ cd ~/pi-dash
 python3 -m venv --system-site-packages .venv
 .venv/bin/pip install -r requirements.txt
 .venv/bin/python -m dash --once --demo --driver sim   # prova: scrive out/frame.png
+scripts/installa-servizio.sh && sudo systemctl start pi-dash   # avvio automatico
 ```
 
+### 3.1 Aggiornamento
+```
+~/pi-dash/scripts/aggiorna.sh
+```
+Scarica da GitHub, esegue i test, riavvia il servizio; se qualcosa non va torna alla versione
+precedente. Dettagli e passaggio da un'installazione via zip: guida § 7.
+
 ## 4. Configurazione
-Tutto in `config.json`: posizione, sveglie, preset del timer, pagine, colori, touch.
-Le voci e la calibrazione del tocco sono spiegate nella guida (§ 5.4 e § 9).
+`config.json` (in Git) contiene i valori del progetto: posizione, sveglie, preset del timer,
+pagine, colori, touch. Le modifiche fatte sul Raspberry vanno in `config.local.json`
+(fuori da Git, solo le voci da cambiare): gli aggiornamenti non le toccano.
+Voci, calibrazione del tocco e colori: guida § 5.4, § 5.6 e § 9.
 
 ## 5. Sviluppo senza hardware
 ```
 python -m dash --demo --driver sim --web 8080   # simulatore nel browser
 python -m dash --screenshots docs/img           # rigenera le anteprime del README
-python -m unittest -v                           # 36 test
+python -m unittest -v                           # 38 test
 ```
 Regole del progetto e decisioni: [CLAUDE.md](CLAUDE.md). Modifiche: [CHANGELOG.md](CHANGELOG.md).
 
