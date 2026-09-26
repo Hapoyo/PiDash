@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.1 — 2026-09-26
+- Meteo: al posto della bussola con riga e radar, un anello come quelli della home — arco da
+  nord in senso orario fino alla direzione da cui soffia il vento, sfera in testa, gradi al
+  centro, tacca sul nord. L'etichetta del pannello torna al solo nome del vento.
+- Sistema: tolto il cursore che scorreva sui grafici di CPU e rete.
+- Test resi deterministici: il ciclo si prova con un istante fisso (prima poteva fallire a caso
+  se due giri cadevano a cavallo dei 2 s della pagina sistema, più probabile sul Pi); la GIF si
+  controlla sulla durata totale, perché Pillow unisce i fotogrammi uguali consecutivi.
+
 ## 0.4.0 — 2026-09-26
 - Motion graphics (`dash/motion.py` per i tempi, `CyberRenderer.compose` per il disegno):
   - a evento: sequenza di accensione (sigla, righe di controllo, barra di carico; un tocco la

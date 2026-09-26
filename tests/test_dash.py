@@ -465,10 +465,15 @@ class TestPages(unittest.TestCase):
 
 class TestLoop(unittest.TestCase):
     def test_draws_once_when_nothing_changes(self) -> None:
+        # istante fisso e niente pagina sistema (cambia chiave ogni 2 s di orologio vero):
+        # altrimenti il test dipende da quando gira, e sul Pi lento fallirebbe a caso
         disp = MemDisplay(480, 320)
-        app = App(make_cfg(), disp, queue.Queue())
-        app.run(once=True)
-        app.run(once=True)  # stesso minuto, nessun evento
+        cfg = make_cfg(pages=[{"name": "Home", "widget": "clock"},
+                              {"name": "Meteo", "widget": "weather"}])
+        app = App(cfg, disp, queue.Queue())
+        now = datetime(2026, 9, 24, 7, 42)
+        app.step(now, 0.0, animate=False)
+        app.step(now, 0.5, animate=False)  # stesso minuto, nessun evento
         self.assertEqual(len(disp.frames), 1)
         app.close()
 
@@ -706,8 +711,12 @@ class TestMotion(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = save_animation(make_cfg(), Path(tmp) / "a.gif", fps=4)
             with Image.open(path) as gif:
-                self.assertEqual(gif.n_frames, sum(round(s * 4) for s, _ in ANIM_SCRIPT))
                 self.assertEqual(gif.size, (480, 320))
+                total = 0
+                for i in range(gif.n_frames):  # Pillow unisce i fotogrammi uguali consecutivi
+                    gif.seek(i)
+                    total += gif.info["duration"]
+            self.assertEqual(total, sum(round(s * 4) for s, _ in ANIM_SCRIPT) * 250)
 
 
 class TestLocalConfig(unittest.TestCase):

@@ -216,9 +216,9 @@ class CyberRenderer:
         return f
 
     def _ring(self, d: ImageDraw.ImageDraw, box: Box, frac: float, color: str, lw: int,
-              dot: float) -> None:
+              dot: float, track: str | tuple[int, int, int] = "line", bg: str = "panel") -> None:
         """Anello spento + arco acceso da ore 12 in senso orario, con una sfera in testa."""
-        d.ellipse(box.rect, outline=self.c["line"], width=lw)
+        d.ellipse(box.rect, outline=self._rgb(track), width=lw)
         ang = -90 + 360 * max(0.0, min(1.0, frac))
         if frac > 0:
             d.arc(box.rect, -90, ang, fill=self.c[color], width=lw)
@@ -226,8 +226,7 @@ class CyberRenderer:
         rad = math.radians(ang)
         px, py = cx + (box.w / 2) * math.cos(rad), cy + (box.h / 2) * math.sin(rad)
         d.ellipse((px - dot, py - dot, px + dot, py + dot), fill=self.c[color])
-        self._add_fx("pulse", (px - dot, py - dot, px + dot, py + dot), color, "panel",
-                     phase=frac)
+        self._add_fx("pulse", (px - dot, py - dot, px + dot, py + dot), color, bg, phase=frac)
 
     def _cycles(self, d: ImageDraw.ImageDraw, box: Box, cycles: dict[str, float], u: float) -> None:
         """Tre anelli concentrici con una sfera ciascuno: settimana, mese, anno."""
@@ -252,32 +251,21 @@ class CyberRenderer:
             self._text(d, (x, box.bottom - leg_h), s, f, col, "la")
             x += wdt
 
-    def _compass(self, d: ImageDraw.ImageDraw, box: Box, deg: float, u: float,
-                 fg: str = "ink", dim: str = "paper") -> None:
-        """Rosa dei venti: freccia nella direzione da cui soffia il vento (uso nautico)."""
+    def _wind_ring(self, d: ImageDraw.ImageDraw, box: Box, deg: float, u: float,
+                   color: str = "ink", bg: str = "orange") -> None:
+        """Direzione del vento come gli anelli della home: arco da nord (ore 12) in senso orario
+        fino alla direzione da cui soffia il vento, sfera in testa, gradi al centro."""
         side = min(box.w, box.h)
+        lw = max(2, round(3 * u))
+        dot = max(2.0, 3.2 * u)
+        r = side / 2 - dot
         cx, cy = box.x + box.w / 2, box.y + box.h / 2
-        r = side / 2
-        lw = max(1, round(2 * u))
-        d.ellipse((cx - r, cy - r, cx + r, cy + r), outline=self.c[dim], width=lw)
-        f = font("mono", max(7, round(9 * u)))
-        for i, s in enumerate(("n", "e", "s", "o")):  # quattro punti cardinali
-            a = math.radians(-90 + 90 * i)
-            self._text(d, (cx + (r - 6 * u) * math.cos(a), cy + (r - 6 * u) * math.sin(a)),
-                       s, f, fg if s == "n" else dim, "mm")
-        for i in range(8):  # tacche intermedie
-            a = math.radians(45 * i + 22.5)
-            d.line((cx + (r - 2 * u) * math.cos(a), cy + (r - 2 * u) * math.sin(a),
-                    cx + r * math.cos(a), cy + r * math.sin(a)), fill=self.c[dim], width=lw)
-        self._add_fx("sweep", (cx - r, cy - r, cx + r, cy + r), dim, "orange")
-        # riga dal centro al bordo, verso la parte da cui soffia il vento (0° = da nord)
-        a = math.radians(deg - 90)
-        tip = r - 7 * u
-        px, py = cx + tip * math.cos(a), cy + tip * math.sin(a)
-        bar = max(4, round(6 * u))
-        d.line((cx, cy, px, py), fill=self.c[fg], width=bar)
-        for ex, ey in ((cx, cy), (px, py)):  # estremi arrotondati come le barre delle altre pagine
-            d.ellipse((ex - bar / 2, ey - bar / 2, ex + bar / 2, ey + bar / 2), fill=self.c[fg])
+        ring = Box(round(cx - r), round(cy - r), round(2 * r), round(2 * r))
+        self._ring(d, ring, (deg % 360) / 360, color, lw, dot, self._mix(color, bg, 0.65), bg)
+        d.line((cx, ring.y - lw, cx, ring.y + lw * 2), fill=self.c[color], width=max(1, lw // 2))  # nord
+        testo = f"{deg % 360:.0f}°"
+        f = self._fit("360°", "grotesk", 500, r * 1.25, r * 0.55)
+        self._text(d, (cx, cy + f.size * 0.35), testo, f, color, "ms")
 
     # --- schedario ---------------------------------------------------------
     def _folder(self, d: ImageDraw.ImageDraw, box: Box, fill: str, outline: str, lw: int,
@@ -393,19 +381,6 @@ class CyberRenderer:
             rr = r * (1.4 + 2.2 * k)
             d.ellipse((cx - rr, cy - rr, cx + rr, cy + rr), outline=self._mix(e.color, e.bg, k),
                       width=max(1, round(1.5 * u)))
-        elif e.kind == "sweep":      # radar: raggio che gira con una scia che sfuma
-            cx, cy, r = (x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0) / 2 * 0.86
-            a0 = (t / 4.0 % 1.0) * 360
-            for i, fade in enumerate((0.15, 0.45, 0.7)):
-                a = math.radians(a0 - 90 - i * 9)
-                d.line((cx, cy, cx + r * math.cos(a), cy + r * math.sin(a)),
-                       fill=self._mix(e.color, e.bg, fade), width=max(1, round(1.5 * u)))
-        elif e.kind == "scan":       # cursore verticale che percorre il grafico
-            k = ease_in_out(((t / 3.2) + e.phase) % 1.0)
-            x = x0 + (x1 - x0) * k
-            d.line((x, y0, x, y1), fill=self._mix(e.color, e.bg, 0.35), width=1)
-            dot = max(2, round(3 * u))
-            d.rectangle((x - dot / 2, y0 - dot, x + dot / 2, y0), fill=self.c[e.color])
         elif e.kind == "outline":    # voce scelta della scheda "+"
             r, lw = (e.extra + (8, 2))[:2]
             d.rounded_rectangle(e.box, radius=round(r), outline=self._mix(e.color, e.bg, wave(t, 1.4)),
@@ -591,12 +566,12 @@ class CyberRenderer:
         band_h = right.h - (band_y - right.y) - pad - round(22 * u)  # sopra la riga di dettaglio
         comp = min(band_h, round(right.w * 0.34))
         mostra = comp > round(26 * u)
-        self._panel(d, right, "orange", f"vento {vento_nome(deg).lower()} {deg:.0f}°", f"{kn:.0f} kn",
+        self._panel(d, right, "orange", f"vento {vento_nome(deg).lower()}", f"{kn:.0f} kn",
                     f"{rosa(deg).lower()} · raf {gust:.0f} · f{beaufort(kn)}", u, r,
                     reserve=comp + pad if mostra else 0, slot="weather.vento")
         if mostra:
-            self._compass(d, Box(right.right - pad - comp, band_y + (band_h - comp) // 2,
-                                 comp, comp), deg, u)
+            self._wind_ring(d, Box(right.right - pad - comp, band_y + (band_h - comp) // 2,
+                                   comp, comp), deg, u)
         # riga 2: tre valori
         mid_h = round(b.h * 0.16)
         mid = Box(b.x, top_h + b.y + g, b.w, mid_h)
@@ -830,8 +805,6 @@ class CyberRenderer:
                             width=max(1, round(2 * u)))
         self._micro(d, (box.x + pad, box.y + round(6 * u)), label, u, "tan", "la", 11, lower=False)
         inner = box.inset(pad, round(20 * u))
-        self._add_fx("scan", (inner.x, inner.y, inner.right, inner.bottom), color, "panel",
-                     phase=0.5 if color == "orange" else 0.0)
         slots = 48
         vals = vals[-slots:]
         if not vals or top <= 0 or inner.w <= 0 or inner.h <= 0:

@@ -1,6 +1,6 @@
 # pi-dash
 
-Versione 0.4.0 · 2026-09-26
+Versione 0.4.1 · 2026-09-26
 
 Dashboard da tavolo per Raspberry Pi 3 Model B con schermo SPI 3,5" touch: orologio, meteo e vento
 in nodi, timer di partenza regata, sveglia e statistiche del sistema.
@@ -10,7 +10,7 @@ in nodi, timer di partenza regata, sveglia e statistiche del sistema.
 Le pagine sono le cartelle di uno schedario: si tocca la linguetta numerata e la cartella si apre
 sotto di essa. Stesso stile ovunque — pannelli arrotondati a colori su fondo scuro, numeri in
 Space Grotesk, microetichette in Space Mono — e motion graphics da computer di bordo: sequenza di
-accensione, scansione al cambio pagina, cifre che si decodificano, radar e spie che vivono.
+accensione, scansione al cambio pagina, cifre che si decodificano, aloni e spie che vivono.
 
 Lo schedario si compone a piacere: la scheda **+** elenca le schede opzionali — timer e sveglia —
 e ogni voce fa da interruttore: le aggiunge se mancano, le toglie se ci sono. La scelta si salva
@@ -20,7 +20,7 @@ in `config.local.json` e torna al riavvio.
 | # | Pagina | In partenza | Contenuto |
 |---|---|---|---|
 | 001 | Home | sì | ora, data, luogo e coordinate, alba/tramonto, barra della giornata, anelli di settimana/mese/anno |
-| 002 | Meteo | sì | temperatura, vento con bussola e gradi, raffiche e Beaufort, pioggia, umidità, pressione, previsione oraria, sole e luna |
+| 002 | Meteo | sì | temperatura, vento con anello della direzione e gradi, raffiche e Beaufort, pioggia, umidità, pressione, previsione oraria, sole e luna |
 | 003 | Timer | da aggiungere | conto alla rovescia con preset (5' = sequenza di partenza) |
 | 004 | Sveglia | da aggiungere | prossima sveglia, stato, elenco per giorno della settimana |
 | 005 | Sistema | sì | CPU, RAM, disco, storici di CPU e rete, host, IP, temperatura, uptime |
@@ -29,7 +29,7 @@ in `config.local.json` e torna al riavvio.
 ### 1.1 Anteprime
 | 001 · Home | 002 · Meteo |
 |:---:|:---:|
-| ![Home: ora, data, luogo, alba e tramonto, anelli di settimana, mese e anno](docs/img/01-home.png) | ![Meteo: temperatura, vento in nodi con bussola, pioggia, umidità, pressione, previsione oraria](docs/img/02-meteo.png) |
+| ![Home: ora, data, luogo, alba e tramonto, anelli di settimana, mese e anno](docs/img/01-home.png) | ![Meteo: temperatura, vento in nodi con anello della direzione, pioggia, umidità, pressione, previsione oraria](docs/img/02-meteo.png) |
 | **003 · Timer** | **004 · Sveglia** |
 | ![Timer: conto alla rovescia di partenza con preset](docs/img/03-timer.png) | ![Sveglia: orario, stato e prossima attivazione](docs/img/04-sveglia.png) |
 | **005 · Sistema** | **+ · Nuova scheda** |
@@ -46,9 +46,7 @@ Immagini a 480×320, risoluzione nativa dello schermo, generate dal codice con d
 | Scansione dall'alto con riga arancio | a ogni cambio pagina | eventi |
 | Cifre che scorrono e si fermano da sinistra a destra | numeri grandi che cambiano o all'apertura della pagina | eventi |
 | Due punti che lampeggiano | ora della home, timer in corsa | pieno |
-| Aloni che pulsano attorno alle sfere | anelli della home | pieno |
-| Radar che gira | bussola del vento | pieno |
-| Cursore che percorre i grafici | storici di CPU e rete | pieno |
+| Aloni che pulsano attorno alle sfere | anelli della home e del vento | pieno |
 | Spia accanto al numero della linguetta aperta | tutte le pagine | pieno |
 
 `motion.livello` in `config.local.json`: `"pieno"` (predefinito), `"eventi"` o `"off"`;

@@ -1,6 +1,6 @@
 # pi-dash — CLAUDE.md
 
-Versione 0.4.0 · 2026-09-26
+Versione 0.4.1 · 2026-09-26
 
 ## 1. Scopo
 Dashboard da tavolo per Raspberry Pi 3 Model B con schermo SPI 3,5" 480×320 (ILI9486 + touch
@@ -76,6 +76,8 @@ tests/                 unittest
   esistenti restano validi. Mai rendere obbligatoria una voce senza default.
 - I test non devono dipendere dal `config.local.json` della macchina: `aggiorna.sh` li esegue sul
   Pi, dove quel file esiste ed è diverso. Per provare `config.json` copiarlo in una cartella vuota.
+- I test non devono dipendere dall'orologio vero: `App.step(now, t, animate=...)` con istanti
+  fissi. Un test che fallisce a caso sul Pi blocca gli aggiornamenti.
 
 ## 5. Vincoli hardware
 Pin, overlay `piscreen`, alimentazione, calibrazione del touch: [docs/hardware.md](docs/hardware.md).
@@ -94,9 +96,9 @@ Leggerlo prima di toccare `display/fb.py` o `inputs.py`.
   `config.local.json`; `App.page_kinds()` dice al widget cosa è già presente. Chiave della pagina
   `tipo` o `tipo#N`, sempre libera anche dopo una rimozione (più copie restano possibili da
   configurazione). La scheda "+" resta ultima e non si può togliere.
-- Meteo: bussola senza ago — riga dagli estremi arrotondati dal centro verso la direzione **da
-  cui** soffia il vento (uso nautico), gradi nell'etichetta del pannello; `_panel(reserve=...)`
-  libera lo spazio a destra del numero.
+- Meteo: direzione del vento come anello della home (`_wind_ring` → `_ring`): arco da nord in
+  senso orario fino alla direzione **da cui** soffia il vento (uso nautico), sfera in testa, gradi
+  al centro, tacca sul nord. Niente aghi né radar. `_panel(reserve=...)` libera lo spazio a destra.
 - Rete: byte/s da `/proc/net/dev` (tutte le schede tranne `lo`), differenza fra due campioni;
   il primo campione dopo l'avvio vale None. Storico nel widget sistema, grafico in scala sul picco.
 - Meteo: Open-Meteo (nessuna chiave), `wind_speed_unit=kn`, `timezone=auto`, 2 giorni orari;
