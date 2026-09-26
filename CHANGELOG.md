@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.4.0 — 2026-09-26
+- Motion graphics (`dash/motion.py` per i tempi, `CyberRenderer.compose` per il disegno):
+  - a evento: sequenza di accensione (sigla, righe di controllo, barra di carico; un tocco la
+    salta), scansione dall'alto con riga arancio al cambio pagina, cifre dei numeri grandi che si
+    decodificano quando cambiano o quando si apre la pagina (07:42 → 07:43 muove solo l'ultima);
+  - continui: due punti che lampeggiano, aloni sulle sfere degli anelli, radar sulla bussola,
+    cursore sui grafici di CPU e rete, spia della linguetta aperta.
+- `motion.livello` = `pieno` (predefinito) · `eventi` · `off`, `motion.fps` (predefinito 8),
+  `motion.avvio`; opzione `--motion` da riga di comando.
+- La pagina si disegna una volta come livello base e si ridisegna solo quando cambiano i dati;
+  ogni fotogramma animato aggiunge sopra solo ciò che si muove.
+- Cache dei testi già rasterizzati: disegno di una pagina da 10–31 ms a 1–3 ms (misurato su PC).
+- Framebuffer: si scrivono solo le fasce di righe cambiate, meno traffico sul bus SPI.
+- Simulatore web aggiornato ogni 120 ms, per vedere le animazioni.
+- `--screenshots` salva anche `animazione.gif` per il README.
+- 59 test.
+
 ## 0.3.1 — 2026-09-26
 - Corretto: `scripts/aggiorna.sh` falliva sul Raspberry quando `config.local.json` cambiava
   `pages`, perché il test del `config.json` di progetto leggeva anche le impostazioni locali.

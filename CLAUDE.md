@@ -1,6 +1,6 @@
 # pi-dash — CLAUDE.md
 
-Versione 0.3.1 · 2026-09-26
+Versione 0.4.0 · 2026-09-26
 
 ## 1. Scopo
 Dashboard da tavolo per Raspberry Pi 3 Model B con schermo SPI 3,5" 480×320 (ILI9486 + touch
@@ -16,7 +16,8 @@ config.json            configurazione del progetto: display, posizione, pagine, 
 config.local.json      impostazioni del singolo Pi, fuori da Git, fuse sopra config.json
 dash/main.py           loop, pagine, eventi, CLI
 dash/config.py         default + validazione (ConfigError)
-dash/cyber.py          tutto il disegno: schedario e una funzione per pagina (immagini RGB)
+dash/cyber.py          tutto il disegno: schedario, una funzione per pagina, `compose` animato
+dash/motion.py         tempi delle animazioni: livelli, curve, avvio, scansione, decodifica
 dash/layout.py         Box e nomi di giorni/mesi
 dash/location.py       posizione condivisa: "ip" (IP pubblico), "city" (geocoding), "fixed"
 dash/astro.py          alba/tramonto calcolati in locale (NOAA semplificato, ±1–2 min)
@@ -37,7 +38,9 @@ tests/                 unittest
 - Simulatore: `python -m dash --demo --web 8080 --driver sim` → `http://localhost:8080`
 - Un fotogramma: `python -m dash --once --demo --driver sim --page 2` → `out/frame.png`
 - Anteprime README: `TZ=Europe/Rome python -m dash --screenshots docs/img` → `docs/img/NN-pagina.png`
-  (dati demo, posizione fissa, istante 24/09/2026 07:42, nessuna rete). Rigenerarle quando cambia il disegno.
+  e `docs/img/animazione.gif` (dati demo, posizione fissa, istante 24/09/2026 07:42, nessuna rete).
+  Rigenerarle quando cambia il disegno.
+- Animazioni: `--motion off|eventi|pieno` sovrascrive `motion.livello`.
 - Repository: https://github.com/Hapoyo/PiDash
 - Test: `python -m unittest -v`
 - Installazione sul Raspberry: [docs/installazione.md](docs/installazione.md)
@@ -61,7 +64,11 @@ tests/                 unittest
   (kB/s, °C).
 - Misure: tutto scala con `u = min(w/960, h/540)`; i numeri della stessa serie si dimensionano su
   una stringa di riferimento (`_panel(ref=...)`), così "7%" e "100%" restano uguali.
-- Ogni widget implementa `state_key()`: se non cambia, il fotogramma non viene ridisegnato.
+- Ogni widget implementa `state_key()`: se non cambia, la pagina base non viene ridisegnata.
+- Animazioni: `motion.py` non disegna e non legge l'orologio (riceve `t`); `cyber.py` registra
+  durante `render` i numeri (`_big`/`_panel` con `slot=`) e gli effetti (`_add_fx`), `compose`
+  li anima sopra la base. Un effetto nuovo: tipo in `_draw_fx` + registrazione nella pagina.
+- Testo sempre con `_text` (cache delle maschere): mai `ImageDraw.text` diretto nelle pagine.
 - Commit: uno per intervento, messaggi in italiano all'imperativo.
 - Il Pi si aggiorna da `main`: ciò che arriva su `main` deve passare `python -m unittest`
   (altrimenti `aggiorna.sh` rifiuta l'aggiornamento e torna indietro).
@@ -114,7 +121,13 @@ Leggerlo prima di toccare `display/fb.py` o `inputs.py`.
 - `aggiorna.sh`: file tracciati modificati → blocca (tranne config.json, spostato in
   config.local.json, e il file del servizio, ripristinato); test o config non validi → `git reset
   --hard` al commit precedente.
-- Da collaudare sull'hardware: overlay e framebuffer, orientamento del touch, pulsanti GPIO, cicalino.
+- Motion graphics: pagina base ridisegnata solo se cambia `state_key`; `App.step` compone
+  `motion.fps` fotogrammi al secondo sopra di essa. Budget SPI: 480×320×16 bit ≈ 2,46 Mbit, a
+  18 MHz ≈ 0,14 s per schermo intero → `fb.py` scrive solo le fasce di 16 righe cambiate.
+  Numeri `live` (cpu, timer) si decodificano solo all'apertura della pagina. Con allarme attivo
+  gli effetti continui si fermano. `--once` e `--screenshots` danno fotogrammi fermi.
+- Da collaudare sull'hardware: overlay e framebuffer, orientamento del touch, pulsanti GPIO, cicalino,
+  fluidità delle animazioni e aggiornamento parziale del pannello (damage del driver DRM).
 
 ## 7. Glossario
 - **WMO code**: codice meteo standard restituito da Open-Meteo (`weather_code`).

@@ -1,6 +1,6 @@
 # pi-dash — Note hardware
 
-Versione 0.1.0 · 2026-09-25
+Versione 0.4.0 · 2026-09-26
 
 ## 1. Schermo 3,5" SPI
 | Voce | Dato |
@@ -17,6 +17,24 @@ Versione 0.1.0 · 2026-09-25
 - Immagine capovolta: aggiungere `,rotate=90` alla riga `dtoverlay` (il valore predefinito è 270).
 - Il touch va calibrato una volta: `--touch-debug`, poi `swap_xy`, `invert_x`, `invert_y` e gli
   estremi `x_min`/`x_max`/`y_min`/`y_max` in `config.json` (guida, § 5.4).
+
+### 1.1 Banda del bus SPI e animazioni
+| Voce | Valore |
+|---|---|
+| Schermo intero | 480 × 320 × 16 bit = 2 457 600 bit |
+| Bus SPI (`speed=18000000`) | 18 Mbit/s → ~0,14 s per schermo intero, ~7 fotogrammi/s al massimo |
+| Fascia di 16 righe | 480 × 16 × 16 bit = 122 880 bit → ~7 ms |
+
+- Per questo `dash/display/fb.py` scrive solo le fasce di righe cambiate: gli effetti continui
+  toccano zone piccole e restano fluidi a 8 fotogrammi/s; la scansione al cambio pagina riscrive
+  lo schermo in 3–4 fotogrammi.
+- L'aggiornamento parziale dipende dal driver DRM (`piscreen,drm`), che invia al pannello solo
+  la zona scritta: da verificare sul Pi osservando fluidità e `top` durante le animazioni.
+- Il progetto usa 18 MHz, sotto il valore predefinito dell'overlay `piscreen` (24 MHz,
+  `spi-max-frequency` in `piscreen-overlay.dts`, fonte:
+  [raspberrypi/linux](https://github.com/raspberrypi/linux/blob/rpi-6.12.y/arch/arm/boot/dts/overlays/piscreen-overlay.dts)).
+  A 24 MHz uno schermo intero scende a ~0,10 s (~10 fotogrammi/s). Se si alza `speed`, farlo a
+  passi e controllare che l'immagine resti pulita: in caso di disturbi tornare a 18 MHz.
 
 ## 2. Pulsanti e cicalino (opzionali)
 - Pulsanti verso GND con pull-up interno: `input.gpio` = `{"next": 5, "action": 13, "back": 19}`.

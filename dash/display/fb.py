@@ -2,6 +2,10 @@
 
 Scrive direttamente nel framebuffer, senza desktop grafico: adatto a Raspberry Pi OS Lite.
 Formati supportati: 16 bpp (RGB565) e 32 bpp (XRGB8888).
+
+Scrive solo le fasce di righe cambiate rispetto al fotogramma precedente: sul bus SPI a 18 MHz
+uno schermo intero costa ~0,14 s, una fascia di 16 righe meno di 10 ms. Le animazioni toccano
+zone piccole, quindi restano fluide.
 """
 from __future__ import annotations
 
@@ -58,6 +62,27 @@ def find_panel() -> str:
     return fbs[0]
 
 
+STRIPE = 16  # righe per fascia nel confronto fra fotogrammi
+
+
+def dirty_bands(old: Image.Image, new: Image.Image, stripe: int = STRIPE) -> list[tuple[int, int]]:
+    """Fasce di righe [y0, y1) diverse fra due fotogrammi della stessa misura."""
+    diff = ImageChops.difference(old, new)
+    w, h = new.size
+    bands: list[tuple[int, int]] = []
+    for y in range(0, h, stripe):
+        y1 = min(h, y + stripe)
+        box = diff.crop((0, y, w, y1)).getbbox()
+        if box is None:
+            continue
+        top, bottom = y + box[1], y + box[3]
+        if bands and bands[-1][1] >= y:   # fascia contigua alla precedente: si uniscono
+            bands[-1] = (bands[-1][0], bottom)
+        else:
+            bands.append((top, bottom))
+    return bands
+
+
 def pack(img: Image.Image, bpp: int) -> bytes:
     """Converte un fotogramma RGB nel formato del framebuffer."""
     r, g, b = img.convert("RGB").split()
@@ -87,6 +112,7 @@ class FramebufferDisplay(Display):
         except PermissionError as exc:
             raise RuntimeError(f"{path}: permesso negato (l'utente deve essere nel gruppo 'video')") from exc
         self._tty: int | None = None
+        self._prev: Image.Image | None = None  # ultimo fotogramma scritto, per le fasce cambiate
         if cfg.get("console_off", True):
             self._console(KD_GRAPHICS)
         log.info("framebuffer %s (%s) %d×%d %d bpp, disegno %d×%d",
@@ -110,17 +136,22 @@ class FramebufferDisplay(Display):
     def show(self, img: Image.Image) -> None:
         if img.size != (self.fb_w, self.fb_h):
             img = img.resize((self.fb_w, self.fb_h), Image.Resampling.NEAREST)
-        data = pack(img, self.bpp)
+        img = img.convert("RGB")
+        prev, self._prev = self._prev, img
+        bands = [(0, self.fb_h)] if prev is None else dirty_bands(prev, img)
         row = self.fb_w * self.bpp // 8
         try:
-            if self.stride == row:
-                self._fh.seek(0)
-                self._fh.write(data)
-            else:
-                for y in range(self.fb_h):
-                    self._fh.seek(y * self.stride)
-                    self._fh.write(data[y * row:(y + 1) * row])
+            for y0, y1 in bands:
+                data = pack(img.crop((0, y0, self.fb_w, y1)), self.bpp)
+                if self.stride == row:  # righe contigue in memoria: una sola scrittura
+                    self._fh.seek(y0 * self.stride)
+                    self._fh.write(data)
+                else:
+                    for y in range(y0, y1):
+                        self._fh.seek(y * self.stride)
+                        self._fh.write(data[(y - y0) * row:(y - y0 + 1) * row])
         except OSError as exc:
+            self._prev = None  # al prossimo giro si riscrive tutto
             log.error("scrittura framebuffer fallita: %s", exc)
 
     def close(self) -> None:

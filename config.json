@@ -112,5 +112,10 @@
       "timer",
       "alarm"
     ]
+  },
+  "motion": {
+    "livello": "pieno",
+    "fps": 8,
+    "avvio": true
   }
 }
