@@ -80,16 +80,12 @@
       "widget": "weather"
     },
     {
-      "name": "Timer",
-      "widget": "timer"
-    },
-    {
-      "name": "Sveglia",
-      "widget": "alarm"
-    },
-    {
       "name": "Sistema",
       "widget": "system"
+    },
+    {
+      "name": "+",
+      "widget": "new"
     }
   ],
   "input": {
@@ -110,5 +106,14 @@
       "debounce_s": 0.3,
       "debug": false
     }
+  },
+  "new": {
+    "tipi": [
+      "timer",
+      "alarm",
+      "clock",
+      "weather",
+      "system"
+    ]
   }
 }

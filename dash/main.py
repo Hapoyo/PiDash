@@ -15,10 +15,11 @@ from typing import Any
 from PIL import Image
 
 from . import __version__
-from .config import ConfigError, load_config
+from .config import ConfigError, load_config, save_local
 from .display import Display, make_display
 from .inputs import Buzzer, Event, Tap, start_gpio, start_keyboard, start_touch
-from .widgets import WIDGET_NAMES, Widget, build_widgets
+from .widgets import ETICHETTE, WIDGET_NAMES, Widget, WidgetFactory
+from .widgets.new import NewWidget
 from .widgets.system import SystemWidget
 
 log = logging.getLogger("dash")
@@ -28,6 +29,8 @@ class Page:
     """Una cartella dello schedario: nome sulla linguetta e widget che ne fornisce i dati."""
     name: str
     widget: Widget
+    key: str = ""      # identificatore univoco (es. "timer#2"): più pagine dello stesso tipo
+    kind: str = ""     # tipo di widget della pagina
 
 
 class _MemDisplay(Display):
@@ -38,6 +41,16 @@ class _MemDisplay(Display):
 
 
 SHOT_TIME = datetime(2026, 9, 24, 7, 42)  # istante fisso: anteprime riproducibili
+# Schedario delle anteprime: mostra ogni tipo di pagina, comprese quelle da aggiungere col "+".
+SHOT_PAGES = [{"name": "Home", "widget": "clock"}, {"name": "Meteo", "widget": "weather"},
+              {"name": "Timer", "widget": "timer"}, {"name": "Sveglia", "widget": "alarm"},
+              {"name": "Sistema", "widget": "system"}, {"name": "+", "widget": "new"}]
+
+
+def _slug(page: Page) -> str:
+    """Nome del file dell'anteprima: dal nome della linguetta, o dal tipo se non è scrivibile."""
+    s = "".join(c if c.isalnum() else "-" for c in page.name.lower()).strip("-")
+    return s or page.kind
 
 
 def save_screenshots(cfg: dict[str, Any], out_dir: Path, now: datetime = SHOT_TIME) -> list[Path]:
@@ -47,6 +60,7 @@ def save_screenshots(cfg: dict[str, Any], out_dir: Path, now: datetime = SHOT_TI
     """
     cfg["weather"]["demo"] = True
     cfg["location"]["mode"] = "fixed"
+    cfg["pages"] = [dict(p) for p in SHOT_PAGES]
     d = cfg["display"]
     if "auto" in (d["width"], d["height"]):
         d["width"], d["height"] = 480, 320
@@ -54,14 +68,14 @@ def save_screenshots(cfg: dict[str, Any], out_dir: Path, now: datetime = SHOT_TI
     app = App(cfg, _MemDisplay(d["width"], d["height"]), queue.Queue())
     paths: list[Path] = []
     try:
-        system = app.widgets.get("system")
-        if isinstance(system, SystemWidget):
-            system.load_demo()
+        for widget in app.widgets.values():
+            if isinstance(widget, SystemWidget):
+                widget.load_demo()
         for widget in app.widgets.values():
             widget.update(now)
         for i, page in enumerate(app.pages):
             app.page_idx = i
-            path = out_dir / f"{i + 1:02d}-{page.name.lower()}.png"
+            path = out_dir / f"{i + 1:02d}-{_slug(page)}.png"
             app.renderer.render(app, now).save(path, optimize=True)
             paths.append(path)
     finally:
@@ -72,13 +86,17 @@ def save_screenshots(cfg: dict[str, Any], out_dir: Path, now: datetime = SHOT_TI
 class App:
     """Stato del dashboard e ciclo di aggiornamento."""
 
-    def __init__(self, cfg: dict[str, Any], display: Display, events: queue.Queue[Any]) -> None:
+    def __init__(self, cfg: dict[str, Any], display: Display, events: queue.Queue[Any],
+                 config_path: Path | None = None) -> None:
         self.cfg = cfg
         self.display = display
         self.events = events
-        used = {p["widget"] for p in cfg["pages"]}
-        self.widgets = build_widgets(used, cfg)
-        self.pages = [Page(p["name"], self.widgets[p["widget"]]) for p in cfg["pages"]]
+        self.config_path = config_path  # dove salvare le pagine create dalla scheda "+"
+        self.factory = WidgetFactory(cfg)
+        self.pages: list[Page] = []
+        self.widgets: dict[str, Widget] = {}
+        for p in cfg["pages"]:
+            self._new_page(p["widget"], p["name"])
         self.page_idx = 0
         self.buzzer = Buzzer(cfg["input"].get("buzzer_pin"), bool(cfg["input"].get("sound")))
         self._stop = threading.Event()
@@ -90,6 +108,66 @@ class App:
     @property
     def page(self) -> Page:
         return self.pages[self.page_idx]
+
+    # --- pagine ----------------------------------------------------------
+    def _new_page(self, kind: str, name: str, at: int | None = None) -> Page:
+        """Crea la pagina e il suo widget; `at` la inserisce prima di quella posizione."""
+        key, n = kind, 1
+        while key in self.widgets:  # chiave libera anche dopo aver tolto pagine dello stesso tipo
+            n += 1
+            key = f"{kind}#{n}"
+        page = Page(name, self.factory.make(kind), key, kind)
+        if isinstance(page.widget, NewWidget):  # la scheda "+" agisce sullo schedario
+            page.widget.pagine = self.removable
+            page.widget.aggiungi = self.add_page
+            page.widget.togli = self.remove_page
+        self.pages.insert(len(self.pages) if at is None else at, page)
+        self.widgets[key] = page.widget
+        return page
+
+    def removable(self) -> list[tuple[str, str]]:
+        """Pagine che la scheda "+" può togliere: tutte tranne sé stessa."""
+        return [(p.key, p.name) for p in self.pages if p.kind != "new"]
+
+    def add_page(self, kind: str) -> None:
+        """Aggiunge una pagina del tipo indicato prima della scheda "+" e ci si sposta."""
+        if kind not in WIDGET_NAMES or kind == "new":
+            log.warning("tipo di pagina sconosciuto: %s", kind)
+            return
+        base = ETICHETTE.get(kind, kind.capitalize())
+        nomi = {p.name for p in self.pages}
+        name, n = base, 1
+        while name in nomi:
+            n += 1
+            name = f"{base} {n}"
+        at = next((i for i, p in enumerate(self.pages) if p.kind == "new"), len(self.pages))
+        self._new_page(kind, name, at)
+        self.page_idx = at
+        self._save_pages()
+
+    def remove_page(self, key: str) -> None:
+        """Toglie una pagina creata in precedenza; l'ultima rimasta non si può togliere."""
+        idx = next((i for i, p in enumerate(self.pages) if p.key == key), None)
+        if idx is None or len(self.pages) <= 1 or self.pages[idx].kind == "new":
+            return
+        corrente = self.page
+        page = self.pages.pop(idx)
+        self.widgets.pop(page.key, None)
+        page.widget.close()
+        # si resta sulla pagina aperta (di norma la scheda "+"), non su quella che ha preso il suo posto
+        self.page_idx = next((i for i, p in enumerate(self.pages) if p is corrente),
+                             min(self.page_idx, len(self.pages) - 1))
+        self._save_pages()
+
+    def _save_pages(self) -> None:
+        """Salva lo schedario in config.local.json, così sopravvive al riavvio."""
+        self.cfg["pages"] = [{"name": p.name, "widget": p.kind} for p in self.pages]
+        if self.config_path is None:
+            return
+        try:
+            save_local(self.config_path, {"pages": self.cfg["pages"]})
+        except OSError as exc:
+            log.error("pagine non salvate: %s", exc)
 
     # --- eventi ----------------------------------------------------------
     def alerting(self) -> tuple[Widget, str] | None:
@@ -139,6 +217,10 @@ class App:
             if b.x <= px < b.right and b.y <= py < b.bottom:
                 self._goto(i)
                 return
+        for i, b in enumerate(self.renderer.select_boxes(self)):  # voci della scheda "+"
+            if b.x <= px < b.right and b.y <= py < b.bottom:
+                self.page.widget.on_select(i)
+                return
         if self.page.widget.has_action:
             self.page.widget.on_action(now)
 
@@ -170,7 +252,8 @@ class App:
                 widget.update(now)
             alert = self.alerting()
             self.buzzer.set(alert is not None)
-            key = (self.page_idx, now.strftime("%Y%m%d%H%M"), alert[1] if alert else None,
+            key = (self.page_idx, tuple(self.widgets), now.strftime("%Y%m%d%H%M"),
+                   alert[1] if alert else None,
                    tuple(w.state_key(now) for w in self.widgets.values()))
             if key != self._last_key:      # ridisegna solo quando qualcosa è cambiato
                 self.display.show(self.render(now))
@@ -239,8 +322,9 @@ def main(argv: list[str] | None = None) -> int:
         cfg["sim"]["web_port"] = 0
         if cfg["display"]["driver"] == "fb":
             cfg["display"]["driver"] = "sim"
-            if "auto" in (cfg["display"]["width"], cfg["display"]["height"]):
-                cfg["display"]["width"], cfg["display"]["height"] = (480, 320)
+    d = cfg["display"]
+    if d["driver"] != "fb" and "auto" in (d["width"], d["height"]):
+        d["width"], d["height"] = 480, 320  # 'auto' lo risolve solo il framebuffer
 
     events: queue.Queue[Any] = queue.Queue()
     try:
@@ -248,7 +332,7 @@ def main(argv: list[str] | None = None) -> int:
     except (RuntimeError, ValueError, OSError) as exc:
         log.error("display: %s", exc)
         return 3
-    app = App(cfg, display, events)
+    app = App(cfg, display, events, config_path=args.config)
     app.page_idx = max(0, min(len(app.pages) - 1, args.page - 1))
 
     if not args.once:

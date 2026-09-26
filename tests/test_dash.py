@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import copy
+import json
 import queue
+import tempfile
 import unittest
 from typing import Any
 from datetime import datetime
@@ -12,7 +14,7 @@ from PIL import Image, ImageChops
 
 from dash.config import DEFAULTS, ConfigError, _merge, validate
 from dash.display.base import Display
-from dash.inputs import Event
+from dash.inputs import Event, Tap
 from dash.main import App
 from dash.widgets import WIDGET_NAMES
 from dash.widgets.alarm import AlarmWidget
@@ -47,6 +49,7 @@ def make_cfg(**over: object) -> dict:
         {"name": "Timer", "widget": "timer"},
         {"name": "Sveglia", "widget": "alarm"},
         {"name": "Sistema", "widget": "system"},
+        {"name": "+", "widget": "new"},
     ]
     return _merge(cfg, over)
 
@@ -71,8 +74,8 @@ class TestConfig(unittest.TestCase):
         from dash.config import load_config
         cfg = load_config(Path(__file__).parent.parent / "config.json", WIDGET_NAMES)
         self.assertEqual(cfg["display"]["driver"], "fb")
-        self.assertEqual([p["name"] for p in cfg["pages"]],
-                         ["Home", "Meteo", "Timer", "Sveglia", "Sistema"])
+        # timer e sveglia non ci sono: si aggiungono dalla scheda "+"
+        self.assertEqual([p["name"] for p in cfg["pages"]], ["Home", "Meteo", "Sistema", "+"])
 
     def test_bad_alarm(self) -> None:
         cfg = make_cfg()
@@ -360,7 +363,7 @@ class TestPages(unittest.TestCase):
         for w, h in ((480, 320), (960, 540), (800, 480)):
             app = self._app(w, h)
             self.assertEqual([p.widget.name for p in app.pages],
-                             ["clock", "weather", "timer", "alarm", "system"])
+                             ["clock", "weather", "timer", "alarm", "system", "new"])
             for i in range(len(app.pages)):
                 app.page_idx = i
                 img = app.render(datetime(2026, 9, 24, 7, 42))
@@ -421,10 +424,107 @@ class TestLoop(unittest.TestCase):
         app.close()
 
 
+class TestPageEditing(unittest.TestCase):
+    """Scheda "+": aggiunge e toglie pagine, e le salva in config.local.json."""
+
+    def _app(self, tmp: str) -> App:
+        main = Path(tmp) / "config.json"
+        main.write_text(json.dumps({"pages": [{"name": "Home", "widget": "clock"},
+                                              {"name": "+", "widget": "new"}]}), encoding="utf-8")
+        cfg = make_cfg(pages=[{"name": "Home", "widget": "clock"}, {"name": "+", "widget": "new"}])
+        return App(cfg, MemDisplay(480, 320), queue.Queue(), config_path=main)
+
+    def test_add_creates_page_before_the_plus_and_saves(self) -> None:
+        now = datetime(2026, 9, 24, 7, 42)
+        with tempfile.TemporaryDirectory() as tmp:
+            app = self._app(tmp)
+            plus = app.pages[-1].widget
+            plus.on_action(now)                       # prima voce del catalogo: timer
+            self.assertEqual([p.name for p in app.pages], ["Home", "Timer", "+"])
+            self.assertEqual(app.page_idx, 1)         # si apre la pagina appena creata
+            plus.on_action(now)                       # secondo timer, indipendente dal primo
+            self.assertEqual([p.name for p in app.pages], ["Home", "Timer", "Timer 2", "+"])
+            self.assertIsNot(app.pages[1].widget, app.pages[2].widget)
+            saved = json.loads((Path(tmp) / "config.local.json").read_text(encoding="utf-8"))
+            self.assertEqual([p["widget"] for p in saved["pages"]],
+                             ["clock", "timer", "timer", "new"])
+            app.close()
+
+    def test_remove_page_and_keep_the_plus(self) -> None:
+        now = datetime(2026, 9, 24, 7, 42)
+        with tempfile.TemporaryDirectory() as tmp:
+            app = self._app(tmp)
+            plus = app.pages[-1].widget
+            plus.on_action(now)
+            voci = plus.voci()
+            idx = next(i for i, v in enumerate(voci) if v.azione == "del" and v.label == "timer")
+            plus.on_select(idx)
+            plus.on_action(now)
+            self.assertEqual([p.name for p in app.pages], ["Home", "+"])
+            self.assertIs(app.page.widget, plus)  # si resta sulla scheda "+"
+            # la scheda "+" non compare fra le voci da togliere: non si può eliminare da sola
+            self.assertNotIn("+", [v.label for v in plus.voci() if v.azione == "del"])
+            plus.togli("new")
+            self.assertEqual([p.name for p in app.pages], ["Home", "+"])
+            app.close()
+
+    def test_tap_on_a_chip_selects_it(self) -> None:
+        app = App(make_cfg(pages=[{"name": "Home", "widget": "clock"},
+                                  {"name": "+", "widget": "new"}]),
+                  MemDisplay(480, 320), queue.Queue())
+        app.page_idx = 1
+        boxes = app.renderer.select_boxes(app)
+        self.assertEqual(len(boxes), len(app.pages[-1].widget.voci()))
+        b = boxes[2]
+        app.handle_tap(Tap((b.x + b.w / 2) / 480, (b.y + b.h / 2) / 320),
+                       datetime(2026, 9, 24, 7, 42))
+        self.assertEqual(app.pages[-1].widget.idx, 2)
+        self.assertEqual(len(app.pages), 2)  # il tocco su una voce non crea nulla
+        app.close()
+
+
+class TestCli(unittest.TestCase):
+    def test_sim_driver_resolves_auto_size(self) -> None:
+        """`--driver sim` su una configurazione da Raspberry ('auto'): niente crash."""
+        from dash.main import main
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = Path(tmp) / "config.json"
+            cfg.write_text(json.dumps({"display": {"driver": "fb", "width": "auto",
+                                                   "height": "auto"},
+                                       "sim": {"out_dir": tmp},
+                                       "pages": [{"name": "Home", "widget": "clock"}]}),
+                           encoding="utf-8")
+            self.assertEqual(main(["-c", str(cfg), "--once", "--demo", "--driver", "sim"]), 0)
+            self.assertTrue((Path(tmp) / "frame.png").exists())
+
+
+class TestNetAndCycles(unittest.TestCase):
+    def test_rate_str(self) -> None:
+        from dash.widgets.system import rate_str
+        self.assertEqual([rate_str(v) for v in (None, 0, 1500, 2_500_000)],
+                         ["--", "0 B/s", "2 kB/s", "2.5 MB/s"])
+
+    def test_net_rate_needs_two_samples(self) -> None:
+        from dash.sysinfo import Sampler
+        s = Sampler()
+        self.assertIsNone(s.sample().net_rx)  # primo campione: nessuna differenza disponibile
+        st = s.sample()
+        if st.net_rx is not None:             # su /proc assente resta None
+            self.assertGreaterEqual(st.net_rx, 0.0)
+            self.assertEqual(st.net_total, st.net_rx + (st.net_tx or 0))
+
+    def test_cycles_are_fractions(self) -> None:
+        from dash.widgets.clock import ClockWidget
+        c = ClockWidget.cycles(datetime(2026, 12, 31, 23, 59))
+        self.assertAlmostEqual(c["anno"], 1.0, places=2)
+        self.assertAlmostEqual(c["mese"], 1.0, places=2)
+        capodanno = ClockWidget.cycles(datetime(2026, 1, 1, 0, 0))
+        self.assertEqual((capodanno["anno"], capodanno["mese"]), (0.0, 0.0))
+        self.assertAlmostEqual(capodanno["settimana"], 3 / 7)  # 1/1/2026 è giovedì
+
+
 class TestLocalConfig(unittest.TestCase):
     def test_local_file_overrides_main(self) -> None:
-        import json
-        import tempfile
         from dash.config import load_config
         with tempfile.TemporaryDirectory() as tmp:
             main = Path(tmp) / "config.json"
@@ -439,7 +539,6 @@ class TestLocalConfig(unittest.TestCase):
             self.assertEqual(cfg["location"]["lat"], 40.796)  # le altre voci restano
 
     def test_invalid_local_file_is_reported(self) -> None:
-        import tempfile
         from dash.config import load_config
         with tempfile.TemporaryDirectory() as tmp:
             main = Path(tmp) / "config.json"
@@ -451,13 +550,12 @@ class TestLocalConfig(unittest.TestCase):
 
 class TestScreenshots(unittest.TestCase):
     def test_one_png_per_page_offline(self) -> None:
-        import tempfile
         from dash.main import save_screenshots
         cfg = make_cfg(display={"width": "auto", "height": "auto"}, location={"mode": "ip"})
         with tempfile.TemporaryDirectory() as tmp:
             paths = save_screenshots(cfg, Path(tmp))
             self.assertEqual([p.name for p in paths], ["01-home.png", "02-meteo.png",
-                             "03-timer.png", "04-sveglia.png", "05-sistema.png"])
+                             "03-timer.png", "04-sveglia.png", "05-sistema.png", "06-new.png"])
             for p in paths:
                 with Image.open(p) as img:
                     self.assertEqual(img.size, (480, 320))

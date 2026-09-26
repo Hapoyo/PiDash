@@ -21,6 +21,8 @@ class Stats:
     disk_used: int | None = None
     disk_total: int | None = None
     temp_c: float | None = None          # temperatura SoC/CPU
+    net_rx: float | None = None          # byte/s in ingresso (tutte le schede tranne lo)
+    net_tx: float | None = None          # byte/s in uscita
     uptime_s: float | None = None
     host: str = field(default_factory=platform.node)
     ip: str | None = None
@@ -28,6 +30,13 @@ class Stats:
     @property
     def ram_frac(self) -> float | None:
         return self.ram_used / self.ram_total if self.ram_used is not None and self.ram_total else None
+
+    @property
+    def net_total(self) -> float | None:
+        """Traffico complessivo in byte/s, None se non misurabile."""
+        if self.net_rx is None or self.net_tx is None:
+            return None
+        return self.net_rx + self.net_tx
 
     @property
     def disk_frac(self) -> float | None:
@@ -56,6 +65,7 @@ class Sampler:
 
     def __init__(self) -> None:
         self._prev_cpu: tuple[float, float] | None = None  # (occupato, totale)
+        self._prev_net: tuple[float, int, int] | None = None  # (istante, rx, tx)
         self._disk_root = Path.home().anchor or "/"
         self._ip: str | None = None
         self._ip_at = 0.0
@@ -77,9 +87,39 @@ class Sampler:
             return None
         return max(0.0, min(1.0, (cur[0] - prev[0]) / (cur[1] - prev[1])))
 
+    # --- rete -------------------------------------------------------------
+    @staticmethod
+    def _net_bytes() -> tuple[int, int] | None:
+        """Byte ricevuti e inviati da tutte le schede tranne `lo`."""
+        text = _read("/proc/net/dev")
+        if not text:
+            return None
+        rx = tx = 0
+        for line in text.splitlines()[2:]:  # due righe di intestazione
+            name, _, rest = line.partition(":")
+            cols = rest.split()
+            if name.strip() == "lo" or len(cols) < 9:
+                continue
+            rx += int(cols[0])
+            tx += int(cols[8])
+        return rx, tx
+
+    def _net(self) -> tuple[float | None, float | None]:
+        cur = self._net_bytes()
+        prev = self._prev_net
+        if cur is None:
+            return None, None
+        now = time.monotonic()
+        self._prev_net = (now, cur[0], cur[1])
+        dt = now - prev[0] if prev else 0.0
+        if not prev or dt <= 0 or cur[0] < prev[1] or cur[1] < prev[2]:  # primo giro o contatori azzerati
+            return None, None
+        return (cur[0] - prev[1]) / dt, (cur[1] - prev[2]) / dt
+
     # --- campione completo ----------------------------------------------
     def sample(self) -> Stats:
         st = Stats(cpu=self._cpu())
+        st.net_rx, st.net_tx = self._net()
         mem = {}
         for line in (_read("/proc/meminfo") or "").splitlines():
             k, _, rest = line.partition(":")

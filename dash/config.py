@@ -18,6 +18,7 @@ DEFAULTS: dict[str, Any] = {
     "timer": {"presets_s": [60, 300, 600], "step_s": 10, "labels": {}},
     "alarm": {"ring_max_min": 10, "alarms": []},
     "pages": [{"name": "Home", "widget": "clock"}],
+    "new": {"tipi": ["timer", "alarm", "clock", "weather", "system"]},
     "fb": {"device": "auto", "pixel_scale": 1, "console_off": True},
     "input": {"keyboard": True, "gpio": None, "buzzer_pin": None, "sound": False,
               "touch": {"enabled": False, "device": "auto", "swap_xy": False, "invert_x": False,
@@ -96,6 +97,20 @@ def _read_json(p: Path) -> dict[str, Any]:
     if not isinstance(raw, dict):
         raise ConfigError(f"{p}: la radice del JSON deve essere un oggetto")
     return raw
+
+
+def save_local(path: str | Path, changes: dict[str, Any]) -> Path:
+    """Scrive le voci di `changes` in `config.local.json`, conservando le altre.
+
+    Serve alla scheda "+": le pagine create sul Raspberry restano fuori da Git.
+    """
+    local = local_path(path)
+    data = _read_json(local) if local.exists() else {}
+    data.update(changes)
+    tmp = local.with_suffix(f"{local.suffix}.tmp")
+    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    tmp.replace(local)  # sostituzione atomica: niente file mezzo scritto se manca corrente
+    return local
 
 
 def load_config(path: str | Path, known_widgets: set[str]) -> dict[str, Any]:

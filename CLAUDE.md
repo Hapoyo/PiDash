@@ -1,11 +1,11 @@
 # pi-dash — CLAUDE.md
 
-Versione 0.2.0 · 2026-09-26
+Versione 0.3.0 · 2026-09-26
 
 ## 1. Scopo
 Dashboard da tavolo per Raspberry Pi 3 Model B con schermo SPI 3,5" 480×320 (ILI9486 + touch
 XPT2046): orologio, meteo e vento in nodi, timer di partenza regata, sveglia, statistiche del
-sistema. Cinque pagine, una per widget, presentate come le cartelle di uno schedario.
+sistema. Schedario componibile: le pagine si aggiungono e si tolgono dalla scheda "+".
 Unico stile: pannelli arrotondati a colori su fondo scuro, numeri in Space Grotesk,
 microetichette in Space Mono.
 
@@ -23,7 +23,7 @@ dash/astro.py          alba/tramonto calcolati in locale (NOAA semplificato, ±1
 dash/sysinfo.py        CPU/RAM/disco/temperatura/uptime/IP da /proc e /sys
 dash/inputs.py         Event, tastiera (stdin), pulsanti GPIO, touch evdev, cicalino
 dash/display/          base.py, sim.py (PNG + pagina web), fb.py (/dev/fbN)
-dash/widgets/          dati e stato: clock, weather, timer, alarm, system (nessun disegno)
+dash/widgets/          dati e stato: clock, weather, timer, alarm, system, new (nessun disegno)
 docs/                  installazione.md (guida passo passo), hardware.md (pin, overlay, alimentazione)
 fonts/                 Space Grotesk, Space Mono (OFL) + licenze
 scripts/aggiorna.sh    aggiornamento sul Pi: pull, dipendenze, test, riavvio, rollback
@@ -53,8 +53,12 @@ tests/                 unittest
 - Testi a video in italiano minuscolo; vento in nodi (kn); temperature in °C; orari 24 h.
 - I widget forniscono **solo dati e stato**: niente disegno. Tutto il disegno sta in `cyber.py`.
 - Nuovo widget: sottoclasse di `Widget`, registrarlo in `widgets/__init__.py` (`WIDGET_NAMES` +
-  `build_widgets`), aggiungere il metodo `_<nome>` in `cyber.py` e la voce nella tabella di
-  `CyberRenderer.render`, più una pagina in `config.json` e un test.
+  `WidgetFactory.make`), aggiungere il metodo `_<nome>` in `cyber.py` e la voce nella tabella di
+  `CyberRenderer.render`, l'etichetta in `widgets/new.py` (`ETICHETTE`) e un test.
+- Le pagine leggono **solo** `app.page.widget`, mai `app.widgets[...]`: dello stesso tipo possono
+  esserci più pagine, ognuna con il proprio stato.
+- Testo a video minuscolo, ma `_micro`/`_rows` accettano `lower=False` dove il maiuscolo conta
+  (kB/s, °C).
 - Misure: tutto scala con `u = min(w/960, h/540)`; i numeri della stessa serie si dimensionano su
   una stringa di riferimento (`_panel(ref=...)`), così "7%" e "100%" restano uguali.
 - Ogni widget implementa `state_key()`: se non cambia, il fotogramma non viene ridisegnato.
@@ -73,7 +77,16 @@ Leggerlo prima di toccare `display/fb.py` o `inputs.py`.
   successive in pila in basso; la cartella aperta parte dalla propria linguetta. Geometria unica in
   `CyberRenderer.layout(w, h, n, current)`, usata sia dal disegno sia dal tocco.
 - Home: ora, data, luogo e coordinate, alba/tramonto, barra della giornata, settimana n:X,
-  giorno X/365 (366 negli anni bisestili).
+  giorno X/365 (366 negli anni bisestili), tre anelli concentrici (anno arancio, mese ambra,
+  settimana crema) con una sfera in testa all'arco: `ClockWidget.cycles`.
+- Schedario componibile: la scheda "+" (`widgets/new.py`) elenca i tipi da aggiungere e le pagine
+  da togliere; `App.add_page`/`remove_page` creano il widget e salvano `pages` in
+  `config.local.json`. Chiave della pagina `tipo` o `tipo#N`, sempre libera anche dopo una
+  rimozione. La scheda "+" resta ultima e non si può togliere.
+- Meteo: bussola con la direzione **da cui** soffia il vento (uso nautico) e gradi nella riga di
+  dettaglio; `_panel(reserve=...)` libera lo spazio a destra del numero.
+- Rete: byte/s da `/proc/net/dev` (tutte le schede tranne `lo`), differenza fra due campioni;
+  il primo campione dopo l'avvio vale None. Storico nel widget sistema, grafico in scala sul picco.
 - Meteo: Open-Meteo (nessuna chiave), `wind_speed_unit=kn`, `timezone=auto`, 2 giorni orari;
   cache in `out/weather_cache.json`, contatore di versione per il ridisegno. Fase lunare calcolata
   localmente (mese sinodico medio).
@@ -83,7 +96,7 @@ Leggerlo prima di toccare `display/fb.py` o `inputs.py`.
 - Alba/tramonto della Home: calcolo locale (funziona senza rete), nel fuso del sistema, quindi il
   Pi deve avere Europe/Rome. La pagina meteo usa i valori Open-Meteo.
 - Timer: etichette per preset `timer.labels` (es. 300 s → "PARTENZA"); B cambia preset.
-- Sistema: campioni ogni `system.sample_s`, storico della CPU su 48 colonne a larghezza fissa.
+- Sistema: campioni ogni `system.sample_s`, storici di CPU e rete su 48 colonne a larghezza fissa.
 - Driver `fb`: scrive nel framebuffer (RGB565 o XRGB8888), niente desktop; trova il pannello per
   nome del driver (ili9486…). Con `console_off` mette la console in modalità grafica (KDSETMODE,
   serve CAP_SYS_TTY_CONFIG: già nel servizio). Touch evdev senza dipendenze (`dash/inputs.py`).
@@ -107,3 +120,4 @@ Leggerlo prima di toccare `display/fb.py` o `inputs.py`.
 - **SoC**: System on Chip del Raspberry (temperatura mostrata come "temp").
 - **Partenza**: sequenza di partenza di regata (conto alla rovescia di 5').
 - **Framebuffer**: `/dev/fb1`, memoria dello schermo scritta direttamente, senza desktop.
+- **Scheda "+"**: pagina `new`, catalogo per comporre lo schedario.

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.0 — 2026-09-26
+- Schedario componibile: la scheda "+" aggiunge e toglie pagine (anche più copie dello stesso
+  tipo, ognuna con il proprio stato) e le salva in `config.local.json`. B sceglie la voce,
+  A conferma; col tocco: una voce per scegliere, il "+" per confermare.
+- Timer e sveglia non sono più pagine fisse: si aggiungono dal "+" quando servono.
+- Home: tre anelli concentrici con una sfera ciascuno per settimana, mese e anno.
+- Meteo: bussola con la direzione da cui soffia il vento e gradi nella riga di dettaglio.
+- Sistema: storico del traffico di rete accanto a quello della CPU e riga "rete" con
+  le velocità in ingresso e in uscita (lette da `/proc/net/dev`, esclusa `lo`).
+- Corretto: `--driver sim` su una configurazione da Raspberry (`width`/`height` "auto") faceva
+  fallire il comando di prova indicato nel README; ora le dimensioni valgono 480×320 con qualunque
+  driver diverso da `fb`.
+- 45 test.
+
 ## 0.2.0 — 2026-09-26
 - README: anteprime di tutte e cinque le pagine (`docs/img/01-home.png` … `05-sistema.png`)
   al posto dell'unica immagine `docs/img/home.png`.
