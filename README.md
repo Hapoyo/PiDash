@@ -1,11 +1,9 @@
 # pi-dash
 
-Versione 0.1.0 · 2026-09-25
+Versione 0.2.0 · 2026-09-26
 
 Dashboard da tavolo per Raspberry Pi 3 Model B con schermo SPI 3,5" touch: orologio, meteo e vento
 in nodi, timer di partenza regata, sveglia e statistiche del sistema.
-
-![Home e meteo](docs/img/home.png)
 
 Le pagine sono le cartelle di uno schedario: si tocca la linguetta numerata e la cartella si apre
 sotto di essa. Stesso stile ovunque — pannelli arrotondati a colori su fondo scuro, numeri in
@@ -19,6 +17,18 @@ Space Grotesk, microetichette in Space Mono.
 | 003 | Timer | conto alla rovescia con preset (5' = sequenza di partenza) |
 | 004 | Sveglia | prossima sveglia, stato, elenco per giorno della settimana |
 | 005 | Sistema | CPU, RAM, disco, storico CPU, host, IP, temperatura, uptime |
+
+### 1.1 Anteprime
+| 001 · Home | 002 · Meteo |
+|:---:|:---:|
+| ![Home: ora, data, luogo, alba e tramonto](docs/img/01-home.png) | ![Meteo: temperatura, vento in nodi, pioggia, umidità, pressione, previsione oraria](docs/img/02-meteo.png) |
+| **003 · Timer** | **004 · Sveglia** |
+| ![Timer: conto alla rovescia di partenza con preset](docs/img/03-timer.png) | ![Sveglia: orario, stato e prossima attivazione](docs/img/04-sveglia.png) |
+| **005 · Sistema** | |
+| ![Sistema: CPU, RAM, disco, storico CPU, host, IP, temperatura, uptime](docs/img/05-sistema.png) | |
+
+Immagini a 480×320, risoluzione nativa dello schermo, generate dal codice con dati demo:
+`python -m dash --screenshots docs/img` (fuori dal Pi anteporre `TZ=Europe/Rome`).
 
 Dati meteo: [Open-Meteo](https://open-meteo.com), senza chiave. Alba e tramonto della Home sono
 calcolati in locale: funzionano anche senza rete.
@@ -39,21 +49,32 @@ Guida passo passo, anche per chi non ha mai usato un Raspberry:
 
 ```
 sudo apt install -y git python3-venv python3-pil
-git clone https://github.com/UTENTE/pi-dash.git ~/pi-dash
+git clone https://github.com/Hapoyo/PiDash.git ~/pi-dash
 cd ~/pi-dash
 python3 -m venv --system-site-packages .venv
 .venv/bin/pip install -r requirements.txt
 .venv/bin/python -m dash --once --demo --driver sim   # prova: scrive out/frame.png
+scripts/installa-servizio.sh && sudo systemctl start pi-dash   # avvio automatico
 ```
 
+### 3.1 Aggiornamento
+```
+~/pi-dash/scripts/aggiorna.sh
+```
+Scarica da GitHub, esegue i test, riavvia il servizio; se qualcosa non va torna alla versione
+precedente. Dettagli e passaggio da un'installazione via zip: guida § 7.
+
 ## 4. Configurazione
-Tutto in `config.json`: posizione, sveglie, preset del timer, pagine, colori, touch.
-Le voci e la calibrazione del tocco sono spiegate nella guida (§ 5.4 e § 9).
+`config.json` (in Git) contiene i valori del progetto: posizione, sveglie, preset del timer,
+pagine, colori, touch. Le modifiche fatte sul Raspberry vanno in `config.local.json`
+(fuori da Git, solo le voci da cambiare): gli aggiornamenti non le toccano.
+Voci, calibrazione del tocco e colori: guida § 5.4, § 5.6 e § 9.
 
 ## 5. Sviluppo senza hardware
 ```
 python -m dash --demo --driver sim --web 8080   # simulatore nel browser
-python -m unittest -v                           # 35 test
+python -m dash --screenshots docs/img           # rigenera le anteprime del README
+python -m unittest -v                           # 38 test
 ```
 Regole del progetto e decisioni: [CLAUDE.md](CLAUDE.md). Modifiche: [CHANGELOG.md](CHANGELOG.md).
 

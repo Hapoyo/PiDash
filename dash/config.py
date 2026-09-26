@@ -80,9 +80,13 @@ def validate(cfg: dict[str, Any], known_widgets: set[str]) -> None:
             raise ConfigError(f"giorni sveglia: usare 0=lun … 6=dom ({a})")
 
 
-def load_config(path: str | Path, known_widgets: set[str]) -> dict[str, Any]:
-    """Legge il file JSON, applica i default e valida."""
+def local_path(path: str | Path) -> Path:
+    """File delle impostazioni personali accanto al principale: config.json → config.local.json."""
     p = Path(path)
+    return p.with_name(f"{p.stem}.local{p.suffix}")
+
+
+def _read_json(p: Path) -> dict[str, Any]:
     try:
         raw = json.loads(p.read_text(encoding="utf-8"))
     except FileNotFoundError as exc:
@@ -90,7 +94,20 @@ def load_config(path: str | Path, known_widgets: set[str]) -> dict[str, Any]:
     except json.JSONDecodeError as exc:
         raise ConfigError(f"JSON non valido in {p}: {exc}") from exc
     if not isinstance(raw, dict):
-        raise ConfigError("la radice del JSON deve essere un oggetto")
-    cfg = _merge(DEFAULTS, raw)
+        raise ConfigError(f"{p}: la radice del JSON deve essere un oggetto")
+    return raw
+
+
+def load_config(path: str | Path, known_widgets: set[str]) -> dict[str, Any]:
+    """Legge il file JSON, applica default e impostazioni personali (`*.local.json`), valida.
+
+    Il file locale non è in Git: `git pull` aggiorna config.json senza toccare le modifiche
+    fatte sul Raspberry. Contiene solo le voci da cambiare.
+    """
+    p = Path(path)
+    cfg = _merge(DEFAULTS, _read_json(p))
+    local = local_path(p)
+    if local.exists():
+        cfg = _merge(cfg, _read_json(local))
     validate(cfg, known_widgets)
     return cfg

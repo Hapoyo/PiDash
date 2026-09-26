@@ -1,4 +1,4 @@
-# Avvio automatico: vedi docs/installazione.md § 6 (il nome utente si imposta con sed).
+# Non copiarlo a mano: scripts/installa-servizio.sh mette utente e cartella giusti (§ 5.5 della guida).
 [Unit]
 Description=pi-dash su schermo 3,5" SPI
 Wants=network-online.target

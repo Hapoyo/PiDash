@@ -19,6 +19,7 @@ from .config import ConfigError, load_config
 from .display import Display, make_display
 from .inputs import Buzzer, Event, Tap, start_gpio, start_keyboard, start_touch
 from .widgets import WIDGET_NAMES, Widget, build_widgets
+from .widgets.system import SystemWidget
 
 log = logging.getLogger("dash")
 
@@ -27,6 +28,45 @@ class Page:
     """Una cartella dello schedario: nome sulla linguetta e widget che ne fornisce i dati."""
     name: str
     widget: Widget
+
+
+class _MemDisplay(Display):
+    """Display senza uscita: serve solo a costruire l'App per le anteprime."""
+
+    def show(self, img: Image.Image) -> None:
+        pass
+
+
+SHOT_TIME = datetime(2026, 9, 24, 7, 42)  # istante fisso: anteprime riproducibili
+
+
+def save_screenshots(cfg: dict[str, Any], out_dir: Path, now: datetime = SHOT_TIME) -> list[Path]:
+    """Salva un PNG per pagina (`NN-nome.png`) con dati demo e posizione fissa, senza rete.
+
+    Alba e tramonto seguono il fuso del sistema: lanciare con TZ=Europe/Rome fuori dal Pi.
+    """
+    cfg["weather"]["demo"] = True
+    cfg["location"]["mode"] = "fixed"
+    d = cfg["display"]
+    if "auto" in (d["width"], d["height"]):
+        d["width"], d["height"] = 480, 320
+    out_dir.mkdir(parents=True, exist_ok=True)
+    app = App(cfg, _MemDisplay(d["width"], d["height"]), queue.Queue())
+    paths: list[Path] = []
+    try:
+        system = app.widgets.get("system")
+        if isinstance(system, SystemWidget):
+            system.load_demo()
+        for widget in app.widgets.values():
+            widget.update(now)
+        for i, page in enumerate(app.pages):
+            app.page_idx = i
+            path = out_dir / f"{i + 1:02d}-{page.name.lower()}.png"
+            app.renderer.render(app, now).save(path, optimize=True)
+            paths.append(path)
+    finally:
+        app.close()
+    return paths
 
 
 class App:
@@ -155,6 +195,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--once", action="store_true", help="un solo fotogramma ed esci")
     p.add_argument("--page", type=int, default=1, help="pagina iniziale (1…n)")
     p.add_argument("--demo", action="store_true", help="meteo con dati finti (offline)")
+    p.add_argument("--screenshots", type=Path, metavar="DIR",
+                   help="salva l'anteprima di ogni pagina in DIR ed esci (es. docs/img)")
     p.add_argument("--web", type=int, help="porta del simulatore web (0 = off)")
     p.add_argument("-v", "--verbose", action="store_true")
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -177,6 +219,14 @@ def main(argv: list[str] | None = None) -> int:
     except ConfigError as exc:
         log.error("configurazione: %s", exc)
         return 2
+    if args.screenshots:
+        try:
+            for path in save_screenshots(cfg, args.screenshots):
+                log.info("anteprima: %s", path)
+        except OSError as exc:
+            log.error("anteprime: %s", exc)
+            return 3
+        return 0
     if args.driver:
         cfg["display"]["driver"] = args.driver
     if args.demo:

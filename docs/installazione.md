@@ -1,6 +1,6 @@
 # pi-dash — Installazione
 
-Versione 0.1.0 · 2026-09-25
+Versione 0.2.0 · 2026-09-26
 
 Guida passo passo per chi è nuovo del Raspberry Pi. Si lavora dal PC Windows: il Raspberry non
 ha bisogno di monitor né di tastiera ("headless"). Le parti in `grassetto monospazio` si scrivono
@@ -115,10 +115,10 @@ App → Funzionalità facoltative → Aggiungi → **Client OpenSSH**.
 Il Raspberry scarica il progetto da solo, senza passare dal PC. Nel terminale SSH:
 ```
 sudo apt install -y git
-git clone https://github.com/UTENTE/pi-dash.git ~/pi-dash
+git clone https://github.com/Hapoyo/PiDash.git ~/pi-dash
 ls ~/pi-dash
 ```
-Al posto di `UTENTE` il nome del tuo account GitHub. Se il repository è privato, `git clone`
+Il progetto finisce in `~/pi-dash` qualunque sia il nome del repository. Se il repository è privato, `git clone`
 chiede nome utente e **token** (non la password del sito): si crea su GitHub → Settings →
 Developer settings → Personal access tokens.
 
@@ -172,7 +172,7 @@ Il dashboard compare sullo schermo. Ogni tocco scrive nel terminale
 1. Tocca l'angolo in alto a sinistra: deve dare circa `0.0, 0.0`; in basso a destra circa `1.0, 1.0`.
 2. Assi scambiati → `"swap_xy": true`; destra/sinistra al contrario → `"invert_x": true`;
    alto/basso al contrario → `"invert_y": true`. Si modificano con
-   `nano config.json`, nella sezione `input` → `touch`.
+   `nano config.local.json`, nella sezione `input` → `touch` (vedi § 5.6).
 3. Se i bordi non arrivano a 0/1: annota i valori grezzi minimi e massimi agli angoli e
    scrivili in `x_min`, `x_max`, `y_min`, `y_max`.
 4. Ctrl+C per fermare, correggi, riprova.
@@ -180,12 +180,11 @@ Il dashboard compare sullo schermo. Ogni tocco scrive nel terminale
 ### 5.5 Avvio automatico all'accensione
 ```
 cd ~/pi-dash
-sed -i "s/\bpi\b/$USER/g" systemd/pi-dash.service
-sudo cp systemd/pi-dash.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now pi-dash
+scripts/installa-servizio.sh
+sudo systemctl start pi-dash
 ```
-Il comando `sed` scrive il tuo nome utente al posto di `pi` nel file del servizio.
+Lo script scrive in `/etc/systemd/system/pi-dash.service` il tuo nome utente e la cartella del
+progetto, senza modificare i file del repository.
 Controllo: `systemctl status pi-dash` deve dire `active (running)`; `q` per uscire.
 
 Se il cursore o il login della console compaiono sopra il dashboard:
@@ -193,6 +192,20 @@ Se il cursore o il login della console compaiono sopra il dashboard:
 2. `sudo nano /boot/firmware/cmdline.txt`: il file ha **una sola riga**; vai in fondo (tasto Fine),
    aggiungi uno spazio e `vt.global_cursor_default=0`, senza andare a capo. Salva, esci,
    `sudo reboot`.
+
+### 5.6 Le tue impostazioni: `config.local.json`
+`config.json` arriva da GitHub e viene sostituito a ogni aggiornamento. Le tue modifiche vanno in
+`config.local.json`, nella stessa cartella: contiene **solo le voci da cambiare** e prevale su
+`config.json`. Non è in Git, quindi gli aggiornamenti non lo toccano. Esempio:
+```json
+{
+  "location": {"mode": "fixed", "name": "Gaeta", "lat": 41.213, "lon": 13.571},
+  "alarm": {"alarms": [{"time": "06:30", "days": [0, 1, 2, 3, 4], "enabled": true}]},
+  "input": {"touch": {"swap_xy": true, "invert_x": true}}
+}
+```
+Le sezioni si fondono voce per voce; gli elenchi (`alarms`, `pages`, `presets_s`) si sostituiscono
+per intero. Dopo una modifica: `sudo systemctl restart pi-dash`.
 
 ## 6. Comandi di tutti i giorni
 Nome del servizio: `pi-dash`.
@@ -205,7 +218,8 @@ Nome del servizio: `pi-dash`.
 | Riavviare il dashboard | `sudo systemctl restart pi-dash` |
 | Fermarlo (per le prove a mano) | `sudo systemctl stop pi-dash` |
 | Non avviarlo più all'accensione | `sudo systemctl disable pi-dash` |
-| Modificare le impostazioni | `nano ~/pi-dash/config.json`, poi riavviare il dashboard |
+| Modificare le impostazioni | `nano ~/pi-dash/config.local.json`, poi riavviare il dashboard (§ 5.6) |
+| Aggiornare dal repository | `~/pi-dash/scripts/aggiorna.sh` (§ 7) |
 | Indirizzo IP | `hostname -I` |
 | Temperatura del processore | `vcgencmd measure_temp` |
 | Spazio libero | `df -h /` |
@@ -215,17 +229,44 @@ Nome del servizio: `pi-dash`.
 Non staccare mai l'alimentazione senza `sudo poweroff`: si rischia di rovinare la microSD.
 
 ## 7. Aggiornare il programma a una nuova versione
-Se hai installato da GitHub (§ 4.3):
+Se hai installato da GitHub (§ 4.3), un solo comando:
+```
+~/pi-dash/scripts/aggiorna.sh
+```
+Lo script:
+1. controlla i file modificati a mano. Se hai cambiato `config.json` sposta le modifiche in
+   `config.local.json` (§ 5.6); se hai il file del servizio modificato col vecchio metodo lo ripristina;
+2. scarica da GitHub (`git pull`) il ramo in uso, di solito `main`, ed elenca le novità;
+3. aggiorna le dipendenze se `requirements.txt` è cambiato;
+4. esegue i test e verifica che la tua configurazione sia ancora valida: se qualcosa non va
+   **torna da solo alla versione precedente** e lascia il dashboard com'era;
+5. reinstalla il servizio se il suo file è cambiato, poi riavvia `pi-dash`.
+
+Chiede la password di `sudo` solo per il riavvio. Con `--no-test` salta i test (più veloce).
+Se non c'è niente di nuovo scrive "già all'ultima versione" e non riavvia nulla.
+
+Aggiornamento dal PC, senza aprire una sessione SSH:
+```
+ssh marinaio@dashboard.local ~/pi-dash/scripts/aggiorna.sh
+```
+
+### 7.1 Passare dallo zip (o dalla copia dal PC) a GitHub
+Una volta sola, poi si aggiorna con `aggiorna.sh`. Le tue impostazioni diventano `config.local.json`:
 ```
 sudo systemctl stop pi-dash
+mv ~/pi-dash ~/pi-dash-vecchio
+git clone https://github.com/Hapoyo/PiDash.git ~/pi-dash
+cp ~/pi-dash-vecchio/config.json ~/pi-dash/config.local.json
 cd ~/pi-dash
-git stash          # mette da parte le tue modifiche alle configurazioni
-git pull
-git stash pop      # le rimette
+python3 -m venv --system-site-packages .venv
 .venv/bin/pip install -r requirements.txt
+scripts/installa-servizio.sh
 sudo systemctl start pi-dash
 ```
-Se hai installato dallo zip:
+Se tutto funziona: `rm -rf ~/pi-dash-vecchio`.
+
+### 7.2 Aggiornare dallo zip
+Se continui a installare dallo zip:
 1. Copia il nuovo `pi-dash.zip` sul Raspberry come al § 4.
 2. Sul Raspberry:
    ```
@@ -235,9 +276,7 @@ Se hai installato dallo zip:
    sudo systemctl start pi-dash
    ```
    `-o` sovrascrive i file senza chiedere; `.venv` resta com'è.
-3. Le impostazioni personali (`config.json`, `config.json`) vengono sovrascritte: prima
-   dell'aggiornamento salvane una copia, es. `cp config.json ~/mio-config.json`, e poi
-   rimettila al suo posto.
+3. `config.json` viene sovrascritto; `config.local.json` (§ 5.6) non è nello zip e resta com'è.
 
 ## 8. Problemi comuni
 | Sintomo | Causa probabile e rimedio |
@@ -247,6 +286,8 @@ Se hai installato dallo zip:
 | `REMOTE HOST IDENTIFICATION HAS CHANGED` dopo aver riscritto la microSD | sul PC: `ssh-keygen -R dashboard.local`, poi ricollegati |
 | Il Raspberry non compare nella rete | rete a 5 GHz (serve 2,4 GHz) o password Wi-Fi errata; prova con il cavo Ethernet e controlla il § 1 |
 | Schermo 3,5" bianco | righe mancanti o scritte male in `config.txt` (§ 5.2) |
+| `aggiorna.sh`: "ci sono file modificati a mano" | l'elenco dice quali; salva le modifiche che ti servono in `config.local.json`, poi `git checkout -- <file>` |
+| `aggiorna.sh`: "test falliti" o "configurazione non valida" | la versione precedente è già ripristinata; manda l'output a chi sviluppa |
 | Schermo acceso ma dashboard assente | `sudo journalctl -u pi-dash -n 50` e leggi l'ultimo errore |
 | Tocco nel punto sbagliato | calibrazione (§ 5.4) |
 | Orario sbagliato | serve la rete all'avvio; controlla il fuso con `timedatectl` (deve dire Europe/Rome) |
@@ -254,7 +295,7 @@ Se hai installato dallo zip:
 | `unzip: command not found` | `sudo apt install -y unzip` |
 
 ## 9. Aspetto
-I colori si cambiano in `config.json`, sezione `theme` → `palette`: si indicano solo le voci da
+I colori si cambiano in `config.local.json` (§ 5.6), sezione `theme` → `palette`: si indicano solo le voci da
 sostituire, in formato `#rrggbb`.
 
 | Voce | Uso |

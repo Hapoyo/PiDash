@@ -1,6 +1,6 @@
 # pi-dash — CLAUDE.md
 
-Versione 0.1.0 · 2026-09-25
+Versione 0.2.0 · 2026-09-26
 
 ## 1. Scopo
 Dashboard da tavolo per Raspberry Pi 3 Model B con schermo SPI 3,5" 480×320 (ILI9486 + touch
@@ -11,8 +11,9 @@ microetichette in Space Mono.
 
 ## 2. Struttura
 ```
-README.md              presentazione per GitHub (anteprime in docs/img/)
-config.json            unica configurazione: display, posizione, pagine, sveglie, touch
+README.md              presentazione per GitHub (anteprime in docs/img/NN-pagina.png)
+config.json            configurazione del progetto: display, posizione, pagine, sveglie, touch
+config.local.json      impostazioni del singolo Pi, fuori da Git, fuse sopra config.json
 dash/main.py           loop, pagine, eventi, CLI
 dash/config.py         default + validazione (ConfigError)
 dash/cyber.py          tutto il disegno: schedario e una funzione per pagina (immagini RGB)
@@ -25,7 +26,9 @@ dash/display/          base.py, sim.py (PNG + pagina web), fb.py (/dev/fbN)
 dash/widgets/          dati e stato: clock, weather, timer, alarm, system (nessun disegno)
 docs/                  installazione.md (guida passo passo), hardware.md (pin, overlay, alimentazione)
 fonts/                 Space Grotesk, Space Mono (OFL) + licenze
-systemd/pi-dash.service  avvio automatico
+scripts/aggiorna.sh    aggiornamento sul Pi: pull, dipendenze, test, riavvio, rollback
+scripts/installa-servizio.sh  installa systemd/pi-dash.service con utente e cartella reali
+systemd/pi-dash.service  avvio automatico (modello: User=pi, /home/pi/pi-dash)
 tests/                 unittest
 ```
 
@@ -33,8 +36,13 @@ tests/                 unittest
 - Setup sviluppo: `python3 -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt`
 - Simulatore: `python -m dash --demo --web 8080 --driver sim` → `http://localhost:8080`
 - Un fotogramma: `python -m dash --once --demo --driver sim --page 2` → `out/frame.png`
+- Anteprime README: `TZ=Europe/Rome python -m dash --screenshots docs/img` → `docs/img/NN-pagina.png`
+  (dati demo, posizione fissa, istante 24/09/2026 07:42, nessuna rete). Rigenerarle quando cambia il disegno.
+- Repository: https://github.com/Hapoyo/PiDash
 - Test: `python -m unittest -v`
 - Installazione sul Raspberry: [docs/installazione.md](docs/installazione.md)
+- Aggiornare il Pi: `~/pi-dash/scripts/aggiorna.sh [--no-test]` (segue il ramo in uso, di norma `main`)
+- Servizio: `scripts/installa-servizio.sh` (mai `sed -i` sul file in Git)
 - Calibrazione tocco: `.venv/bin/python -m dash --touch-debug`
 - Comandi: N pagina seguente · A azione (avvia/ferma timer, spegne sveglia) · B indietro/preset
 - Tocco: linguetta → apre quella cartella; contenuto → azione del widget della pagina
@@ -51,6 +59,10 @@ tests/                 unittest
   una stringa di riferimento (`_panel(ref=...)`), così "7%" e "100%" restano uguali.
 - Ogni widget implementa `state_key()`: se non cambia, il fotogramma non viene ridisegnato.
 - Commit: uno per intervento, messaggi in italiano all'imperativo.
+- Il Pi si aggiorna da `main`: ciò che arriva su `main` deve passare `python -m unittest`
+  (altrimenti `aggiorna.sh` rifiuta l'aggiornamento e torna indietro).
+- Nuove voci di configurazione: default in `DEFAULTS` di `config.py`, così i `config.local.json`
+  esistenti restano validi. Mai rendere obbligatoria una voce senza default.
 
 ## 5. Vincoli hardware
 Pin, overlay `piscreen`, alimentazione, calibrazione del touch: [docs/hardware.md](docs/hardware.md).
@@ -78,6 +90,12 @@ Leggerlo prima di toccare `display/fb.py` o `inputs.py`.
 - Con allarme attivo (sveglia/timer) qualsiasi tocco o il tasto A lo spegne, ovunque ci si trovi.
 - Suono: cicalino su GPIO (`input.buzzer_pin`), altrimenti campanella del terminale (`input.sound`).
 - Simulatore web con pulsanti virtuali per sviluppo senza hardware.
+- Configurazione a due livelli: `DEFAULTS` ← `config.json` ← `config.local.json` (`_merge`
+  ricorsivo sui dizionari, le liste si sostituiscono). Il Pi non modifica mai file in Git: così
+  `git pull --ff-only` non trova conflitti.
+- `aggiorna.sh`: file tracciati modificati → blocca (tranne config.json, spostato in
+  config.local.json, e il file del servizio, ripristinato); test o config non validi → `git reset
+  --hard` al commit precedente.
 - Da collaudare sull'hardware: overlay e framebuffer, orientamento del touch, pulsanti GPIO, cicalino.
 
 ## 7. Glossario
