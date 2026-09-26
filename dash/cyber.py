@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import calendar
 import logging
+import math
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -130,14 +131,77 @@ class CyberRenderer:
         return font(kind, lo, weight)
 
     def _micro(self, d: ImageDraw.ImageDraw, xy: tuple[float, float], s: str, u: float,
-               fill: str = "cream", anchor: str = "la", size: float = 11) -> None:
-        self._text(d, xy, s.lower(), font("mono", round(size * u)), fill, anchor)
+               fill: str = "cream", anchor: str = "la", size: float = 11,
+               lower: bool = True) -> None:
+        """`lower=False` dove il maiuscolo è significativo (kB/s, °C)."""
+        self._text(d, xy, s.lower() if lower else s, font("mono", round(size * u)), fill, anchor)
 
     def _big(self, d: ImageDraw.ImageDraw, box: Box, s: str, fill: str, weight: int = 500,
              anchor: str = "ls", pos: tuple[float, float] | None = None) -> None:
         f = self._fit(s, "grotesk", weight, box.w, box.h)
         x, y = pos if pos else (box.x, box.bottom)
         self._text(d, (x, y), s, f, fill, anchor)
+
+    def _ring(self, d: ImageDraw.ImageDraw, box: Box, frac: float, color: str, lw: int,
+              dot: float) -> None:
+        """Anello spento + arco acceso da ore 12 in senso orario, con una sfera in testa."""
+        d.ellipse(box.rect, outline=self.c["line"], width=lw)
+        ang = -90 + 360 * max(0.0, min(1.0, frac))
+        if frac > 0:
+            d.arc(box.rect, -90, ang, fill=self.c[color], width=lw)
+        cx, cy = box.x + box.w / 2, box.y + box.h / 2
+        rad = math.radians(ang)
+        px, py = cx + (box.w / 2) * math.cos(rad), cy + (box.h / 2) * math.sin(rad)
+        d.ellipse((px - dot, py - dot, px + dot, py + dot), fill=self.c[color])
+
+    def _cycles(self, d: ImageDraw.ImageDraw, box: Box, cycles: dict[str, float], u: float) -> None:
+        """Tre anelli concentrici con una sfera ciascuno: settimana, mese, anno."""
+        lw = max(2, round(3 * u))
+        dot = max(2.0, 3.2 * u)
+        leg_h = round(13 * u)
+        side = min(box.w, box.h - leg_h)
+        cx, cy = box.x + box.w / 2, box.y + (box.h - leg_h) / 2
+        anelli = (("anno", "orange"), ("mese", "amber"), ("settimana", "cream"))
+        for i, (key, col) in enumerate(anelli):
+            r = side / 2 - dot - i * (lw + max(4, round(6 * u)))
+            if r <= lw:
+                continue
+            self._ring(d, Box(round(cx - r), round(cy - r), round(2 * r), round(2 * r)),
+                       cycles.get(key, 0.0), col, lw, dot)
+        # legenda: tre sigle nei colori dei rispettivi anelli
+        sigle = [(k[:3], c) for k, c in reversed(anelli)]
+        f = font("mono", round(11 * u))
+        widths = [f.getlength(s + " ") for s, _ in sigle]
+        x = cx - sum(widths) / 2
+        for (s, col), wdt in zip(sigle, widths):
+            self._text(d, (x, box.bottom - leg_h), s, f, col, "la")
+            x += wdt
+
+    def _compass(self, d: ImageDraw.ImageDraw, box: Box, deg: float, u: float,
+                 fg: str = "ink", dim: str = "paper") -> None:
+        """Rosa dei venti: freccia nella direzione da cui soffia il vento (uso nautico)."""
+        side = min(box.w, box.h)
+        cx, cy = box.x + box.w / 2, box.y + box.h / 2
+        r = side / 2
+        lw = max(1, round(2 * u))
+        d.ellipse((cx - r, cy - r, cx + r, cy + r), outline=self.c[dim], width=lw)
+        f = font("mono", max(7, round(9 * u)))
+        for i, s in enumerate(("n", "e", "s", "o")):  # quattro punti cardinali
+            a = math.radians(-90 + 90 * i)
+            self._text(d, (cx + (r - 6 * u) * math.cos(a), cy + (r - 6 * u) * math.sin(a)),
+                       s, f, fg if s == "n" else dim, "mm")
+        for i in range(8):  # tacche intermedie
+            a = math.radians(45 * i + 22.5)
+            d.line((cx + (r - 2 * u) * math.cos(a), cy + (r - 2 * u) * math.sin(a),
+                    cx + r * math.cos(a), cy + r * math.sin(a)), fill=self.c[dim], width=lw)
+        # riga dal centro al bordo, verso la parte da cui soffia il vento (0° = da nord)
+        a = math.radians(deg - 90)
+        tip = r - 7 * u
+        px, py = cx + tip * math.cos(a), cy + tip * math.sin(a)
+        bar = max(4, round(6 * u))
+        d.line((cx, cy, px, py), fill=self.c[fg], width=bar)
+        for ex, ey in ((cx, cy), (px, py)):  # estremi arrotondati come le barre delle altre pagine
+            d.ellipse((ex - bar / 2, ey - bar / 2, ex + bar / 2, ey + bar / 2), fill=self.c[fg])
 
     # --- schedario ---------------------------------------------------------
     def _folder(self, d: ImageDraw.ImageDraw, box: Box, fill: str, outline: str, lw: int,
@@ -189,7 +253,7 @@ class CyberRenderer:
         inner = lay.content.inset(round(14 * u))
         name = app.page.widget.name
         page = {"weather": self._weather, "timer": self._timer, "alarm": self._alarm,
-                "system": self._system}.get(name, self._home)
+                "system": self._system, "new": self._new}.get(name, self._home)
         try:
             page(d, inner, app, now, u)
         except Exception:  # una pagina difettosa non deve bloccare il dashboard
@@ -204,7 +268,7 @@ class CyberRenderer:
     # --- contenuti nativi ----------------------------------------------------
     def _home(self, d: ImageDraw.ImageDraw, b: Box, app: App, now: datetime, u: float) -> None:
         """Ora, data, luogo, alba/tramonto, avanzamento della giornata, settimana e giorno dell'anno."""
-        clock: Any = app.widgets.get("clock")
+        clock: Any = app.page.widget
         loc = getattr(clock, "location", None)
         name, lat, lon = loc.snapshot() if loc is not None else ("", 0.0, 0.0)
         line = round(17 * u)
@@ -220,12 +284,19 @@ class CyberRenderer:
         self._micro(d, (head.right, head.y), f"{lat:.3f}n {lon:.3f}e", u, "tan", "ra", 12)
         clock_top = head.bottom + round(6 * u)
         gap = max(4, round(8 * u))
-        clock_box = Box(b.x, clock_top, b.w, date_y - date_h - gap - clock_top)
+        band = Box(b.x, clock_top, b.w, date_y - date_h - gap - clock_top)
+        # anello dei cicli a destra, ora a sinistra nello spazio che resta
+        side = min(band.h + date_h, round(b.w * 0.30))
+        clock_box = Box(band.x, band.y, band.w - side - gap, band.h)
         self._big(d, clock_box, now.strftime("%H:%M"), "cream", 500,
-                  pos=(b.x + b.w / 2, clock_box.bottom), anchor="ms")
+                  pos=(clock_box.x + clock_box.w / 2, clock_box.bottom), anchor="ms")
+        if clock is not None and side > round(28 * u):
+            ring = Box(band.right - side, band.y + (band.h + date_h - side) // 2, side, side)
+            self._cycles(d, ring, clock.cycles(now), u)
         date = f"{GIORNI[now.weekday()]} {now.day:02d} {MESI[now.month - 1]} {now.year}"
-        f = self._fit(date.lower(), "grotesk", 500, b.w, date_h)
-        self._text(d, (b.x + b.w / 2, clock_box.bottom + gap), date.lower(), f, "tan", "ma")
+        f = self._fit(date.lower(), "grotesk", 500, clock_box.w, date_h)
+        self._text(d, (clock_box.x + clock_box.w / 2, clock_box.bottom + gap), date.lower(),
+                   f, "tan", "ma")
         label, frac = clock.progress(now) if clock is not None else ("GIORNO", 0.0)
         d.rounded_rectangle(bar.rect, radius=bar.h // 2, fill=self.c["line"])
         d.rounded_rectangle((bar.x, bar.y, bar.x + max(bar.h, round(bar.w * frac)), bar.bottom - 1),
@@ -242,15 +313,18 @@ class CyberRenderer:
             self._micro(d, (b.right, y), right, u, "cream", "ra", 12)
 
     def _panel(self, d: ImageDraw.ImageDraw, box: Box, fill: str, label: str, value: str,
-               foot: str, u: float, r: int, ref: str | None = None) -> None:
-        """Pannello con etichetta in alto, numero grande al centro e riga di dettaglio in basso."""
+               foot: str, u: float, r: int, ref: str | None = None, reserve: int = 0) -> None:
+        """Pannello con etichetta in alto, numero grande al centro e riga di dettaglio in basso.
+
+        `reserve`: larghezza lasciata libera a destra del numero (bussola del vento).
+        """
         d.rounded_rectangle(box.rect, radius=r, fill=self.c[fill])
         pad = max(4, round(11 * u))
         lab = font("mono", round(11 * u))
         lab_h = int(lab.size) + max(2, round(3 * u))
         self._text(d, (box.x + pad, box.y + pad), label.lower(), lab, "ink", "la")
         foot_h = (lab_h + max(2, round(3 * u))) if foot else 0
-        big = Box(box.x + pad, box.y + pad + lab_h, box.w - 2 * pad,
+        big = Box(box.x + pad, box.y + pad + lab_h, box.w - 2 * pad - reserve,
                   box.h - 2 * pad - lab_h - foot_h)
         if big.h > round(10 * u):
             # `ref` dà la taglia (numeri della stessa serie allineati, es. 7% e 100%)
@@ -263,7 +337,7 @@ class CyberRenderer:
         """Pagina meteo unica: stato attuale, vento, valori, previsione oraria, sole e luna."""
         from .widgets.weather import (SHORT, beaufort, describe, moon_illumination, moon_name,
                                       moon_phase, rosa, vento_nome)
-        wx: Any = app.widgets["weather"]
+        wx: Any = app.page.widget
         data = wx.snapshot()
         if not data:
             self._micro(d, (b.x + b.w / 2, b.y + b.h / 2), "meteo in attesa di dati...", u, "tan", "mm", 13)
@@ -284,8 +358,17 @@ class CyberRenderer:
         self._panel(d, left, "cream", SHORT.get(text, text),
                     f"{float(cur.get('temperature_2m', 0)):.0f}°",
                     f"percepita {float(cur.get('apparent_temperature', 0)):.0f}°", u, r)
-        self._panel(d, right, "orange", f"vento {vento_nome(deg).lower()}", f"{kn:.0f} kn",
-                    f"{rosa(deg).lower()} · raf {gust:.0f} · f{beaufort(kn)}", u, r)
+        pad = max(4, round(11 * u))
+        band_y = right.y + pad + round(16 * u)            # sotto l'etichetta
+        band_h = right.h - (band_y - right.y) - pad - round(22 * u)  # sopra la riga di dettaglio
+        comp = min(band_h, round(right.w * 0.34))
+        mostra = comp > round(26 * u)
+        self._panel(d, right, "orange", f"vento {vento_nome(deg).lower()} {deg:.0f}°", f"{kn:.0f} kn",
+                    f"{rosa(deg).lower()} · raf {gust:.0f} · f{beaufort(kn)}", u, r,
+                    reserve=comp + pad if mostra else 0)
+        if mostra:
+            self._compass(d, Box(right.right - pad - comp, band_y + (band_h - comp) // 2,
+                                 comp, comp), deg, u)
         # riga 2: tre valori
         mid_h = round(b.h * 0.16)
         mid = Box(b.x, top_h + b.y + g, b.w, mid_h)
@@ -328,7 +411,7 @@ class CyberRenderer:
     def _timer(self, d: ImageDraw.ImageDraw, b: Box, app: App, now: datetime, u: float) -> None:
         """Conto alla rovescia grande, barra del tempo residuo e preset selezionabili."""
         from .widgets.timer import TimerState
-        t: Any = app.widgets["timer"]
+        t: Any = app.page.widget
         secs = t.shown_remaining()
         mm, ss = divmod(secs, 60)
         r, pad, g = round(20 * u), max(4, round(11 * u)), round(10 * u)
@@ -363,7 +446,7 @@ class CyberRenderer:
 
     def _alarm(self, d: ImageDraw.ImageDraw, b: Box, app: App, now: datetime, u: float) -> None:
         """Prossima sveglia in grande, stato e elenco delle sveglie configurate."""
-        al: Any = app.widgets["alarm"]
+        al: Any = app.page.widget
         nxt = al.next_alarm(now) if al.armed else None
         r, pad, g = round(20 * u), max(4, round(11 * u)), round(10 * u)
         top = Box(b.x, b.y, b.w, round(b.h * 0.52))
@@ -394,8 +477,76 @@ class CyberRenderer:
                   a.label_days()) for i, a in enumerate(al.alarms)]
         self._rows(d, rows, lines, u, key_color="cream")
 
+    @staticmethod
+    def chips(box: Box, n: int, u: float, per_row: int = 0) -> list[Box]:
+        """Riquadri del catalogo della scheda "+": stessa geometria per disegno e tocco."""
+        if n <= 0:
+            return []
+        per_row = per_row or min(3, n)
+        g = round(10 * u)
+        rows = max(1, -(-n // per_row))
+        cw = (box.w - (per_row - 1) * g) / per_row
+        ch = min((box.h - (rows - 1) * g) / rows, 90 * u)  # riquadri alti al massimo come un tasto
+        return [Box(round(box.x + (i % per_row) * (cw + g)), round(box.y + (i // per_row) * (ch + g)),
+                    round(cw), round(ch)) for i in range(n)]
+
+    def select_boxes(self, app: App) -> list[Box]:
+        """Riquadri selezionabili col tocco nella pagina aperta (solo la scheda "+")."""
+        widget: Any = app.page.widget
+        if widget.name != "new":
+            return []
+        b = self.content_inner(app)
+        u = self._u(*app.frame_size())
+        return self.chips(self._new_grid(b, u), len(widget.voci()), u)
+
+    @staticmethod
+    def _new_grid(b: Box, u: float) -> Box:
+        """Zona del catalogo: sotto il riquadro con il "+"."""
+        top_h = round(b.h * 0.34)
+        g = round(10 * u)
+        return Box(b.x, b.y + top_h + g, b.w, b.h - top_h - g)
+
+    def _new(self, d: ImageDraw.ImageDraw, b: Box, app: App, now: datetime, u: float) -> None:
+        """Catalogo delle schede: "+" grande in testa, voci sotto; A crea, B cambia voce."""
+        widget: Any = app.page.widget
+        voci = widget.voci()
+        scelta = widget.scelta()
+        r, pad, g = round(20 * u), max(4, round(11 * u)), round(10 * u)
+        top = Box(b.x, b.y, b.w, round(b.h * 0.34))
+        d.rounded_rectangle(top.rect, radius=r, fill=self.c["cream"])
+        self._micro(d, (top.x + pad, top.y + pad), "schede da aggiungere", u, "ink", "la", 12)
+        self._micro(d, (top.right - pad, top.y + pad),
+                    "tocca il + per confermare" if app.touch else "a conferma · b scegli",
+                    u, "ink", "ra", 11)
+        num = Box(top.x + pad, top.y + pad + round(14 * u), round(top.h * 0.7),
+                  top.h - 2 * pad - round(14 * u))
+        self._big(d, num, "+", "ink", 600, pos=(top.x + pad + num.w / 2, num.bottom), anchor="ms")
+        if scelta is not None:
+            azione = "aggiungi" if scelta.azione == "add" else "togli"  # la voce fa da interruttore
+            f = self._fit(f"{azione} {scelta.label}", "grotesk", 500, top.w - num.w - 3 * pad,
+                          num.h * 0.62)
+            self._text(d, (top.right - pad, num.bottom), f"{azione} {scelta.label}", f, "ink", "rs")
+        grid = self._new_grid(b, u)
+        riquadri = self.chips(grid, len(voci), u)
+        if riquadri:  # sotto i riquadri: come funziona l'interruttore
+            self._micro(d, (b.x + b.w / 2, riquadri[-1].bottom + round(14 * u)),
+                        "la stessa voce toglie la scheda quando è già nello schedario",
+                        u, "tan", "ma", 11)
+        for i, (voce, cb) in enumerate(zip(voci, riquadri)):
+            active = scelta is not None and i == widget.idx % len(voci)
+            togli = voce.azione == "del"
+            fill = "pink" if active else "panel"
+            d.rounded_rectangle(cb.rect, radius=r, fill=self.c[fill],
+                                outline=self.c["cream" if active else "line"],
+                                width=max(1, round(2 * u)))
+            col = "paper" if active else ("tan" if togli else "cream")
+            self._text(d, (cb.x + cb.w / 2, cb.y + cb.h / 2 - round(3 * u)),
+                       ("− " if togli else "+ ") + voce.label,
+                       self._fit(f"− {voce.label}", "grotesk", 600, cb.w - round(12 * u), cb.h * 0.42),
+                       col, "mm")
+
     def _rows(self, d: ImageDraw.ImageDraw, box: Box, rows: list[tuple[str, str]], u: float,
-              key_color: str = "tan") -> None:
+              key_color: str = "tan", lower: bool = True) -> None:
         """Righe "etichetta … valore" distribuite nello spazio disponibile (quelle che ci stanno)."""
         line_h = max(round(15 * u), round(12 * u) + round(6 * u))
         n = max(1, min(len(rows), box.h // line_h))
@@ -403,13 +554,13 @@ class CyberRenderer:
         for i, (k, v) in enumerate(rows[:n]):
             y = box.y + i * step + (step - round(12 * u)) / 2
             self._micro(d, (box.x, y), k, u, key_color, "la", 12)
-            self._micro(d, (box.right, y), str(v).lower(), u, "cream" if key_color == "tan" else "tan",
-                        "ra", 12)
+            self._micro(d, (box.right, y), str(v), u, "cream" if key_color == "tan" else "tan",
+                        "ra", 12, lower=lower)
 
     def _system(self, d: ImageDraw.ImageDraw, b: Box, app: App, now: datetime, u: float) -> None:
         """CPU, RAM e disco in pannelli a colori; host, IP, temperatura e uptime in basso."""
-        from .widgets.system import uptime_str
-        sysw: Any = app.widgets["system"]
+        from .widgets.system import rate_str, uptime_str
+        sysw: Any = app.page.widget
         st, hist = sysw.snapshot()
         r, pad, g = round(20 * u), max(4, round(11 * u)), round(10 * u)
         top = Box(b.x, b.y, b.w, round(b.h * 0.46))
@@ -419,26 +570,39 @@ class CyberRenderer:
             cb = Box(round(top.x + i * (cw + g)), top.y, round(cw), top.h)
             self._panel(d, cb, col, k, f"{v * 100:.0f}%" if v is not None else "--", "", u, r,
                         ref="100%")
-        # storico CPU a barre
-        graph = Box(b.x, top.bottom + g, b.w, round(b.h * 0.26))
-        d.rounded_rectangle(graph.rect, radius=r, fill=self.c["panel"], outline=self.c["line"],
-                            width=max(1, round(2 * u)))
-        self._micro(d, (graph.x + pad, graph.y + round(6 * u)), "cpu · storico", u, "tan", "la", 11)
-        inner = graph.inset(pad, round(20 * u))
-        slots = 48  # larghezza fissa delle colonne: lo storico cresce da sinistra
-        vals = hist[-slots:]
-        if vals and inner.w > 0 and inner.h > 0:
-            bw = inner.w / slots
-            for i, v in enumerate(vals):
-                hgt = max(1, round(inner.h * max(0.0, min(1.0, v))))
-                x = inner.x + i * bw
-                d.rectangle((x, inner.bottom - hgt, x + max(1, bw - 1), inner.bottom - 1),
-                            fill=self.c["amber"])
-        rows = Box(b.x, graph.bottom + g, b.w, b.bottom - graph.bottom - g)
+        # storici affiancati: cpu in percentuale, rete in scala sul massimo mostrato
+        net = sysw.net_snapshot() if hasattr(sysw, "net_snapshot") else []
+        gh = round(b.h * 0.26)
+        gw = (b.w - g) / 2
+        cpu_box = Box(b.x, top.bottom + g, round(gw), gh)
+        net_box = Box(round(b.x + gw + g), top.bottom + g, round(gw), gh)
+        picco = max(net) if net else 0.0
+        self._graph(d, cpu_box, hist, 1.0, "cpu · storico", "amber", u, r, pad)
+        self._graph(d, net_box, net, picco, f"rete · picco {rate_str(picco)}", "orange", u, r, pad)
+        rows = Box(b.x, cpu_box.bottom + g, b.w, b.bottom - cpu_box.bottom - g)
         info = [("host", st.host), ("ip", st.ip or "--"),
+                ("rete", f"giù {rate_str(st.net_rx)} · su {rate_str(st.net_tx)}"),
                 ("temp", f"{st.temp_c:.0f}°C" if st.temp_c else "--"),
                 ("uptime", uptime_str(st.uptime_s))]
-        self._rows(d, rows, info, u)
+        self._rows(d, rows, info, u, lower=False)
+
+    def _graph(self, d: ImageDraw.ImageDraw, box: Box, vals: list[float], top: float, label: str,
+               color: str, u: float, r: int, pad: int) -> None:
+        """Istogramma a colonne di larghezza fissa: lo storico cresce da sinistra."""
+        d.rounded_rectangle(box.rect, radius=r, fill=self.c["panel"], outline=self.c["line"],
+                            width=max(1, round(2 * u)))
+        self._micro(d, (box.x + pad, box.y + round(6 * u)), label, u, "tan", "la", 11, lower=False)
+        inner = box.inset(pad, round(20 * u))
+        slots = 48
+        vals = vals[-slots:]
+        if not vals or top <= 0 or inner.w <= 0 or inner.h <= 0:
+            return
+        bw = inner.w / slots
+        for i, v in enumerate(vals):
+            hgt = max(1, round(inner.h * max(0.0, min(1.0, v / top))))
+            x = inner.x + i * bw
+            d.rectangle((x, inner.bottom - hgt, x + max(1, bw - 1), inner.bottom - 1),
+                        fill=self.c[color])
 
     def _alert(self, d: ImageDraw.ImageDraw, w: int, h: int, u: float, msg: str, touch: bool) -> None:
         b = Box(round(w * 0.2), round(h * 0.38), round(w * 0.6), round(h * 0.24))

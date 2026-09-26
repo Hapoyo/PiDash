@@ -27,6 +27,9 @@ class Widget:
     def on_back(self, now: datetime) -> None:
         """Pulsante B."""
 
+    def on_select(self, i: int) -> None:
+        """Tocco su una voce selezionabile della pagina (scheda "+")."""
+
     def alert(self) -> str | None:
         """Testo di allarme se il widget richiede attenzione, altrimenti None."""
         return None

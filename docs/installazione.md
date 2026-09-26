@@ -1,6 +1,6 @@
 # pi-dash — Installazione
 
-Versione 0.2.0 · 2026-09-26
+Versione 0.3.0 · 2026-09-26
 
 Guida passo passo per chi è nuovo del Raspberry Pi. Si lavora dal PC Windows: il Raspberry non
 ha bisogno di monitor né di tastiera ("headless"). Le parti in `grassetto monospazio` si scrivono
@@ -172,7 +172,7 @@ Il dashboard compare sullo schermo. Ogni tocco scrive nel terminale
 1. Tocca l'angolo in alto a sinistra: deve dare circa `0.0, 0.0`; in basso a destra circa `1.0, 1.0`.
 2. Assi scambiati → `"swap_xy": true`; destra/sinistra al contrario → `"invert_x": true`;
    alto/basso al contrario → `"invert_y": true`. Si modificano con
-   `nano config.local.json`, nella sezione `input` → `touch` (vedi § 5.6).
+   `nano config.local.json`, nella sezione `input` → `touch` (vedi § 5.7).
 3. Se i bordi non arrivano a 0/1: annota i valori grezzi minimi e massimi agli angoli e
    scrivili in `x_min`, `x_max`, `y_min`, `y_max`.
 4. Ctrl+C per fermare, correggi, riprova.
@@ -193,7 +193,22 @@ Se il cursore o il login della console compaiono sopra il dashboard:
    aggiungi uno spazio e `vt.global_cursor_default=0`, senza andare a capo. Salva, esci,
    `sudo reboot`.
 
-### 5.6 Le tue impostazioni: `config.local.json`
+### 5.6 Comporre lo schedario: la scheda "+"
+In partenza ci sono home, meteo, sistema e la scheda **+**. Timer e sveglia si aggiungono quando
+servono: apri il **+**, scegli la voce e conferma.
+
+| Con il tocco | Con i pulsanti |
+|---|---|
+| tocca una voce per sceglierla, poi il riquadro "+" in alto per confermare | B passa alla voce seguente, A conferma |
+
+La stessa voce fa da interruttore: `+ timer` aggiunge la scheda, `− timer` la toglie. Lo schedario
+risultante viene salvato in `config.local.json` (§ 5.7) e torna al riavvio; la scheda "+" resta
+sempre l'ultima e non si può togliere.
+
+Le schede elencate sono quelle di `new.tipi` (`timer`, `alarm`). Le pagine fisse — home, meteo,
+sistema — stanno in `pages`: si cambiano dal file, non dal dashboard.
+
+### 5.7 Le tue impostazioni: `config.local.json`
 `config.json` arriva da GitHub e viene sostituito a ogni aggiornamento. Le tue modifiche vanno in
 `config.local.json`, nella stessa cartella: contiene **solo le voci da cambiare** e prevale su
 `config.json`. Non è in Git, quindi gli aggiornamenti non lo toccano. Esempio:
@@ -218,7 +233,8 @@ Nome del servizio: `pi-dash`.
 | Riavviare il dashboard | `sudo systemctl restart pi-dash` |
 | Fermarlo (per le prove a mano) | `sudo systemctl stop pi-dash` |
 | Non avviarlo più all'accensione | `sudo systemctl disable pi-dash` |
-| Modificare le impostazioni | `nano ~/pi-dash/config.local.json`, poi riavviare il dashboard (§ 5.6) |
+| Aggiungere o togliere una pagina | scheda "+" sul dashboard (§ 5.6) |
+| Modificare le impostazioni | `nano ~/pi-dash/config.local.json`, poi riavviare il dashboard (§ 5.7) |
 | Aggiornare dal repository | `~/pi-dash/scripts/aggiorna.sh` (§ 7) |
 | Indirizzo IP | `hostname -I` |
 | Temperatura del processore | `vcgencmd measure_temp` |
@@ -235,7 +251,7 @@ Se hai installato da GitHub (§ 4.3), un solo comando:
 ```
 Lo script:
 1. controlla i file modificati a mano. Se hai cambiato `config.json` sposta le modifiche in
-   `config.local.json` (§ 5.6); se hai il file del servizio modificato col vecchio metodo lo ripristina;
+   `config.local.json` (§ 5.7); se hai il file del servizio modificato col vecchio metodo lo ripristina;
 2. scarica da GitHub (`git pull`) il ramo in uso, di solito `main`, ed elenca le novità;
 3. aggiorna le dipendenze se `requirements.txt` è cambiato;
 4. esegue i test e verifica che la tua configurazione sia ancora valida: se qualcosa non va
@@ -276,7 +292,7 @@ Se continui a installare dallo zip:
    sudo systemctl start pi-dash
    ```
    `-o` sovrascrive i file senza chiedere; `.venv` resta com'è.
-3. `config.json` viene sovrascritto; `config.local.json` (§ 5.6) non è nello zip e resta com'è.
+3. `config.json` viene sovrascritto; `config.local.json` (§ 5.7) non è nello zip e resta com'è.
 
 ## 8. Problemi comuni
 | Sintomo | Causa probabile e rimedio |
@@ -295,7 +311,7 @@ Se continui a installare dallo zip:
 | `unzip: command not found` | `sudo apt install -y unzip` |
 
 ## 9. Aspetto
-I colori si cambiano in `config.local.json` (§ 5.6), sezione `theme` → `palette`: si indicano solo le voci da
+I colori si cambiano in `config.local.json` (§ 5.7), sezione `theme` → `palette`: si indicano solo le voci da
 sostituire, in formato `#rrggbb`.
 
 | Voce | Uso |

@@ -1,6 +1,7 @@
 """Orologio: alba/tramonto alla posizione corrente e avanzamento della giornata."""
 from __future__ import annotations
 
+import calendar
 from datetime import date, datetime
 from typing import Any
 
@@ -37,6 +38,16 @@ class ClockWidget(Widget):
     def sun(self, now: datetime) -> tuple[str, str] | None:
         s = self.sun_dt(now)
         return (hhmm(s[0]), hhmm(s[1])) if s else None
+
+    @staticmethod
+    def cycles(now: datetime) -> dict[str, float]:
+        """Avanzamento 0…1 di settimana (da lunedì), mese e anno: le tre sfere della home."""
+        day = (now.hour * 3600 + now.minute * 60 + now.second) / 86400
+        in_month = calendar.monthrange(now.year, now.month)[1]
+        in_year = 366 if calendar.isleap(now.year) else 365
+        return {"settimana": (now.weekday() + day) / 7,
+                "mese": (now.day - 1 + day) / in_month,
+                "anno": (now.timetuple().tm_yday - 1 + day) / in_year}
 
     def progress(self, now: datetime) -> tuple[str, float]:
         """(etichetta, frazione 0…1) secondo `clock.progress`."""
