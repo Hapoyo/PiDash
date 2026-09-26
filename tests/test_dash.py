@@ -15,7 +15,7 @@ from PIL import Image, ImageChops
 from dash.config import DEFAULTS, ConfigError, _merge, validate
 from dash.display.base import Display
 from dash.inputs import Event, Tap
-from dash.main import App
+from dash.app import App
 from dash.widgets import WIDGET_NAMES
 from dash.widgets.alarm import AlarmWidget
 from dash.widgets.timer import TimerState, TimerWidget
@@ -456,6 +456,17 @@ class TestPages(unittest.TestCase):
             self.assertEqual(lay.content.y, lay.tabs[i].bottom)
         app.close()
 
+    def test_grid_is_legible_on_the_real_screen(self) -> None:
+        """A 480×320 etichette ≥ 12 px, testi secondari ≥ 11 px, linguette ≥ 18 px anche con 6 pagine."""
+        from dash.render.canvas import Canvas
+        from dash.render.folders import layout
+        cv = Canvas(Image.new("RGB", (480, 320)), {}, 1.0)
+        self.assertGreaterEqual(cv.f_label.size, 12)
+        self.assertGreaterEqual(cv.f_small.size, 11)
+        lay = layout(480, 320, 6, 2)
+        self.assertTrue(all(t.h >= 18 for t in lay.tabs))
+        self.assertGreaterEqual(lay.content.h, 170)  # spazio utile anche con lo schedario pieno
+
     def test_rotation_keeps_frame_size(self) -> None:
         cfg = make_cfg(display={"width": 320, "height": 480, "rotate": 90})
         app = App(cfg, MemDisplay(480, 320), queue.Queue())
@@ -465,10 +476,15 @@ class TestPages(unittest.TestCase):
 
 class TestLoop(unittest.TestCase):
     def test_draws_once_when_nothing_changes(self) -> None:
+        # istante fisso e niente pagina sistema (cambia chiave ogni 2 s di orologio vero):
+        # altrimenti il test dipende da quando gira, e sul Pi lento fallirebbe a caso
         disp = MemDisplay(480, 320)
-        app = App(make_cfg(), disp, queue.Queue())
-        app.run(once=True)
-        app.run(once=True)  # stesso minuto, nessun evento
+        cfg = make_cfg(pages=[{"name": "Home", "widget": "clock"},
+                              {"name": "Meteo", "widget": "weather"}])
+        app = App(cfg, disp, queue.Queue())
+        now = datetime(2026, 9, 24, 7, 42)
+        app.step(now, 0.0, animate=False)
+        app.step(now, 0.5, animate=False)  # stesso minuto, nessun evento
         self.assertEqual(len(disp.frames), 1)
         app.close()
 
@@ -584,7 +600,7 @@ class TestNetAndCycles(unittest.TestCase):
 
 
 class TestMotion(unittest.TestCase):
-    """Motion graphics: tempi puri in motion.py, disegno in cyber.compose."""
+    """Motion graphics: tempi puri in motion.py, disegno in render/effects.py."""
 
     def test_levels_and_config(self) -> None:
         from dash.motion import Motion
@@ -697,17 +713,21 @@ class TestMotion(unittest.TestCase):
         app.close()
 
     def test_text_cache_returns_the_same_mask(self) -> None:
-        from dash.cyber import font, text_mask
+        from dash.render import font, text_mask
         f = font("mono", 12)
         self.assertIs(text_mask("meteo", f, "la")[0], text_mask("meteo", f, "la")[0])
 
     def test_animation_gif(self) -> None:
-        from dash.main import ANIM_SCRIPT, save_animation
+        from dash.preview import ANIM_SCRIPT, save_animation
         with tempfile.TemporaryDirectory() as tmp:
             path = save_animation(make_cfg(), Path(tmp) / "a.gif", fps=4)
             with Image.open(path) as gif:
-                self.assertEqual(gif.n_frames, sum(round(s * 4) for s, _ in ANIM_SCRIPT))
                 self.assertEqual(gif.size, (480, 320))
+                total = 0
+                for i in range(gif.n_frames):  # Pillow unisce i fotogrammi uguali consecutivi
+                    gif.seek(i)
+                    total += gif.info["duration"]
+            self.assertEqual(total, sum(round(s * 4) for s, _ in ANIM_SCRIPT) * 250)
 
 
 class TestLocalConfig(unittest.TestCase):
@@ -737,7 +757,7 @@ class TestLocalConfig(unittest.TestCase):
 
 class TestScreenshots(unittest.TestCase):
     def test_one_png_per_page_offline(self) -> None:
-        from dash.main import save_screenshots
+        from dash.preview import save_screenshots
         cfg = make_cfg(display={"width": "auto", "height": "auto"}, location={"mode": "ip"})
         with tempfile.TemporaryDirectory() as tmp:
             paths = save_screenshots(cfg, Path(tmp))

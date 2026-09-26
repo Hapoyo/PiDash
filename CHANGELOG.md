@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.5.0 — 2026-09-27
+- Codice riorganizzato, a parità di immagine (95 impronte identiche: pagine a quattro
+  risoluzioni, compresa quella ruotata, e ogni fotogramma della GIF):
+  - `dash/cyber.py` (850 righe) diviso nel pacchetto `dash/render/`: `theme`, `canvas`
+    (primitive dello stile), `folders` (schedario), `pages/` (un modulo per pagina con registro
+    `PAGES`), `effects` (animazioni e allarme), `renderer`;
+  - `dash/main.py` diviso in `app.py` (ciclo e pagine), `preview.py` (anteprime) e `main.py`
+    (sola riga di comando);
+  - tolto il driver `waveshare`, che la validazione rifiutava già;
+  - decisioni di progetto spostate da `CLAUDE.md` a `docs/decisioni.md` (CLAUDE.md sotto le
+    150 righe).
+- Grafica più leggibile e allineata su tutte le schermate:
+  - griglia unica in `render/theme.py` (`GRID`): margini, spazi, raggi, spessori e due corpi di
+    testo pensati per lo schermo 480×320; le pagine non usano più numeri sparsi;
+  - etichette da 8 a 12 px, testi secondari 11 px, linguette alte 18–20 px (più facili da
+    toccare);
+  - pannelli con etichetta, numero e dettaglio allineati a sinistra; i pannelli bassi (pioggia,
+    umidità, pressione, "prossima" della sveglia) mettono etichetta e numero sulla stessa riga;
+  - home: ora, data e righe allineate a sinistra, anelli più grandi; meteo: anello del vento alto
+    quanto il pannello, previsione che rinuncia alla riga vento/pioggia se lo spazio non basta;
+    sistema: dati della macchina su due colonne con i valori incolonnati; timer: niente più
+    "pronto pronto"; scheda "+": simbolo alto quanto il pannello.
+- Test sulle misure minime di leggibilità a 480×320 (60 test).
+
+## 0.4.1 — 2026-09-26
+- Meteo: al posto della bussola con riga e radar, un anello come quelli della home — arco da
+  nord in senso orario fino alla direzione da cui soffia il vento, sfera in testa, gradi al
+  centro, tacca sul nord. L'etichetta del pannello torna al solo nome del vento.
+- Sistema: tolto il cursore che scorreva sui grafici di CPU e rete.
+- Test resi deterministici: il ciclo si prova con un istante fisso (prima poteva fallire a caso
+  se due giri cadevano a cavallo dei 2 s della pagina sistema, più probabile sul Pi); la GIF si
+  controlla sulla durata totale, perché Pillow unisce i fotogrammi uguali consecutivi.
+
 ## 0.4.0 — 2026-09-26
 - Motion graphics (`dash/motion.py` per i tempi, `CyberRenderer.compose` per il disegno):
   - a evento: sequenza di accensione (sigla, righe di controllo, barra di carico; un tocco la

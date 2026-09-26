@@ -1,4 +1,4 @@
-"""Motion graphics: tempi e stato delle animazioni (il disegno è in `dash/cyber.py`).
+"""Motion graphics: tempi e stato delle animazioni (il disegno è in `dash/render/effects.py`).
 
 Tre livelli (`motion.livello`):
 - "off":    nessuna animazione, schermo aggiornato solo quando cambia un dato;
@@ -59,7 +59,7 @@ class Slot:
 @dataclass(frozen=True)
 class Fx:
     """Effetto continuo registrato durante il disegno (livello "pieno")."""
-    kind: str                     # "pulse", "blink", "sweep", "scan", "led", "outline"
+    kind: str                     # "pulse", "blink", "led", "outline"
     box: tuple[int, int, int, int]
     color: str = "cream"
     bg: str = "panel"
