@@ -1,6 +1,6 @@
 # pi-dash — CLAUDE.md
 
-Versione 0.4.1 · 2026-09-26
+Versione 0.5.0 · 2026-09-27
 
 ## 1. Scopo
 Dashboard da tavolo per Raspberry Pi 3 Model B con schermo SPI 3,5" 480×320 (ILI9486 + touch
@@ -66,15 +66,18 @@ tests/                 unittest
 - Nuovo widget: sottoclasse di `Widget`, registrarlo in `widgets/__init__.py` (`WIDGET_NAMES` +
   `WidgetFactory.make`), un modulo `render/pages/<nome>.py` con `draw(cv, box, app, now)` e la
   voce in `PAGES`, l'etichetta in `widgets/new.py` (`ETICHETTE`) e un test.
-- Le pagine disegnano solo con i metodi di `Canvas` (`cv.text`, `cv.micro`, `cv.big`, `cv.panel`,
+- Le pagine disegnano solo con i metodi di `Canvas` (`cv.text`, `cv.label`, `cv.big`, `cv.panel`,
   `cv.ring`, `cv.progress`, `cv.rows`, `cv.graph`, `cv.rect`); `cv.d` (ImageDraw) solo per linee
   ed ellissi senza equivalente. Un elemento che serve a due pagine va in `Canvas`.
 - Le pagine leggono **solo** `app.page.widget`, mai `app.widgets[...]`: dello stesso tipo possono
   esserci più pagine, ognuna con il proprio stato.
-- Testo a video minuscolo, ma `cv.micro`/`cv.rows` accettano `lower=False` dove il maiuscolo
+- Testo a video minuscolo, ma `cv.label`/`cv.rows` accettano `lower=False` dove il maiuscolo
   conta (kB/s, °C).
-- Misure: tutto scala con `u = min(w/960, h/540)`; i numeri della stessa serie si dimensionano su
-  una stringa di riferimento (`cv.panel(ref=...)`), così "7%" e "100%" restano uguali.
+- Misure: solo dalla griglia `GRID` in `render/theme.py` (pixel sullo schermo 480×320, scala
+  `u = min(w/480, h/320)`): `cv.margin`, `cv.gap`, `cv.pad`, `cv.radius`, `cv.line`, `cv.stroke`,
+  `cv.px(n)`. Niente numeri magici nelle pagine. Testi: `cv.label` (12 px) e `small=True` (11 px);
+  numeri grandi con `cv.big`/`cv.panel` adattati al riquadro, stessa serie con lo stesso `ref`
+  ("7%" e "100%" uguali). Allineamento: etichetta, numero e dettaglio a sinistra nei pannelli.
 - Ogni widget implementa `state_key()`: se non cambia, la pagina base non viene ridisegnata.
 - Animazioni: `motion.py` non disegna e non legge l'orologio (riceve `t`); durante `render` il
   Canvas registra i numeri (`cv.big`/`cv.panel` con `slot=`) e gli effetti (`cv.add_fx`),

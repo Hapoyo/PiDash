@@ -10,12 +10,10 @@ from dataclasses import dataclass
 
 from ..layout import Box
 from .canvas import Canvas
-from .theme import font
+from .theme import GRID, px, unit
 
-
-def unit(w: int, h: int) -> float:
-    """Scala del disegno: 1 = riferimento 960×540."""
-    return min(w / 960, h / 540)
+TAB_BAND = 0.36  # quota dell'altezza per tutte le linguette insieme (fra tab_min e tab_max)
+TAB_WIDTH = 0.66
 
 
 @dataclass
@@ -28,12 +26,11 @@ class Layout:
 def layout(w: int, h: int, n_pages: int, current: int = 0) -> Layout:
     """Linguette alternate a sinistra e a destra, cartella aperta in mezzo."""
     u = unit(w, h)
-    m = round(12 * u)
+    m = px(GRID.margin, u)
     n = max(1, n_pages)
     cur = max(0, min(n - 1, current))
-    band = h * (0.34 if n > 4 else 0.26)          # spazio complessivo delle linguette
-    row = max(round(15 * u), min(round(30 * u), round(band / n)))
-    tab_w = round(w * 0.66)
+    row = max(px(GRID.tab_min, u), min(px(GRID.tab_max, u), round(h * TAB_BAND / n)))
+    tab_w = round(w * TAB_WIDTH)
 
     def x_of(i: int) -> int:
         return m if i % 2 == 0 else w - m - tab_w
@@ -50,47 +47,44 @@ def layout(w: int, h: int, n_pages: int, current: int = 0) -> Layout:
 
 def inner(lay: Layout, u: float) -> Box:
     """Area utile della cartella aperta, dentro il bordo."""
-    return lay.content.inset(round(14 * u))
+    return lay.content.inset(px(GRID.pad, u))
 
 
-def _folder(cv: Canvas, box: Box, fill: str, outline: str, lw: int, r: int) -> None:
+def _folder(cv: Canvas, box: Box, fill: str, outline: str) -> None:
     """Cartella con i soli angoli superiori arrotondati."""
-    cv.d.rounded_rectangle(box.rect, radius=r, fill=cv.c[fill], outline=cv.c[outline], width=lw,
-                           corners=(True, True, False, False))
+    cv.d.rounded_rectangle(box.rect, radius=cv.radius, fill=cv.c[fill], outline=cv.c[outline],
+                           width=cv.line, corners=(True, True, False, False))
 
 
 def draw_tabs(cv: Canvas, lay: Layout, names: list[str], current: int) -> None:
     """Cartelle sovrapposte: le linguette sotto passano davanti al collo di quella aperta."""
-    u = cv.u
-    r = round(16 * u)
-    lw = max(1, round(2 * u))
-    size = round(12 * u)
+    lw = cv.line
     body = lay.content
     neck = lay.tabs[current]
+    side = cv.px(10)  # margine orizzontale del testo nella linguetta
 
     def label(i: int, active: bool) -> None:
         b = lay.tabs[i]
         col = "cream" if active else "ink"
-        pad = round(16 * u)
-        cv.text((b.x + pad, b.y + b.h / 2), f"{i + 1:03d}", font("mono", size), col, "lm")
-        cv.text((b.right - pad, b.y + b.h / 2), names[i].lower(),
-                font("mono", size, 700 if active else 400), col, "rm")
+        cy = b.y + b.h / 2
+        cv.label((b.x + side, cy), f"{i + 1:03d}", col, "lm")
+        cv.label((b.right - side, cy), names[i], col, "rm", bold=active)
 
     for i in range(current):  # pila sopra: ogni linguetta copre il fondo della precedente
         b = lay.tabs[i]
-        _folder(cv, Box(b.x, b.y, b.w, neck.bottom - b.y), "cream", "line", lw, r)
+        _folder(cv, Box(b.x, b.y, b.w, neck.bottom - b.y), "cream", "line")
         label(i, False)
     # cartella aperta: linguetta + corpo attaccato, senza la linea di giunzione
-    _folder(cv, Box(neck.x, neck.y, neck.w, neck.h + lw), "panel", "cream", lw, r)
-    cv.rect(body, r, "panel", "cream", lw)
+    _folder(cv, Box(neck.x, neck.y, neck.w, neck.h + lw), "panel", "cream")
+    cv.rect(body, "panel", "cream")
     cv.d.rectangle((neck.x + lw, neck.bottom - lw, neck.right - lw - 1, neck.bottom + lw),
                    fill=cv.c["panel"])
     label(current, True)
-    num_w = font("mono", size).getlength(f"{current + 1:03d}")
-    led = max(3, round(6 * u))
-    lx, ly = neck.x + round(16 * u) + num_w + round(8 * u), neck.y + neck.h / 2
+    led = cv.px(5)
+    lx = neck.x + side + cv.f_label.getlength(f"{current + 1:03d}") + cv.px(6)
+    ly = neck.y + neck.h / 2
     cv.add_fx("led", (lx, ly - led / 2, lx + led, ly + led / 2), "orange", "panel")
     for i in range(current + 1, len(lay.tabs)):  # pila sotto, davanti al bordo del corpo
         b = lay.tabs[i]
-        _folder(cv, Box(b.x, b.y, b.w, lay.tabs[-1].bottom - b.y), "cream", "line", lw, r)
+        _folder(cv, Box(b.x, b.y, b.w, lay.tabs[-1].bottom - b.y), "cream", "line")
         label(i, False)

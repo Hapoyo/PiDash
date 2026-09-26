@@ -53,3 +53,7 @@ le regole operative stanno in [CLAUDE.md](../CLAUDE.md).
   gli effetti continui si fermano. `--once` e `--screenshots` danno fotogrammi fermi.
 - Da collaudare sull'hardware: overlay e framebuffer, orientamento del touch, pulsanti GPIO, cicalino,
   fluidità delle animazioni e aggiornamento parziale del pannello (damage del driver DRM).
+- Griglia di disegno: misure pensate per lo schermo reale 480×320 (non più per 960×540 scalato):
+  sotto i 12 px Space Mono diventa illeggibile sul 3,5". Le linguette costano altezza: con 6
+  pagine restano ~170 px utili, per questo i pannelli bassi passano a una riga sola e la
+  previsione meteo toglie la terza riga quando non ci sta.

@@ -12,7 +12,7 @@ from PIL import Image
 from ..layout import Box
 from ..motion import Fx, Slot, ease_in_out, scramble, wave
 from .canvas import Canvas
-from .theme import fit, font
+from .theme import fit
 
 if TYPE_CHECKING:
     from ..app import App
@@ -32,7 +32,7 @@ def draw_fx(cv: Canvas, e: Fx, t: float) -> None:
         cx, cy, r = (x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0) / 2
         rr = r * (1.4 + 2.2 * k)
         cv.d.ellipse((cx - rr, cy - rr, cx + rr, cy + rr), outline=cv.mix(e.color, e.bg, k),
-                     width=max(1, round(1.5 * cv.u)))
+                     width=cv.line)
     elif e.kind == "outline":    # voce scelta della scheda "+"
         r, lw = (e.extra + (8, 2))[:2]
         cv.d.rounded_rectangle(e.box, radius=round(r), outline=cv.mix(e.color, e.bg, wave(t, 1.4)),
@@ -65,7 +65,7 @@ def wipe(old: Image.Image, new: Image.Image, p: float, colors: dict[str, tuple[i
     if y > 0:
         out.paste(new.crop((0, 0, w, y)), (0, 0))
     cv = Canvas(out, colors, u)
-    lw = max(1, round(3 * u))
+    lw = cv.px(2)
     cv.d.rectangle((0, y, w, y + lw), fill=cv.c["orange"])
     cv.d.line((0, y + lw + 1, w, y + lw + 1), fill=cv.mix("amber", "bg", 0.5))
     return out
@@ -76,51 +76,50 @@ def boot(w: int, h: int, u: float, colors: dict[str, tuple[int, int, int]], app:
     """Sequenza di accensione: sigla che si scrive, righe di controllo, barra di carico."""
     from .. import __version__
     cv = Canvas(Image.new("RGB", (w, h), colors["bg"]), colors, u)
-    m = round(24 * u)
+    m = cv.px(12)
     loc = getattr(getattr(app.pages[0].widget, "location", None), "name", "") or "--"
     righe = [f"schermo {w}×{h}", f"schede {len(app.pages)}", f"posizione {loc.lower()}",
              "meteo open-meteo", "sistema pronto"]
-    cv.micro((m, m), f"pi-dash // v{__version__}", "tan", "la", 12)
-    cv.micro((w - m, m), "avvio", "tan", "ra", 12)
+    cv.label((m, m), f"pi-dash // v{__version__}", "tan", small=True)
+    cv.label((w - m, m), "avvio", "tan", "ra", small=True)
     # sigla: si scrive una lettera alla volta, con il cursore a blocco
     sigla = "pi-dash"
     n = min(len(sigla), int(len(sigla) * min(1.0, p / 0.35)) + 1)
-    f = fit(sigla, "grotesk", 600, w - 2 * m, h * 0.26)
-    base_y = round(h * 0.42)
+    f = fit(sigla, "grotesk", 600, w - 2 * m, h * 0.24)
+    base_y = round(h * 0.36)
     cv.text((m, base_y), sigla[:n], f, "cream", "ls")
-    cur_x = m + f.getlength(sigla[:n]) + round(6 * u)
+    cur_x = m + f.getlength(sigla[:n]) + cv.px(4)
     if p < 0.9 and (p * 10) % 1 < 0.6:
         cv.d.rectangle((cur_x, base_y - round(f.size * 0.7), cur_x + round(f.size * 0.35), base_y),
                        fill=cv.c["orange"])
-    # righe di controllo: compaiono una dopo l'altra, "ok" in arancio
-    line_h = round(19 * u)
-    y = base_y + round(18 * u)
-    mono = font("mono", round(12 * u))
+    # righe di controllo: compaiono una dopo l'altra, puntini fino a "ok" in arancio
+    step = cv.height(cv.f_label) + cv.px(5)
+    y = base_y + cv.px(12)
+    dot = cv.f_label.getlength(".")
     for i, r in enumerate(righe):
         if p < 0.25 + i * 0.12:
             break
-        cv.text((m, y), r, mono, "cream", "la")
-        dots_x = m + mono.getlength(r) + round(6 * u)
-        end = w - m - mono.getlength("ok") - round(6 * u)
+        cv.label((m, y), r, "cream", lower=False)
+        dots_x = m + cv.f_label.getlength(r) + cv.px(4)
+        end = w - m - cv.f_label.getlength("ok") - cv.px(4)
         if end > dots_x:
-            cv.text((dots_x, y), "." * int((end - dots_x) / max(1, mono.getlength("."))), mono,
-                    "line", "la")
-        cv.text((w - m, y), "ok", mono, "orange", "ra")
-        y += line_h
-    # barra di carico in basso, stile delle altre pagine
-    bar = Box(m, h - m - round(8 * u), w - 2 * m, max(3, round(8 * u)))
+            cv.label((dots_x, y), "." * int((end - dots_x) / max(1, dot)), "line")
+        cv.label((w - m, y), "ok", "orange", "ra")
+        y += step
+    # barra di carico in basso, come le barre delle altre pagine
+    bar = Box(m, h - m - cv.px(6), w - 2 * m, cv.px(6))
     k = ease_in_out(p)
     cv.progress(bar, k, "orange")
-    cv.micro((bar.x, bar.y - round(6 * u)), f"carico {k * 100:.0f}%", "tan", "ld", 11)
+    cv.label((bar.x, bar.y - cv.px(4)), f"carico {k * 100:.0f}%", "tan", "ld", small=True)
     return cv.img
 
 
 def alert(cv: Canvas, w: int, h: int, msg: str, touch: bool) -> None:
     """Riquadro rosa di sveglia o timer scaduto, sopra qualsiasi pagina."""
-    u = cv.u
-    b = Box(round(w * 0.2), round(h * 0.38), round(w * 0.6), round(h * 0.24))
-    cv.rect(b, round(24 * u), "pink", "cream", max(2, round(4 * u)))
-    cv.big(b.inset(round(20 * u), round(24 * u)), msg.lower(), "paper", 600,
-           pos=(b.x + b.w / 2, b.y + b.h * 0.62), anchor="ms")
-    cv.micro((b.x + b.w / 2, b.bottom - round(18 * u)), "tocca lo schermo" if touch else "premi a",
-             "paper", "mm")
+    b = Box(round(w * 0.15), round(h * 0.32), round(w * 0.7), round(h * 0.36))
+    cv.rect(b, "pink", "cream", cv.px(3), r=cv.px(14))
+    hint = cv.height(cv.f_label) + 2 * cv.gap
+    num = Box(b.x + 2 * cv.pad, b.y + 2 * cv.pad, b.w - 4 * cv.pad, b.h - 3 * cv.pad - hint)
+    cv.big(num, msg.lower(), "paper", 600, pos=(b.x + b.w / 2, num.bottom), anchor="ms")
+    cv.label((b.x + b.w / 2, b.bottom - cv.pad), "tocca lo schermo" if touch else "premi a",
+             "paper", "md")

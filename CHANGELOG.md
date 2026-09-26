@@ -11,6 +11,18 @@
   - tolto il driver `waveshare`, che la validazione rifiutava già;
   - decisioni di progetto spostate da `CLAUDE.md` a `docs/decisioni.md` (CLAUDE.md sotto le
     150 righe).
+- Grafica più leggibile e allineata su tutte le schermate:
+  - griglia unica in `render/theme.py` (`GRID`): margini, spazi, raggi, spessori e due corpi di
+    testo pensati per lo schermo 480×320; le pagine non usano più numeri sparsi;
+  - etichette da 8 a 12 px, testi secondari 11 px, linguette alte 18–20 px (più facili da
+    toccare);
+  - pannelli con etichetta, numero e dettaglio allineati a sinistra; i pannelli bassi (pioggia,
+    umidità, pressione, "prossima" della sveglia) mettono etichetta e numero sulla stessa riga;
+  - home: ora, data e righe allineate a sinistra, anelli più grandi; meteo: anello del vento alto
+    quanto il pannello, previsione che rinuncia alla riga vento/pioggia se lo spazio non basta;
+    sistema: dati della macchina su due colonne con i valori incolonnati; timer: niente più
+    "pronto pronto"; scheda "+": simbolo alto quanto il pannello.
+- Test sulle misure minime di leggibilità a 480×320 (60 test).
 
 ## 0.4.1 — 2026-09-26
 - Meteo: al posto della bussola con riga e radar, un anello come quelli della home — arco da

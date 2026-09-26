@@ -1,8 +1,9 @@
 """Superficie di disegno di un fotogramma: primitive dello stile e registro delle animazioni.
 
-Le pagine disegnano solo attraverso `Canvas`: colori per nome, testi dalla cache, pannelli,
-anelli, barre, righe, grafici. Durante il disegno il Canvas registra i numeri che possono
-decodificarsi (`slots`) e gli effetti continui (`fx`), che `compose` anima sopra la pagina.
+Le pagine disegnano solo attraverso `Canvas`: colori per nome, misure dalla griglia (`GRID`,
+già scalate: `cv.gap`, `cv.pad`, `cv.radius`…), testi dalla cache, pannelli, anelli, barre,
+righe, grafici. Durante il disegno il Canvas registra i numeri che possono decodificarsi
+(`slots`) e gli effetti continui (`fx`), che `compose` anima sopra la pagina.
 """
 from __future__ import annotations
 
@@ -13,13 +14,13 @@ from PIL import Image, ImageDraw
 
 from ..layout import Box
 from ..motion import Fx, Slot
-from .theme import fit, font, text_mask
+from .theme import GRID, fit, font, px, text_mask
 
 Color = str | tuple[int, int, int]
 
 
 class Canvas:
-    """Immagine RGB + colori del tema + scala `u` (1 = riferimento 960×540)."""
+    """Immagine RGB + colori del tema + scala `u` (1 = schermo 480×320)."""
 
     def __init__(self, img: Image.Image, colors: dict[str, tuple[int, int, int]], u: float) -> None:
         self.img = img
@@ -28,6 +29,21 @@ class Canvas:
         self.u = u
         self.slots: list[Slot] = []
         self.fx: list[Fx] = []
+        # misure della griglia alla scala di questo schermo
+        self.margin, self.gap, self.pad = self.px(GRID.margin), self.px(GRID.gap), self.px(GRID.pad)
+        self.radius, self.line, self.stroke = self.px(GRID.radius), self.px(GRID.line), self.px(GRID.stroke)
+        self.f_label = font("mono", self.px(GRID.label))
+        self.f_bold = font("mono", self.px(GRID.label), 700)
+        self.f_small = font("mono", self.px(GRID.small))
+
+    def px(self, n: float) -> int:
+        """Misura della griglia (pixel a 480×320) alla scala dello schermo, almeno 1."""
+        return px(n, self.u)
+
+    @staticmethod
+    def height(f: Any) -> int:
+        """Spazio verticale di una riga ancorata in alto ("la"): dall'ancora al fondo delle gambe."""
+        return f.getbbox("Hgjà", anchor="la")[3]
 
     # --- colori ------------------------------------------------------------
     def rgb(self, c: Color) -> tuple[int, int, int]:
@@ -40,20 +56,22 @@ class Canvas:
         return tuple(round(x + (y - x) * f) for x, y in zip(ca, cb))  # type: ignore[return-value]
 
     # --- forme -------------------------------------------------------------
-    def rect(self, box: Box | tuple[float, float, float, float], r: int, fill: Color | None,
-             outline: Color | None = None, width: int = 1) -> None:
-        """Rettangolo arrotondato; `box` come Box o come (x0, y0, x1, y1) inclusivo."""
+    def rect(self, box: Box | tuple[float, float, float, float], fill: Color | None,
+             outline: Color | None = None, width: int | None = None, r: int | None = None) -> None:
+        """Rettangolo arrotondato (raggio della griglia se `r` manca); `box` Box o (x0, y0, x1, y1)."""
         xy = box.rect if isinstance(box, Box) else box
-        self.d.rounded_rectangle(xy, radius=r, fill=None if fill is None else self.rgb(fill),
-                                 outline=None if outline is None else self.rgb(outline), width=width)
+        self.d.rounded_rectangle(xy, radius=self.radius if r is None else r,
+                                 fill=None if fill is None else self.rgb(fill),
+                                 outline=None if outline is None else self.rgb(outline),
+                                 width=self.line if width is None else width)
 
     def progress(self, bar: Box, frac: float, color: str, track: str = "line",
-                 outline: str | None = None, width: int = 1, show_empty: bool = True) -> None:
+                 outline: str | None = None, show_empty: bool = True) -> None:
         """Barra arrotondata: fondo `track`, parte piena `color` proporzionale a `frac`."""
-        self.rect(bar, bar.h // 2, track, outline, width)
+        self.rect(bar, track, outline, r=bar.h // 2)
         if frac > 0 or show_empty:
-            self.rect((bar.x, bar.y, bar.x + max(bar.h, round(bar.w * frac)), bar.bottom - 1),
-                      bar.h // 2, color)
+            self.rect((bar.x, bar.y, bar.x + max(bar.h, round(bar.w * min(1.0, frac))), bar.bottom - 1),
+                      color, r=bar.h // 2)
 
     def ring(self, box: Box, frac: float, color: str, lw: int, dot: float,
              track: Color = "line", bg: str = "panel") -> None:
@@ -73,16 +91,17 @@ class Canvas:
         mask, dx, dy = text_mask(s, f, anchor)
         self.d.bitmap((round(xy[0]) + dx, round(xy[1]) + dy), mask, fill=self.rgb(fill))
 
-    def micro(self, xy: tuple[float, float], s: str, fill: Color = "cream", anchor: str = "la",
-              size: float = 11, lower: bool = True) -> None:
-        """Microetichetta in Space Mono; `lower=False` dove il maiuscolo conta (kB/s, °C)."""
-        self.text(xy, s.lower() if lower else s, font("mono", round(size * self.u)), fill, anchor)
+    def label(self, xy: tuple[float, float], s: str, fill: Color = "cream", anchor: str = "la",
+              small: bool = False, bold: bool = False, lower: bool = True) -> None:
+        """Etichetta in Space Mono ai due corpi della griglia; `lower=False` per kB/s, °C."""
+        f = self.f_small if small else (self.f_bold if bold else self.f_label)
+        self.text(xy, s.lower() if lower else s, f, fill, anchor)
 
     def big(self, box: Box, s: str, fill: str, weight: int = 500, anchor: str = "ls",
             pos: tuple[float, float] | None = None, slot: str | None = None, bg: str = "panel",
-            live: bool = False) -> Any:
-        """Numero grande adattato al riquadro; `slot` lo registra per la decodifica."""
-        f = fit(s, "grotesk", weight, box.w, box.h)
+            live: bool = False, ref: str | None = None) -> Any:
+        """Numero grande adattato al riquadro (taglia da `ref`, se c'è); `slot` lo registra."""
+        f = fit(ref or s, "grotesk", weight, box.w, box.h)
         x, y = pos if pos else (box.x, box.bottom)
         self.text((x, y), s, f, fill, anchor)
         if slot:
@@ -90,51 +109,63 @@ class Canvas:
         return f
 
     # --- componenti ricorrenti -----------------------------------------------
-    def panel(self, box: Box, fill: str, label: str, value: str, foot: str, r: int,
+    def panel(self, box: Box, fill: str, label: str, value: str, foot: str = "",
               ref: str | None = None, reserve: int = 0, slot: str | None = None,
               live: bool = False) -> None:
-        """Pannello con etichetta in alto, numero grande al centro e riga di dettaglio in basso.
+        """Pannello a colori: etichetta, numero grande e dettaglio, tutti allineati a sinistra.
 
+        Se il pannello è basso il numero va a destra dell'etichetta, sulla stessa riga.
         `ref` dà la taglia del numero (serie allineate: 7% e 100% uguali); `reserve` lascia
-        libera quella larghezza a destra del numero (anello del vento).
+        libera quella larghezza a destra, per tutta l'altezza (anello del vento).
         """
-        u = self.u
-        self.rect(box, r, fill)
-        pad = max(4, round(11 * u))
-        lab = font("mono", round(11 * u))
-        lab_h = int(lab.size) + max(2, round(3 * u))
-        self.text((box.x + pad, box.y + pad), label.lower(), lab, "ink", "la")
-        foot_h = (lab_h + max(2, round(3 * u))) if foot else 0
-        big = Box(box.x + pad, box.y + pad + lab_h, box.w - 2 * pad - reserve,
-                  box.h - 2 * pad - lab_h - foot_h)
-        if big.h > round(10 * u):
-            f = fit(ref or value, "grotesk", 500, big.w, big.h)
-            self.text((big.x, big.bottom), value, f, "ink", "ls")
-            if slot:
-                self.slot(slot, value, (big.x, big.bottom), "ls", f, "ink", fill, live)
+        self.rect(box, fill)
+        pad = self.pad
+        lab_h = self.height(self.f_label)
+        if box.h < 2 * pad + 2 * lab_h + self.gap:  # riga unica: etichetta … numero
+            self.label((box.x + pad, box.y + box.h / 2), label, "ink", "lm")
+            room = box.w - 2 * pad - round(self.f_label.getlength(label.lower())) - self.gap
+            num = Box(box.right - pad - room, box.y + pad // 2, room, box.h - pad)
+            self.big(num, value, "ink", anchor="rs", pos=(box.right - pad, num.bottom), ref=ref,
+                     slot=slot, bg=fill, live=live)
+            return
+        self.label((box.x + pad, box.y + pad), label, "ink")
+        foot_h = self.height(self.f_small) + self.gap if foot else 0
+        top = box.y + pad + lab_h + self.gap
+        num = Box(box.x + pad, top, box.w - 2 * pad - reserve, box.bottom - pad - foot_h - top)
+        if num.h > self.px(10):
+            self.big(num, value, "ink", ref=ref, slot=slot, bg=fill, live=live)
         if foot:
-            self.text((box.right - pad, box.bottom - pad), foot.lower(), lab, "ink", "rd")
+            self.label((box.x + pad, box.bottom - pad), foot, "ink", "ld", small=True)
+
+    def row_step(self) -> int:
+        """Passo verticale fra righe di etichette."""
+        return self.height(self.f_label) + self.px(3)
 
     def rows(self, box: Box, rows: list[tuple[str, str]], key_color: str = "tan",
-             lower: bool = True) -> None:
-        """Righe "etichetta … valore" distribuite nello spazio disponibile (quelle che ci stanno)."""
-        u = self.u
-        line_h = max(round(15 * u), round(12 * u) + round(6 * u))
-        n = max(1, min(len(rows), box.h // line_h))
-        step = box.h / n
-        for i, (k, v) in enumerate(rows[:n]):
-            y = box.y + i * step + (step - round(12 * u)) / 2
-            self.micro((box.x, y), k, key_color, "la", 12)
-            self.micro((box.right, y), str(v), "cream" if key_color == "tan" else "tan", "ra", 12,
-                       lower=lower)
+             lower: bool = True, value_x: int | None = None) -> None:
+        """Righe "etichetta … valore" a passo fisso dall'alto (quelle che ci stanno).
 
-    def graph(self, box: Box, vals: list[float], top: float, label: str, color: str, r: int,
-              pad: int) -> None:
+        Valori allineati a destra del riquadro, oppure a sinistra a `value_x` dal bordo
+        (colonne affiancate: i valori non toccano la colonna vicina).
+        """
+        step = self.row_step()
+        n = max(0, min(len(rows), (box.h + self.px(3)) // step))
+        col = "cream" if key_color == "tan" else "tan"
+        for i, (k, v) in enumerate(rows[:n]):
+            y = box.y + i * step
+            self.label((box.x, y), k, key_color)
+            if value_x is None:
+                self.label((box.right, y), str(v), col, "ra", lower=lower)
+            else:
+                self.label((box.x + value_x, y), str(v), col, "la", lower=lower)
+
+    def graph(self, box: Box, vals: list[float], top: float, label: str, color: str) -> None:
         """Istogramma a colonne di larghezza fissa: lo storico cresce da sinistra."""
-        u = self.u
-        self.rect(box, r, "panel", "line", max(1, round(2 * u)))
-        self.micro((box.x + pad, box.y + round(6 * u)), label, "tan", "la", 11, lower=False)
-        inner = box.inset(pad, round(20 * u))
+        pad = self.pad
+        self.rect(box, "panel", "line")
+        self.label((box.x + pad, box.y + pad - self.px(2)), label, "tan", small=True, lower=False)
+        head = self.height(self.f_small) + self.gap
+        inner = Box(box.x + pad, box.y + pad + head, box.w - 2 * pad, box.h - 2 * pad - head)
         slots = 48
         vals = vals[-slots:]
         if not vals or top <= 0 or inner.w <= 0 or inner.h <= 0:
@@ -153,7 +184,7 @@ class Canvas:
         if len(anchor) < 2 or anchor[1] != "s":
             return  # la decodifica posiziona le cifre sulla linea di base
         left, top, right, bottom = f.getbbox(text, anchor=anchor)
-        pad = 3
+        pad = self.px(2)
         box = (round(xy[0] + left) - pad, round(xy[1] + top) - pad,
                round(xy[0] + right) + pad, round(xy[1] + bottom) + pad)
         self.slots.append(Slot(key, text, xy, anchor, f, fill, bg, box, live))

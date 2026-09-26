@@ -12,7 +12,7 @@ from ..motion import Fx, Motion, Slot
 from . import effects, folders
 from .canvas import Canvas
 from .pages import PAGES, new
-from .theme import PALETTE
+from .theme import PALETTE, unit
 
 if TYPE_CHECKING:
     from ..app import App
@@ -36,7 +36,7 @@ class CyberRenderer:
 
     def content_inner(self, app: App) -> Box:
         w, h = app.frame_size()
-        return folders.inner(folders.layout(w, h, len(app.pages), app.page_idx), folders.unit(w, h))
+        return folders.inner(folders.layout(w, h, len(app.pages), app.page_idx), unit(w, h))
 
     def nav_rows(self, app: App) -> list[Box]:
         w, h = app.frame_size()
@@ -47,14 +47,14 @@ class CyberRenderer:
         widget: Any = app.page.widget
         if widget.name != "new":
             return []
-        u = folders.unit(*app.frame_size())
+        u = unit(*app.frame_size())
         return new.chips(new.grid(self.content_inner(app), u), len(widget.voci()), u)
 
     # --- pagina base -----------------------------------------------------------
     def render(self, app: App, now: datetime) -> Image.Image:
         """Disegna la pagina corrente: schedario + contenuto della cartella aperta."""
         w, h = app.frame_size()
-        cv = Canvas(Image.new("RGB", (w, h), self.c["bg"]), self.c, folders.unit(w, h))
+        cv = Canvas(Image.new("RGB", (w, h), self.c["bg"]), self.c, unit(w, h))
         lay = folders.layout(w, h, len(app.pages), app.page_idx)
         folders.draw_tabs(cv, lay, [p.name for p in app.pages], app.page_idx)
         box = folders.inner(lay, cv.u)
@@ -63,7 +63,7 @@ class CyberRenderer:
             PAGES.get(name, PAGES["clock"])(cv, box, app, now)
         except Exception:  # una pagina difettosa non deve bloccare il dashboard
             log.exception("errore nella pagina %s", app.page.name)
-            cv.micro((box.x + box.w / 2, box.y + box.h / 2), f"errore in {name}", "pink", "mm", 13)
+            cv.label((box.x + box.w / 2, box.y + box.h / 2), f"errore in {name}", "pink", "mm")
         alert = app.alerting()
         if alert:
             effects.alert(cv, w, h, alert[1], app.touch)
@@ -78,7 +78,7 @@ class CyberRenderer:
         che si muove, così ogni fotogramma costa pochi millisecondi anche sul Pi 3.
         """
         w, h = base.size
-        u = folders.unit(w, h)
+        u = unit(w, h)
         p = motion.boot_progress(t)
         if p is not None:
             self._boot_frame = effects.boot(w, h, u, self.c, app, p)

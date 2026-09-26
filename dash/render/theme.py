@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 from collections import OrderedDict
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -27,13 +28,46 @@ PALETTE: dict[str, str] = {
     "line": "#5b514a",     # linee sottili e anelli spenti
 }
 
+
+@dataclass(frozen=True)
+class Grid:
+    """Misure dello stile in pixel sullo schermo di riferimento 480×320 (scala 1).
+
+    Tutte le pagine usano queste: cambiandole qui cambia l'aspetto di tutto il dashboard.
+    """
+    margin: int = 6      # bordo dello schermo
+    gap: int = 6         # spazio fra pannelli
+    pad: int = 8         # margine dentro i pannelli
+    radius: int = 10     # angoli dei pannelli
+    line: int = 1        # contorni sottili
+    stroke: int = 2      # contorni in evidenza, anelli
+    label: int = 12      # etichette (Space Mono): titoli dei pannelli, linguette, righe
+    small: int = 11      # testi secondari (Space Mono): dettagli, legende
+    tab_min: int = 18    # altezza minima di una linguetta (tocco)
+    tab_max: int = 20
+
+
+GRID = Grid()
+REF_W, REF_H = 480, 320  # schermo di riferimento: scala 1
+
+
+def unit(w: int, h: int) -> float:
+    """Scala del disegno rispetto allo schermo di riferimento 480×320."""
+    return min(w / REF_W, h / REF_H)
+
+
+def px(n: float, u: float) -> int:
+    """Misura della griglia (pixel a 480×320) alla scala `u`, almeno 1 pixel."""
+    return max(1, round(n * u))
+
+
 FONT_DIR = Path(__file__).resolve().parents[2] / "fonts"
 _FONTS: dict[tuple[str, int, int], ImageFont.FreeTypeFont] = {}
 
 
 def font(kind: str, size: int, weight: int = 500) -> ImageFont.FreeTypeFont:
     """kind: "grotesk" (variabile 300–700) o "mono" (Space Mono regular/bold)."""
-    size = max(8 if kind == "mono" else 6, int(size))  # microetichette leggibili anche a 480×320
+    size = max(8 if kind == "mono" else 6, int(size))  # sotto gli 8 px Space Mono non si legge
     key = (kind, size, weight)
     if key not in _FONTS:
         try:

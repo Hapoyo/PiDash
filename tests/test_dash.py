@@ -456,6 +456,17 @@ class TestPages(unittest.TestCase):
             self.assertEqual(lay.content.y, lay.tabs[i].bottom)
         app.close()
 
+    def test_grid_is_legible_on_the_real_screen(self) -> None:
+        """A 480×320 etichette ≥ 12 px, testi secondari ≥ 11 px, linguette ≥ 18 px anche con 6 pagine."""
+        from dash.render.canvas import Canvas
+        from dash.render.folders import layout
+        cv = Canvas(Image.new("RGB", (480, 320)), {}, 1.0)
+        self.assertGreaterEqual(cv.f_label.size, 12)
+        self.assertGreaterEqual(cv.f_small.size, 11)
+        lay = layout(480, 320, 6, 2)
+        self.assertTrue(all(t.h >= 18 for t in lay.tabs))
+        self.assertGreaterEqual(lay.content.h, 170)  # spazio utile anche con lo schedario pieno
+
     def test_rotation_keeps_frame_size(self) -> None:
         cfg = make_cfg(display={"width": 320, "height": 480, "rotate": 90})
         app = App(cfg, MemDisplay(480, 320), queue.Queue())
