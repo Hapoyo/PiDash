@@ -1,4 +1,4 @@
-"""Interfaccia comune dei widget: stato e dati; il disegno è nelle pagine di `dash/cyber.py`."""
+"""Interfaccia comune dei widget: stato e dati; il disegno è in `dash/render/pages/`."""
 from __future__ import annotations
 
 from collections.abc import Hashable

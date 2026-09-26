@@ -1,4 +1,4 @@
-"""Motion graphics: tempi e stato delle animazioni (il disegno è in `dash/cyber.py`).
+"""Motion graphics: tempi e stato delle animazioni (il disegno è in `dash/render/effects.py`).
 
 Tre livelli (`motion.livello`):
 - "off":    nessuna animazione, schermo aggiornato solo quando cambia un dato;

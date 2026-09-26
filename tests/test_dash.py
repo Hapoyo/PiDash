@@ -15,7 +15,7 @@ from PIL import Image, ImageChops
 from dash.config import DEFAULTS, ConfigError, _merge, validate
 from dash.display.base import Display
 from dash.inputs import Event, Tap
-from dash.main import App
+from dash.app import App
 from dash.widgets import WIDGET_NAMES
 from dash.widgets.alarm import AlarmWidget
 from dash.widgets.timer import TimerState, TimerWidget
@@ -589,7 +589,7 @@ class TestNetAndCycles(unittest.TestCase):
 
 
 class TestMotion(unittest.TestCase):
-    """Motion graphics: tempi puri in motion.py, disegno in cyber.compose."""
+    """Motion graphics: tempi puri in motion.py, disegno in render/effects.py."""
 
     def test_levels_and_config(self) -> None:
         from dash.motion import Motion
@@ -702,12 +702,12 @@ class TestMotion(unittest.TestCase):
         app.close()
 
     def test_text_cache_returns_the_same_mask(self) -> None:
-        from dash.cyber import font, text_mask
+        from dash.render import font, text_mask
         f = font("mono", 12)
         self.assertIs(text_mask("meteo", f, "la")[0], text_mask("meteo", f, "la")[0])
 
     def test_animation_gif(self) -> None:
-        from dash.main import ANIM_SCRIPT, save_animation
+        from dash.preview import ANIM_SCRIPT, save_animation
         with tempfile.TemporaryDirectory() as tmp:
             path = save_animation(make_cfg(), Path(tmp) / "a.gif", fps=4)
             with Image.open(path) as gif:
@@ -746,7 +746,7 @@ class TestLocalConfig(unittest.TestCase):
 
 class TestScreenshots(unittest.TestCase):
     def test_one_png_per_page_offline(self) -> None:
-        from dash.main import save_screenshots
+        from dash.preview import save_screenshots
         cfg = make_cfg(display={"width": "auto", "height": "auto"}, location={"mode": "ip"})
         with tempfile.TemporaryDirectory() as tmp:
             paths = save_screenshots(cfg, Path(tmp))

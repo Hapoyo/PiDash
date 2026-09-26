@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.0 — 2026-09-27
+- Codice riorganizzato, a parità di immagine (95 impronte identiche: pagine a quattro
+  risoluzioni, compresa quella ruotata, e ogni fotogramma della GIF):
+  - `dash/cyber.py` (850 righe) diviso nel pacchetto `dash/render/`: `theme`, `canvas`
+    (primitive dello stile), `folders` (schedario), `pages/` (un modulo per pagina con registro
+    `PAGES`), `effects` (animazioni e allarme), `renderer`;
+  - `dash/main.py` diviso in `app.py` (ciclo e pagine), `preview.py` (anteprime) e `main.py`
+    (sola riga di comando);
+  - tolto il driver `waveshare`, che la validazione rifiutava già;
+  - decisioni di progetto spostate da `CLAUDE.md` a `docs/decisioni.md` (CLAUDE.md sotto le
+    150 righe).
+
 ## 0.4.1 — 2026-09-26
 - Meteo: al posto della bussola con riga e radar, un anello come quelli della home — arco da
   nord in senso orario fino alla direzione da cui soffia il vento, sfera in testa, gradi al

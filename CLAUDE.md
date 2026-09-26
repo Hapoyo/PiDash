@@ -14,10 +14,18 @@ microetichette in Space Mono.
 README.md              presentazione per GitHub (anteprime in docs/img/NN-pagina.png)
 config.json            configurazione del progetto: display, posizione, pagine, sveglie, touch
 config.local.json      impostazioni del singolo Pi, fuori da Git, fuse sopra config.json
-dash/main.py           loop, pagine, eventi, CLI
+dash/main.py           riga di comando: configurazione, schermo, ingressi, avvio
+dash/app.py            App: pagine dello schedario, eventi, ciclo (`step`, `run`)
+dash/preview.py        anteprime del README: PNG per pagina e GIF animata
 dash/config.py         default + validazione (ConfigError)
-dash/cyber.py          tutto il disegno: schedario, una funzione per pagina, `compose` animato
 dash/motion.py         tempi delle animazioni: livelli, curve, avvio, scansione, decodifica
+dash/render/           tutto il disegno
+  theme.py             colori, font, `fit`, cache dei testi
+  canvas.py            Canvas: primitive dello stile + registro di numeri ed effetti
+  folders.py           schedario: geometria delle linguette (disegno e tocco), cartelle
+  pages/               una `draw(cv, box, app, now)` per tipo di pagina + registro `PAGES`
+  effects.py           animazioni sopra la base, sequenza di avvio, riquadro di allarme
+  renderer.py          CyberRenderer: `render` (pagina base) e `compose` (fotogramma animato)
 dash/layout.py         Box e nomi di giorni/mesi
 dash/location.py       posizione condivisa: "ip" (IP pubblico), "city" (geocoding), "fixed"
 dash/astro.py          alba/tramonto calcolati in locale (NOAA semplificato, ±1–2 min)
@@ -25,7 +33,7 @@ dash/sysinfo.py        CPU/RAM/disco/temperatura/uptime/IP da /proc e /sys
 dash/inputs.py         Event, tastiera (stdin), pulsanti GPIO, touch evdev, cicalino
 dash/display/          base.py, sim.py (PNG + pagina web), fb.py (/dev/fbN)
 dash/widgets/          dati e stato: clock, weather, timer, alarm, system, new (nessun disegno)
-docs/                  installazione.md (guida passo passo), hardware.md (pin, overlay, alimentazione)
+docs/                  installazione.md (guida), hardware.md (pin, overlay, SPI), decisioni.md
 fonts/                 Space Grotesk, Space Mono (OFL) + licenze
 scripts/aggiorna.sh    aggiornamento sul Pi: pull, dipendenze, test, riavvio, rollback
 scripts/installa-servizio.sh  installa systemd/pi-dash.service con utente e cartella reali
@@ -54,21 +62,26 @@ tests/                 unittest
 - Python ≥ 3.11, type hints, docstring brevi, errori espliciti (nessun `except:` nudo).
 - Sola dipendenza obbligatoria: Pillow. gpiozero solo sul Pi, importato in modo lazy.
 - Testi a video in italiano minuscolo; vento in nodi (kn); temperature in °C; orari 24 h.
-- I widget forniscono **solo dati e stato**: niente disegno. Tutto il disegno sta in `cyber.py`.
+- I widget forniscono **solo dati e stato**: niente disegno. Tutto il disegno sta in `dash/render/`.
 - Nuovo widget: sottoclasse di `Widget`, registrarlo in `widgets/__init__.py` (`WIDGET_NAMES` +
-  `WidgetFactory.make`), aggiungere il metodo `_<nome>` in `cyber.py` e la voce nella tabella di
-  `CyberRenderer.render`, l'etichetta in `widgets/new.py` (`ETICHETTE`) e un test.
+  `WidgetFactory.make`), un modulo `render/pages/<nome>.py` con `draw(cv, box, app, now)` e la
+  voce in `PAGES`, l'etichetta in `widgets/new.py` (`ETICHETTE`) e un test.
+- Le pagine disegnano solo con i metodi di `Canvas` (`cv.text`, `cv.micro`, `cv.big`, `cv.panel`,
+  `cv.ring`, `cv.progress`, `cv.rows`, `cv.graph`, `cv.rect`); `cv.d` (ImageDraw) solo per linee
+  ed ellissi senza equivalente. Un elemento che serve a due pagine va in `Canvas`.
 - Le pagine leggono **solo** `app.page.widget`, mai `app.widgets[...]`: dello stesso tipo possono
   esserci più pagine, ognuna con il proprio stato.
-- Testo a video minuscolo, ma `_micro`/`_rows` accettano `lower=False` dove il maiuscolo conta
-  (kB/s, °C).
+- Testo a video minuscolo, ma `cv.micro`/`cv.rows` accettano `lower=False` dove il maiuscolo
+  conta (kB/s, °C).
 - Misure: tutto scala con `u = min(w/960, h/540)`; i numeri della stessa serie si dimensionano su
-  una stringa di riferimento (`_panel(ref=...)`), così "7%" e "100%" restano uguali.
+  una stringa di riferimento (`cv.panel(ref=...)`), così "7%" e "100%" restano uguali.
 - Ogni widget implementa `state_key()`: se non cambia, la pagina base non viene ridisegnata.
-- Animazioni: `motion.py` non disegna e non legge l'orologio (riceve `t`); `cyber.py` registra
-  durante `render` i numeri (`_big`/`_panel` con `slot=`) e gli effetti (`_add_fx`), `compose`
-  li anima sopra la base. Un effetto nuovo: tipo in `_draw_fx` + registrazione nella pagina.
-- Testo sempre con `_text` (cache delle maschere): mai `ImageDraw.text` diretto nelle pagine.
+- Animazioni: `motion.py` non disegna e non legge l'orologio (riceve `t`); durante `render` il
+  Canvas registra i numeri (`cv.big`/`cv.panel` con `slot=`) e gli effetti (`cv.add_fx`),
+  `compose` li anima sopra la base. Un effetto nuovo: ramo in `effects.draw_fx` + `cv.add_fx`.
+- Testo sempre con `cv.text` (cache delle maschere): mai `ImageDraw.text` diretto nelle pagine.
+- Refactor del disegno: le immagini devono restare identiche. Confrontare le impronte SHA-1 delle
+  pagine (più risoluzioni) e dei fotogrammi della GIF prima e dopo.
 - Commit: uno per intervento, messaggi in italiano all'imperativo.
 - Il Pi si aggiorna da `main`: ciò che arriva su `main` deve passare `python -m unittest`
   (altrimenti `aggiorna.sh` rifiuta l'aggiornamento e torna indietro).
@@ -84,52 +97,8 @@ Pin, overlay `piscreen`, alimentazione, calibrazione del touch: [docs/hardware.m
 Leggerlo prima di toccare `display/fb.py` o `inputs.py`.
 
 ## 6. Decisioni
-- Schedario: una linguetta numerata per pagina. Le pagine precedenti restano in pila in alto, le
-  successive in pila in basso; la cartella aperta parte dalla propria linguetta. Geometria unica in
-  `CyberRenderer.layout(w, h, n, current)`, usata sia dal disegno sia dal tocco.
-- Home: ora, data, luogo e coordinate, alba/tramonto, barra della giornata, settimana n:X,
-  giorno X/365 (366 negli anni bisestili), tre anelli concentrici (anno arancio, mese ambra,
-  settimana crema) con una sfera in testa all'arco: `ClockWidget.cycles`.
-- Schedario componibile: la scheda "+" (`widgets/new.py`) elenca solo i tipi opzionali
-  (`new.tipi`, di norma timer e sveglia); ogni voce fa da interruttore, quindi una sola pagina
-  per tipo. `App.add_page`/`remove_page` creano il widget e salvano `pages` in
-  `config.local.json`; `App.page_kinds()` dice al widget cosa è già presente. Chiave della pagina
-  `tipo` o `tipo#N`, sempre libera anche dopo una rimozione (più copie restano possibili da
-  configurazione). La scheda "+" resta ultima e non si può togliere.
-- Meteo: direzione del vento come anello della home (`_wind_ring` → `_ring`): arco da nord in
-  senso orario fino alla direzione **da cui** soffia il vento (uso nautico), sfera in testa, gradi
-  al centro, tacca sul nord. Niente aghi né radar. `_panel(reserve=...)` libera lo spazio a destra.
-- Rete: byte/s da `/proc/net/dev` (tutte le schede tranne `lo`), differenza fra due campioni;
-  il primo campione dopo l'avvio vale None. Storico nel widget sistema, grafico in scala sul picco.
-- Meteo: Open-Meteo (nessuna chiave), `wind_speed_unit=kn`, `timezone=auto`, 2 giorni orari;
-  cache in `out/weather_cache.json`, contatore di versione per il ridisegno. Fase lunare calcolata
-  localmente (mese sinodico medio).
-- Posizione: `location.mode` = `ip` (ipapi.co poi ip-api.com), `city` (geocoding Open-Meteo),
-  `fixed`. `name/lat/lon` fanno da ripiego; cache in `out/location.json`, aggiornata ogni
-  `refresh_h`. Cambio di posizione → dati meteo vecchi scartati.
-- Alba/tramonto della Home: calcolo locale (funziona senza rete), nel fuso del sistema, quindi il
-  Pi deve avere Europe/Rome. La pagina meteo usa i valori Open-Meteo.
-- Timer: etichette per preset `timer.labels` (es. 300 s → "PARTENZA"); B cambia preset.
-- Sistema: campioni ogni `system.sample_s`, storici di CPU e rete su 48 colonne a larghezza fissa.
-- Driver `fb`: scrive nel framebuffer (RGB565 o XRGB8888), niente desktop; trova il pannello per
-  nome del driver (ili9486…). Con `console_off` mette la console in modalità grafica (KDSETMODE,
-  serve CAP_SYS_TTY_CONFIG: già nel servizio). Touch evdev senza dipendenze (`dash/inputs.py`).
-- Con allarme attivo (sveglia/timer) qualsiasi tocco o il tasto A lo spegne, ovunque ci si trovi.
-- Suono: cicalino su GPIO (`input.buzzer_pin`), altrimenti campanella del terminale (`input.sound`).
-- Simulatore web con pulsanti virtuali per sviluppo senza hardware.
-- Configurazione a due livelli: `DEFAULTS` ← `config.json` ← `config.local.json` (`_merge`
-  ricorsivo sui dizionari, le liste si sostituiscono). Il Pi non modifica mai file in Git: così
-  `git pull --ff-only` non trova conflitti.
-- `aggiorna.sh`: file tracciati modificati → blocca (tranne config.json, spostato in
-  config.local.json, e il file del servizio, ripristinato); test o config non validi → `git reset
-  --hard` al commit precedente.
-- Motion graphics: pagina base ridisegnata solo se cambia `state_key`; `App.step` compone
-  `motion.fps` fotogrammi al secondo sopra di essa. Budget SPI: 480×320×16 bit ≈ 2,46 Mbit, a
-  18 MHz ≈ 0,14 s per schermo intero → `fb.py` scrive solo le fasce di 16 righe cambiate.
-  Numeri `live` (cpu, timer) si decodificano solo all'apertura della pagina. Con allarme attivo
-  gli effetti continui si fermano. `--once` e `--screenshots` danno fotogrammi fermi.
-- Da collaudare sull'hardware: overlay e framebuffer, orientamento del touch, pulsanti GPIO, cicalino,
-  fluidità delle animazioni e aggiornamento parziale del pannello (damage del driver DRM).
+Scelte prese e motivi (schedario, meteo, posizione, animazioni, configurazione, aggiornamento):
+[docs/decisioni.md](docs/decisioni.md). Leggerlo prima di cambiare il comportamento di una parte.
 
 ## 7. Glossario
 - **WMO code**: codice meteo standard restituito da Open-Meteo (`weather_code`).
