@@ -37,7 +37,7 @@ async function poll(){
       if(n!==last){last=n;document.getElementById('f').src='/frame.png?'+n;
                    document.getElementById('n').textContent=n;}}catch(e){}
 }
-setInterval(poll,500);
+setInterval(poll,120);
 document.querySelectorAll('button').forEach(b=>b.onclick=()=>fetch('/key/'+b.dataset.k,{method:'POST'}));
 document.addEventListener('keydown',e=>{const m={n:'next',a:'action',b:'back'}[e.key];
   if(m)fetch('/key/'+m,{method:'POST'});});
@@ -85,7 +85,7 @@ class SimDisplay(Display):
                 (self.out_dir / f"frame_{n:05d}.png").write_bytes(data)
         except OSError as exc:
             log.error("impossibile scrivere %s: %s", target, exc)
-        log.info("[sim] fotogramma #%d", n)
+        log.debug("[sim] fotogramma #%d", n)
 
     def _start_web(self, host: str, port: int, on_key: Callable[[str], None] | None) -> None:
         sim = self

@@ -22,6 +22,7 @@ DEFAULTS: dict[str, Any] = {
     "alarm": {"ring_max_min": 10, "alarms": []},
     "pages": [{"name": "Home", "widget": "clock"}],
     "new": {"tipi": ["timer", "alarm"]},
+    "motion": {"livello": "pieno", "fps": 8, "avvio": True},
     "fb": {"device": "auto", "pixel_scale": 1, "console_off": True},
     "input": {"keyboard": True, "gpio": None, "buzzer_pin": None, "sound": False,
               "touch": {"enabled": False, "device": "auto", "swap_xy": False, "invert_x": False,
@@ -62,6 +63,11 @@ def validate(cfg: dict[str, Any], known_widgets: set[str]) -> None:
         raise ConfigError("location.mode deve essere 'ip', 'city' o 'fixed'")
     if cfg["location"]["mode"] == "city" and not (cfg["location"].get("city") or cfg["location"].get("name")):
         raise ConfigError("location.mode 'city' richiede location.city")
+    mo = cfg["motion"]
+    if mo.get("livello") not in ("off", "eventi", "pieno"):
+        raise ConfigError("motion.livello deve essere 'off', 'eventi' o 'pieno'")
+    if not isinstance(mo.get("fps"), (int, float)) or not 1 <= mo["fps"] <= 30:
+        raise ConfigError("motion.fps deve essere un numero fra 1 e 30")
     if cfg["clock"]["progress"] not in ("day", "daylight", "hour"):
         raise ConfigError("clock.progress deve essere 'day', 'daylight' o 'hour'")
     if not cfg["pages"]:

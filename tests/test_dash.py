@@ -325,6 +325,46 @@ class TestFramebufferAndTouch(unittest.TestCase):
             self.assertEqual(len(data), 480 * 320 * 2)
             self.assertEqual(set(data), {0})  # schermo nero
 
+    def test_framebuffer_writes_only_changed_rows(self) -> None:
+        from unittest import mock
+        from PIL import ImageDraw
+        from dash.display import fb as FB
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sysd = root / "sys" / "fb1"
+            sysd.mkdir(parents=True)
+            for k, v in (("name", "ili9486drmfb"), ("virtual_size", "480,320"),
+                         ("bits_per_pixel", "16"), ("stride", "960")):
+                (sysd / k).write_text(v + "\n")
+            (root / "dev").mkdir()
+            (root / "dev" / "fb1").write_bytes(bytes(480 * 320 * 2))
+            with mock.patch.object(FB, "SYS_FB", root / "sys"), \
+                    mock.patch.object(FB, "DEV_DIR", root / "dev"):
+                d = FB.FramebufferDisplay("auto", "auto", {"console_off": False})
+                img = Image.new("RGB", (480, 320))
+                d.show(img)
+                writes: list[tuple[int, int]] = []
+                real_seek, real_write = d._fh.seek, d._fh.write
+                pos = {"at": 0}
+
+                def seek(off: int, *a: int) -> int:
+                    pos["at"] = off
+                    return real_seek(off, *a)
+
+                def write(data: bytes) -> int:
+                    writes.append((pos["at"], len(data)))
+                    return real_write(data)
+
+                d._fh = mock.Mock(seek=seek, write=write, close=d._fh.close)
+                img2 = img.copy()
+                ImageDraw.Draw(img2).rectangle((100, 50, 120, 60), fill=(255, 255, 255))
+                d.show(img2)
+                d.show(img2)                                   # identico: nessuna scrittura
+                d.close()
+            self.assertEqual(writes, [(50 * 960, 11 * 960)])   # solo le righe 50…60
+            data = (root / "dev" / "fb1").read_bytes()
+            self.assertEqual(data[50 * 960 + 100 * 2: 50 * 960 + 100 * 2 + 2], b"\xff\xff")
+
     def test_find_touch_device(self) -> None:
         from dash.inputs import find_touch_device
         text = ('I: Bus=0000\nN: Name="vc4-hdmi"\nH: Handlers=kbd event0\n\n'
@@ -541,6 +581,133 @@ class TestNetAndCycles(unittest.TestCase):
         capodanno = ClockWidget.cycles(datetime(2026, 1, 1, 0, 0))
         self.assertEqual((capodanno["anno"], capodanno["mese"]), (0.0, 0.0))
         self.assertAlmostEqual(capodanno["settimana"], 3 / 7)  # 1/1/2026 è giovedì
+
+
+class TestMotion(unittest.TestCase):
+    """Motion graphics: tempi puri in motion.py, disegno in cyber.compose."""
+
+    def test_levels_and_config(self) -> None:
+        from dash.motion import Motion
+        with self.assertRaises(ValueError):
+            Motion.from_cfg({"livello": "tanto"})
+        off = Motion.from_cfg({"livello": "off"})
+        off.start(0.0)
+        self.assertIsNone(off.boot_start)             # niente avvio animato
+        self.assertIsNone(off.frame_key(1.0))
+        self.assertEqual(off.interval(1.0, 0.5), 0.5)  # si torna al ritmo lento
+        pieno = Motion.from_cfg({"livello": "pieno", "fps": 8})
+        self.assertEqual(pieno.interval(1.0, 0.5), 0.125)
+        self.assertEqual(Motion.from_cfg({"fps": 500}).fps, 30.0)  # limite di sicurezza
+
+    def test_config_rejects_bad_motion(self) -> None:
+        for bad in ({"livello": "x"}, {"fps": 0}, {"fps": "otto"}):
+            cfg = make_cfg(motion={**DEFAULTS["motion"], **bad})
+            with self.assertRaises(ConfigError):
+                validate(cfg, WIDGET_NAMES)
+
+    def test_easing_and_boot(self) -> None:
+        from dash.motion import BOOT_S, Motion, ease_in_out, ease_out, wave
+        self.assertEqual((ease_out(0), ease_out(1), ease_in_out(0), ease_in_out(1)), (0, 1, 0, 1))
+        self.assertEqual((wave(0, 2), wave(1, 2)), (0.0, 1.0))
+        m = Motion()
+        m.start(10.0)
+        self.assertAlmostEqual(m.boot_progress(10.0 + BOOT_S / 2), 0.5)
+        self.assertIsNone(m.boot_progress(10.0 + BOOT_S))   # finito: si passa alle pagine
+        self.assertIsNone(m.boot_start)
+
+    def test_scramble_keeps_unchanged_digits_and_settles(self) -> None:
+        from dash.motion import scramble
+        self.assertEqual(scramble("07:43", 1.0, 1), "07:43")       # a fine corsa: testo finale
+        for seed in range(20):
+            s = scramble("07:43", 0.0, seed, keep="07:42")
+            self.assertEqual(s[:4], "07:4")                          # si muove solo l'ultima
+        self.assertEqual(scramble("--:--", 0.0, 3), "--:--")         # niente cifre, niente effetto
+
+    def test_live_numbers_decode_only_when_the_page_opens(self) -> None:
+        from dash.motion import Motion, Slot
+        m = Motion()
+        s1 = Slot("system.cpu", "12%", (0, 0), "ls", None, "ink", "orange", (0, 0, 1, 1), True)
+        m.slots_drawn([s1], 0.0)
+        self.assertEqual(len(m.decodes), 1)                         # prima comparsa: sì
+        m.decodes.clear()
+        m.slots_drawn([Slot("system.cpu", "13%", (0, 0), "ls", None, "ink", "orange",
+                            (0, 0, 1, 1), True)], 1.0)
+        self.assertEqual(m.decodes, [])                             # cambia spesso: no
+
+    def _app(self, livello: str = "pieno") -> App:
+        cfg = make_cfg(motion={"livello": livello, "fps": 8, "avvio": True})
+        return App(cfg, MemDisplay(480, 320), queue.Queue())
+
+    def test_off_level_shows_the_plain_page(self) -> None:
+        app = self._app("off")
+        now = datetime(2026, 9, 24, 7, 42)
+        shown = app.step(now, 0.0)
+        self.assertIsNotNone(shown)
+        self.assertIsNone(app.step(now, 0.3))                       # niente cambia: niente disegno
+        app.close()
+
+    def test_boot_then_first_page_and_tap_skips(self) -> None:
+        from dash.motion import BOOT_S
+        app = self._app()
+        now = datetime(2026, 9, 24, 7, 42)
+        app.motion.start(0.0)
+        boot = app.step(now, 0.5)
+        self.assertIsNotNone(boot)
+        self.assertEqual(boot.getpixel((5, 5)), app.renderer.c["bg"])  # niente linguette
+        page = app.step(now, BOOT_S + 5)                            # dopo avvio e scansione
+        self.assertNotEqual(ImageChops.difference(boot, page).getbbox(), None)
+        app2 = self._app()
+        app2.motion.start(0.0)
+        app2.handle_tap(Tap(0.5, 0.5), now)
+        self.assertIsNone(app2.motion.boot_start)                   # il tocco salta l'avvio
+        self.assertEqual(app2.page_idx, 0)                          # e non fa altro
+        app.close()
+        app2.close()
+
+    def test_page_change_wipes_from_the_top(self) -> None:
+        from dash.motion import WIPE_S
+        app = self._app("eventi")
+        now = datetime(2026, 9, 24, 7, 42)
+        old = app.step(now, 0.0)
+        app.page_idx = 1
+        mid = app.step(now, 0.01)
+        new_full = app.renderer.render(app, now)
+        self.assertIsNotNone(app.motion.wipe_from)
+        h = mid.height
+        self.assertEqual(mid.crop((0, h - 20, 480, h)).tobytes(),
+                         old.crop((0, h - 20, 480, h)).tobytes())  # sotto: ancora la vecchia
+        end = app.step(now, WIPE_S + 1.0)                          # decodifiche comprese
+        self.assertIsNone(ImageChops.difference(end, new_full).getbbox())
+        app.close()
+
+    def test_ambient_effects_stay_inside_their_boxes(self) -> None:
+        app = self._app()
+        now = datetime(2026, 9, 24, 7, 42)
+        app.step(now, 0.0)
+        base = app.renderer.render(app, now)
+        app.motion.decodes.clear()
+        frame = app.renderer.compose(base, app, app.motion, 10.6)   # due punti spenti
+        diff = ImageChops.difference(base, frame).getbbox()
+        self.assertIsNotNone(diff)
+        pad = 60  # aloni e contorni escono un poco dal riquadro registrato
+        xs = [b for e in app.renderer.fx for b in (e.box[0] - pad, e.box[2] + pad)]
+        ys = [b for e in app.renderer.fx for b in (e.box[1] - pad, e.box[3] + pad)]
+        self.assertTrue(min(xs) <= diff[0] and diff[2] <= max(xs))
+        self.assertTrue(min(ys) <= diff[1] and diff[3] <= max(ys))
+        app.close()
+
+    def test_text_cache_returns_the_same_mask(self) -> None:
+        from dash.cyber import font, text_mask
+        f = font("mono", 12)
+        self.assertIs(text_mask("meteo", f, "la")[0], text_mask("meteo", f, "la")[0])
+
+    def test_animation_gif(self) -> None:
+        from dash.main import ANIM_SCRIPT, save_animation
+        with tempfile.TemporaryDirectory() as tmp:
+            path = save_animation(make_cfg(), Path(tmp) / "a.gif", fps=4)
+            with Image.open(path) as gif:
+                self.assertEqual(gif.n_frames, sum(round(s * 4) for s, _ in ANIM_SCRIPT))
+                self.assertEqual(gif.size, (480, 320))
 
 
 class TestLocalConfig(unittest.TestCase):

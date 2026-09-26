@@ -1,6 +1,6 @@
 # pi-dash — Installazione
 
-Versione 0.3.1 · 2026-09-26
+Versione 0.4.0 · 2026-09-26
 
 Guida passo passo per chi è nuovo del Raspberry Pi. Si lavora dal PC Windows: il Raspberry non
 ha bisogno di monitor né di tastiera ("headless"). Le parti in `grassetto monospazio` si scrivono
@@ -311,6 +311,7 @@ Se continui a installare dallo zip:
 | Il Raspberry non compare nella rete | rete a 5 GHz (serve 2,4 GHz) o password Wi-Fi errata; prova con il cavo Ethernet e controlla il § 1 |
 | Schermo 3,5" bianco | righe mancanti o scritte male in `config.txt` (§ 5.2) |
 | `aggiorna.sh`: "ci sono file modificati a mano" | l'elenco dice quali; salva le modifiche che ti servono in `config.local.json`, poi `git checkout -- <file>` |
+| Animazioni a scatti o processore caldo | abbassa `motion.fps` o usa `"livello": "eventi"` (§ 9.1) |
 | Manca la scheda "+" dopo un aggiornamento | il tuo `config.local.json` contiene `pages`: § 5.6, in fondo |
 | `aggiorna.sh`: "test falliti" o "configurazione non valida" | la versione precedente è già ripristinata; manda l'output a chi sviluppa |
 | Schermo acceso ma dashboard assente | `sudo journalctl -u pi-dash -n 50` e leggi l'ultimo errore |
@@ -320,6 +321,24 @@ Se continui a installare dallo zip:
 | `unzip: command not found` | `sudo apt install -y unzip` |
 
 ## 9. Aspetto
+
+### 9.1 Animazioni
+In `config.local.json`, sezione `motion`:
+
+| Voce | Valori | Effetto |
+|---|---|---|
+| `livello` | `"pieno"` (predefinito) | accensione, scansione al cambio pagina, cifre che si decodificano, più effetti continui (radar, aloni, spie, due punti) |
+| | `"eventi"` | solo le animazioni brevi legate a un evento: lo schermo resta fermo il resto del tempo |
+| | `"off"` | nessuna animazione |
+| `fps` | 1–30, predefinito `8` | fotogrammi al secondo delle animazioni |
+| `avvio` | `true` / `false` | sequenza di accensione (un tocco la salta) |
+
+Esempio: `{"motion": {"livello": "eventi"}}`. Poi `sudo systemctl restart pi-dash`.
+
+Se il Raspberry scalda o le animazioni scattano, prova `"fps": 5` oppure `"livello": "eventi"`.
+Temperatura: `vcgencmd measure_temp` (sopra 80 °C il processore rallenta da solo).
+
+### 9.2 Colori
 I colori si cambiano in `config.local.json` (§ 5.7), sezione `theme` → `palette`: si indicano solo le voci da
 sostituire, in formato `#rrggbb`.
 

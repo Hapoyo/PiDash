@@ -11,6 +11,8 @@ from __future__ import annotations
 import calendar
 import logging
 import math
+import zlib
+from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -19,6 +21,7 @@ from typing import TYPE_CHECKING, Any
 from PIL import Image, ImageColor, ImageDraw, ImageFont
 
 from .layout import GIORNI, MESI, Box
+from .motion import Fx, Motion, Slot, ease_in_out, scramble, wave
 
 if TYPE_CHECKING:
     from .main import App
@@ -64,6 +67,26 @@ def font(kind: str, size: int, weight: int = 500) -> ImageFont.FreeTypeFont:
     return _FONTS[key]
 
 
+_MASKS: OrderedDict[tuple[str, int, str], tuple[Image.Image, int, int]] = OrderedDict()
+MASK_CACHE = 1024  # testi già rasterizzati: FreeType è l'88% del tempo di disegno
+
+
+def text_mask(s: str, f: Any, anchor: str) -> tuple[Image.Image, int, int]:
+    """Maschera "L" del testo e scostamento dal punto di ancoraggio; in cache (LRU)."""
+    key = (s, id(f), anchor)  # i font restano in _FONTS per tutta la vita del programma
+    hit = _MASKS.get(key)
+    if hit is not None:
+        _MASKS.move_to_end(key)
+        return hit
+    left, top, right, bottom = f.getbbox(s, anchor=anchor)
+    mask = Image.new("L", (max(1, right - left), max(1, bottom - top)))
+    ImageDraw.Draw(mask).text((-left, -top), s, font=f, fill=255, anchor=anchor)
+    _MASKS[key] = (mask, left, top)
+    if len(_MASKS) > MASK_CACHE:
+        _MASKS.popitem(last=False)
+    return mask, left, top
+
+
 @dataclass
 class Layout:
     """Rettangoli della pagina: disegno e tocco usano gli stessi."""
@@ -76,6 +99,10 @@ class CyberRenderer:
 
     def __init__(self, palette: dict[str, str] | None = None) -> None:
         self.c = {k: ImageColor.getrgb(v) for k, v in {**PALETTE, **(palette or {})}.items()}
+        # registrati durante `render`: numeri che possono decodificarsi, effetti continui
+        self.slots: list[Slot] = []
+        self.fx: list[Fx] = []
+        self._boot_frame: Image.Image | None = None
 
     # --- geometria ---------------------------------------------------------
     @staticmethod
@@ -116,7 +143,48 @@ class CyberRenderer:
 
     def _text(self, d: ImageDraw.ImageDraw, xy: tuple[float, float], s: str, f: Any,
               fill: str, anchor: str = "la") -> None:
-        d.text(xy, s, font=f, fill=self.c[fill], anchor=anchor)
+        mask, dx, dy = text_mask(s, f, anchor)
+        d.bitmap((round(xy[0]) + dx, round(xy[1]) + dy), mask, fill=self._rgb(fill))
+
+    def _rgb(self, c: str | tuple[int, int, int]) -> tuple[int, int, int]:
+        return self.c[c] if isinstance(c, str) else c
+
+    def _mix(self, a: str, b: str, f: float) -> tuple[int, int, int]:
+        """Colore fra `a` (f=0) e `b` (f=1): dissolvenze senza canale alfa."""
+        ca, cb = self.c[a], self.c[b]
+        f = max(0.0, min(1.0, f))
+        return tuple(round(x + (y - x) * f) for x, y in zip(ca, cb))  # type: ignore[return-value]
+
+    # --- registro per le animazioni ---------------------------------------
+    def _slot(self, key: str, text: str, xy: tuple[float, float], anchor: str, f: Any,
+              fill: str, bg: str, live: bool = False) -> None:
+        """Numero che può decodificarsi; `live`: solo all'apertura della pagina (cambia spesso)."""
+        if len(anchor) < 2 or anchor[1] != "s":
+            return  # la decodifica posiziona le cifre sulla linea di base
+        left, top, right, bottom = f.getbbox(text, anchor=anchor)
+        pad = 3
+        box = (round(xy[0] + left) - pad, round(xy[1] + top) - pad,
+               round(xy[0] + right) + pad, round(xy[1] + bottom) + pad)
+        self.slots.append(Slot(key, text, xy, anchor, f, fill, bg, box, live))
+
+    def _add_fx(self, kind: str, box: tuple[float, float, float, float], color: str = "cream",
+                bg: str = "panel", phase: float = 0.0, extra: tuple[float, ...] = ()) -> None:
+        self.fx.append(Fx(kind, tuple(round(v) for v in box), color, bg, phase, extra))  # type: ignore[arg-type]
+
+    @staticmethod
+    def _left(s: str, f: Any, x: float, anchor: str) -> float:
+        """Bordo sinistro della riga di testo per ancoraggi l/m/r."""
+        total = f.getlength(s)
+        return x - total / 2 if anchor[0] == "m" else (x - total if anchor[0] == "r" else x)
+
+    def _colon_fx(self, s: str, f: Any, xy: tuple[float, float], anchor: str, bg: str) -> None:
+        """Due punti dell'ora che lampeggiano (solo ancoraggi sulla linea di base)."""
+        if ":" not in s or len(anchor) < 2 or anchor[1] != "s":
+            return
+        x0 = self._left(s, f, xy[0], anchor) + f.getlength(s[:s.index(":")])
+        left, top, right, bottom = f.getbbox(":", anchor="ls")
+        self._add_fx("blink", (x0 + left - 1, xy[1] + top - 1, x0 + right + 1, xy[1] + bottom + 1),
+                     bg=bg)
 
     @staticmethod
     def _fit(s: str, kind: str, weight: int, max_w: float, max_h: float) -> ImageFont.FreeTypeFont:
@@ -137,10 +205,15 @@ class CyberRenderer:
         self._text(d, xy, s.lower() if lower else s, font("mono", round(size * u)), fill, anchor)
 
     def _big(self, d: ImageDraw.ImageDraw, box: Box, s: str, fill: str, weight: int = 500,
-             anchor: str = "ls", pos: tuple[float, float] | None = None) -> None:
+             anchor: str = "ls", pos: tuple[float, float] | None = None,
+             slot: str | None = None, bg: str = "panel", live: bool = False) -> Any:
+        """Numero grande adattato al riquadro; `slot` lo registra per la decodifica."""
         f = self._fit(s, "grotesk", weight, box.w, box.h)
         x, y = pos if pos else (box.x, box.bottom)
         self._text(d, (x, y), s, f, fill, anchor)
+        if slot:
+            self._slot(slot, s, (x, y), anchor, f, fill, bg, live)
+        return f
 
     def _ring(self, d: ImageDraw.ImageDraw, box: Box, frac: float, color: str, lw: int,
               dot: float) -> None:
@@ -153,6 +226,8 @@ class CyberRenderer:
         rad = math.radians(ang)
         px, py = cx + (box.w / 2) * math.cos(rad), cy + (box.h / 2) * math.sin(rad)
         d.ellipse((px - dot, py - dot, px + dot, py + dot), fill=self.c[color])
+        self._add_fx("pulse", (px - dot, py - dot, px + dot, py + dot), color, "panel",
+                     phase=frac)
 
     def _cycles(self, d: ImageDraw.ImageDraw, box: Box, cycles: dict[str, float], u: float) -> None:
         """Tre anelli concentrici con una sfera ciascuno: settimana, mese, anno."""
@@ -194,6 +269,7 @@ class CyberRenderer:
             a = math.radians(45 * i + 22.5)
             d.line((cx + (r - 2 * u) * math.cos(a), cy + (r - 2 * u) * math.sin(a),
                     cx + r * math.cos(a), cy + r * math.sin(a)), fill=self.c[dim], width=lw)
+        self._add_fx("sweep", (cx - r, cy - r, cx + r, cy + r), dim, "orange")
         # riga dal centro al bordo, verso la parte da cui soffia il vento (0° = da nord)
         a = math.radians(deg - 90)
         tip = r - 7 * u
@@ -237,6 +313,10 @@ class CyberRenderer:
         d.rectangle((neck.x + lw, neck.bottom - lw, neck.right - lw - 1, neck.bottom + lw),
                     fill=self.c["panel"])
         label(current, True)
+        num_w = font("mono", size).getlength(f"{current + 1:03d}")
+        led = max(3, round(6 * u))
+        lx, ly = neck.x + round(16 * u) + num_w + round(8 * u), neck.y + neck.h / 2
+        self._add_fx("led", (lx, ly - led / 2, lx + led, ly + led / 2), "orange", "panel")
         for i in range(current + 1, len(lay.tabs)):  # pila sotto, davanti al bordo del corpo
             b = lay.tabs[i]
             self._folder(d, Box(b.x, b.y, b.w, lay.tabs[-1].bottom - b.y), "cream", "line", lw, r)
@@ -246,6 +326,7 @@ class CyberRenderer:
         """Disegna la pagina corrente: schedario + contenuto della cartella aperta."""
         w, h = app.frame_size()
         u = self._u(w, h)
+        self.slots, self.fx = [], []
         img = Image.new("RGB", (w, h), self.c["bg"])
         d = ImageDraw.Draw(img)
         lay = self.layout(w, h, len(app.pages), app.page_idx)
@@ -263,6 +344,147 @@ class CyberRenderer:
         alert = app.alerting()
         if alert:
             self._alert(d, w, h, u, alert[1], app.touch)
+        return img
+
+    # --- motion graphics ---------------------------------------------------
+    def compose(self, base: Image.Image, app: App, motion: Motion, t: float) -> Image.Image:
+        """Fotogramma animato: avvio, oppure pagina base + effetti + decodifiche + scansione.
+
+        La pagina base si ridisegna solo quando cambiano i dati; qui si aggiunge soltanto ciò
+        che si muove, così ogni fotogramma costa pochi millisecondi anche sul Pi 3.
+        """
+        w, h = base.size
+        u = self._u(w, h)
+        boot = motion.boot_progress(t)
+        if boot is not None:
+            self._boot_frame = self._boot(w, h, u, app, boot)
+            return self._boot_frame
+        if self._boot_frame is not None:  # fine dell'avvio: si apre la prima pagina
+            motion.page_changed(self._boot_frame, t)
+            motion.slots_drawn(self.slots, t)
+            self._boot_frame = None
+        wipe = motion.wipe_progress(t)
+        decodes = motion.active_decodes(t)
+        fx = self.fx if motion.ambient and not app.alerting() else []
+        if wipe is None and not decodes and not fx:
+            return base
+        img = base.copy()
+        d = ImageDraw.Draw(img)
+        for e in fx:
+            self._draw_fx(d, e, t, u)
+        frame_no = int(t * motion.fps)
+        for slot, p, keep in decodes:
+            self._draw_decode(d, slot, p, keep, frame_no)
+        if wipe is not None and motion.wipe_from is not None:
+            img = self._wipe(motion.wipe_from, img, wipe, u)
+        return img
+
+    def _draw_fx(self, d: ImageDraw.ImageDraw, e: Fx, t: float, u: float) -> None:
+        x0, y0, x1, y1 = e.box
+        if e.kind == "blink":        # due punti: mezzo secondo sì, mezzo no
+            if t % 1.0 >= 0.5:
+                d.rectangle(e.box, fill=self.c[e.bg])
+        elif e.kind == "led":        # spia della linguetta aperta
+            on = wave(t, 1.6) > 0.35
+            d.rectangle(e.box, fill=self.c[e.color] if on else self._mix(e.color, e.bg, 0.8))
+        elif e.kind == "pulse":      # alone che si allarga e sfuma attorno alla sfera
+            k = ((t / 2.2) + e.phase) % 1.0
+            cx, cy, r = (x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0) / 2
+            rr = r * (1.4 + 2.2 * k)
+            d.ellipse((cx - rr, cy - rr, cx + rr, cy + rr), outline=self._mix(e.color, e.bg, k),
+                      width=max(1, round(1.5 * u)))
+        elif e.kind == "sweep":      # radar: raggio che gira con una scia che sfuma
+            cx, cy, r = (x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0) / 2 * 0.86
+            a0 = (t / 4.0 % 1.0) * 360
+            for i, fade in enumerate((0.15, 0.45, 0.7)):
+                a = math.radians(a0 - 90 - i * 9)
+                d.line((cx, cy, cx + r * math.cos(a), cy + r * math.sin(a)),
+                       fill=self._mix(e.color, e.bg, fade), width=max(1, round(1.5 * u)))
+        elif e.kind == "scan":       # cursore verticale che percorre il grafico
+            k = ease_in_out(((t / 3.2) + e.phase) % 1.0)
+            x = x0 + (x1 - x0) * k
+            d.line((x, y0, x, y1), fill=self._mix(e.color, e.bg, 0.35), width=1)
+            dot = max(2, round(3 * u))
+            d.rectangle((x - dot / 2, y0 - dot, x + dot / 2, y0), fill=self.c[e.color])
+        elif e.kind == "outline":    # voce scelta della scheda "+"
+            r, lw = (e.extra + (8, 2))[:2]
+            d.rounded_rectangle(e.box, radius=round(r), outline=self._mix(e.color, e.bg, wave(t, 1.4)),
+                                width=round(lw))
+
+    def _draw_decode(self, d: ImageDraw.ImageDraw, slot: Slot, p: float, keep: str,
+                     frame_no: int) -> None:
+        """Cifre che scorrono e si fermano da sinistra a destra, ognuna al suo posto finale."""
+        seed = zlib.crc32(slot.key.encode()) ^ frame_no  # riproducibile fra esecuzioni
+        text = scramble(slot.text, p, seed, keep)
+        if text == slot.text:
+            return
+        d.rectangle(slot.box, fill=self.c[slot.bg])
+        x = self._left(slot.text, slot.font, slot.xy[0], slot.anchor)
+        for i, c in enumerate(text):
+            cx = x + slot.font.getlength(slot.text[:i])
+            if c == slot.text[i]:
+                self._text(d, (cx, slot.xy[1]), c, slot.font, slot.fill, "ls")
+            else:  # cifra di passaggio centrata nella cella di quella finale, come un rullo
+                mid = cx + slot.font.getlength(slot.text[i]) / 2
+                self._text(d, (mid, slot.xy[1]), c, slot.font,
+                           self._mix(slot.fill, slot.bg, 0.35), "ms")
+
+    def _wipe(self, old: Image.Image, new: Image.Image, p: float, u: float) -> Image.Image:
+        """Scansione dall'alto: sopra la riga la pagina nuova, sotto quella vecchia."""
+        w, h = new.size
+        y = round(h * p)
+        out = old.copy() if old.size == new.size else Image.new("RGB", new.size, self.c["bg"])
+        if y > 0:
+            out.paste(new.crop((0, 0, w, y)), (0, 0))
+        d = ImageDraw.Draw(out)
+        lw = max(1, round(3 * u))
+        d.rectangle((0, y, w, y + lw), fill=self.c["orange"])
+        d.line((0, y + lw + 1, w, y + lw + 1), fill=self._mix("amber", "bg", 0.5))
+        return out
+
+    def _boot(self, w: int, h: int, u: float, app: App, p: float) -> Image.Image:
+        """Sequenza di accensione: sigla che si scrive, righe di controllo, barra di carico."""
+        from . import __version__
+        img = Image.new("RGB", (w, h), self.c["bg"])
+        d = ImageDraw.Draw(img)
+        m = round(24 * u)
+        loc = getattr(getattr(app.pages[0].widget, "location", None), "name", "") or "--"
+        righe = [f"schermo {w}×{h}", f"schede {len(app.pages)}", f"posizione {loc.lower()}",
+                 "meteo open-meteo", "sistema pronto"]
+        self._micro(d, (m, m), f"pi-dash // v{__version__}", u, "tan", "la", 12)
+        self._micro(d, (w - m, m), "avvio", u, "tan", "ra", 12)
+        # sigla: si scrive una lettera alla volta, con il cursore a blocco
+        sigla = "pi-dash"
+        n = min(len(sigla), int(len(sigla) * min(1.0, p / 0.35)) + 1)
+        f = self._fit(sigla, "grotesk", 600, w - 2 * m, h * 0.26)
+        base_y = round(h * 0.42)
+        self._text(d, (m, base_y), sigla[:n], f, "cream", "ls")
+        cur_x = m + f.getlength(sigla[:n]) + round(6 * u)
+        if p < 0.9 and (p * 10) % 1 < 0.6:
+            d.rectangle((cur_x, base_y - round(f.size * 0.7), cur_x + round(f.size * 0.35), base_y),
+                        fill=self.c["orange"])
+        # righe di controllo: compaiono una dopo l'altra, "ok" in arancio
+        line_h = round(19 * u)
+        y = base_y + round(18 * u)
+        mono = font("mono", round(12 * u))
+        for i, r in enumerate(righe):
+            if p < 0.25 + i * 0.12:
+                break
+            self._text(d, (m, y), r, mono, "cream", "la")
+            dots_x = m + mono.getlength(r) + round(6 * u)
+            end = w - m - mono.getlength("ok") - round(6 * u)
+            if end > dots_x:
+                self._text(d, (dots_x, y), "." * int((end - dots_x) / max(1, mono.getlength("."))),
+                           mono, "line", "la")
+            self._text(d, (w - m, y), "ok", mono, "orange", "ra")
+            y += line_h
+        # barra di carico in basso, stile delle altre pagine
+        bar = Box(m, h - m - round(8 * u), w - 2 * m, max(3, round(8 * u)))
+        d.rounded_rectangle(bar.rect, radius=bar.h // 2, fill=self.c["line"])
+        k = ease_in_out(p)
+        d.rounded_rectangle((bar.x, bar.y, bar.x + max(bar.h, round(bar.w * k)), bar.bottom - 1),
+                            radius=bar.h // 2, fill=self.c["orange"])
+        self._micro(d, (bar.x, bar.y - round(6 * u)), f"carico {k * 100:.0f}%", u, "tan", "ld", 11)
         return img
 
     # --- contenuti nativi ----------------------------------------------------
@@ -288,8 +510,10 @@ class CyberRenderer:
         # anello dei cicli a destra, ora a sinistra nello spazio che resta
         side = min(band.h + date_h, round(b.w * 0.30))
         clock_box = Box(band.x, band.y, band.w - side - gap, band.h)
-        self._big(d, clock_box, now.strftime("%H:%M"), "cream", 500,
-                  pos=(clock_box.x + clock_box.w / 2, clock_box.bottom), anchor="ms")
+        ora = now.strftime("%H:%M")
+        pos = (clock_box.x + clock_box.w / 2, clock_box.bottom)
+        f = self._big(d, clock_box, ora, "cream", 500, pos=pos, anchor="ms", slot="clock.ora")
+        self._colon_fx(ora, f, pos, "ms", "panel")
         if clock is not None and side > round(28 * u):
             ring = Box(band.right - side, band.y + (band.h + date_h - side) // 2, side, side)
             self._cycles(d, ring, clock.cycles(now), u)
@@ -313,7 +537,8 @@ class CyberRenderer:
             self._micro(d, (b.right, y), right, u, "cream", "ra", 12)
 
     def _panel(self, d: ImageDraw.ImageDraw, box: Box, fill: str, label: str, value: str,
-               foot: str, u: float, r: int, ref: str | None = None, reserve: int = 0) -> None:
+               foot: str, u: float, r: int, ref: str | None = None, reserve: int = 0,
+               slot: str | None = None, live: bool = False) -> None:
         """Pannello con etichetta in alto, numero grande al centro e riga di dettaglio in basso.
 
         `reserve`: larghezza lasciata libera a destra del numero (bussola del vento).
@@ -330,6 +555,8 @@ class CyberRenderer:
             # `ref` dà la taglia (numeri della stessa serie allineati, es. 7% e 100%)
             f = self._fit(ref or value, "grotesk", 500, big.w, big.h)
             self._text(d, (big.x, big.bottom), value, f, "ink", "ls")
+            if slot:
+                self._slot(slot, value, (big.x, big.bottom), "ls", f, "ink", fill, live)
         if foot:
             self._text(d, (box.right - pad, box.bottom - pad), foot.lower(), lab, "ink", "rd")
 
@@ -357,7 +584,8 @@ class CyberRenderer:
         right = Box(left.right + g, b.y, b.right - left.right - g, top_h)
         self._panel(d, left, "cream", SHORT.get(text, text),
                     f"{float(cur.get('temperature_2m', 0)):.0f}°",
-                    f"percepita {float(cur.get('apparent_temperature', 0)):.0f}°", u, r)
+                    f"percepita {float(cur.get('apparent_temperature', 0)):.0f}°", u, r,
+                    slot="weather.temp")
         pad = max(4, round(11 * u))
         band_y = right.y + pad + round(16 * u)            # sotto l'etichetta
         band_h = right.h - (band_y - right.y) - pad - round(22 * u)  # sopra la riga di dettaglio
@@ -365,7 +593,7 @@ class CyberRenderer:
         mostra = comp > round(26 * u)
         self._panel(d, right, "orange", f"vento {vento_nome(deg).lower()} {deg:.0f}°", f"{kn:.0f} kn",
                     f"{rosa(deg).lower()} · raf {gust:.0f} · f{beaufort(kn)}", u, r,
-                    reserve=comp + pad if mostra else 0)
+                    reserve=comp + pad if mostra else 0, slot="weather.vento")
         if mostra:
             self._compass(d, Box(right.right - pad - comp, band_y + (band_h - comp) // 2,
                                  comp, comp), deg, u)
@@ -378,7 +606,7 @@ class CyberRenderer:
                  ("pressione", f"{cur.get('pressure_msl', 0):.0f}", "amber")]
         for i, (k, v, col) in enumerate(cells):
             cb = Box(round(mid.x + i * (cw + g)), mid.y, round(cw), mid.h)
-            self._panel(d, cb, col, k, v, "", u, r, ref="1013")
+            self._panel(d, cb, col, k, v, "", u, r, ref="1013", slot=f"weather.{k}")
         # riga 3: previsione oraria
         fc_top = mid.bottom + g
         foot_h = round(20 * u)
@@ -422,8 +650,12 @@ class CyberRenderer:
         self._micro(d, (top.right - pad, top.y + pad), t.state.value.lower(), u, "ink", "ra", 12)
         num = Box(top.x + pad, top.y + pad + round(14 * u), top.w - 2 * pad,
                   top.h - 2 * pad - round(14 * u))
-        self._big(d, num, f"{mm:02d}:{ss:02d}", "ink", 500,
-                  pos=(top.x + top.w / 2, num.bottom), anchor="ms")
+        tempo, pos = f"{mm:02d}:{ss:02d}", (top.x + top.w / 2, num.bottom)
+        bg = "orange" if running else "cream"
+        f = self._big(d, num, tempo, "ink", 500, pos=pos, anchor="ms", slot="timer.tempo",
+                      bg=bg, live=True)
+        if running:
+            self._colon_fx(tempo, f, pos, "ms", bg)
         # barra del tempo residuo
         bar = Box(b.x, top.bottom + g, b.w, max(round(10 * u), round(b.h * 0.1)))
         d.rounded_rectangle(bar.rect, radius=bar.h // 2, fill=self.c["panel"], outline=self.c["line"],
@@ -461,7 +693,8 @@ class CyberRenderer:
         text = f"{first.hour:02d}:{first.minute:02d}" if first else "--:--"
         num = Box(top.x + pad, top.y + pad + round(14 * u), top.w - 2 * pad,
                   top.h - 2 * pad - round(14 * u))
-        self._big(d, num, text, col, 500, pos=(top.x + top.w / 2, num.bottom), anchor="ms")
+        self._big(d, num, text, col, 500, pos=(top.x + top.w / 2, num.bottom), anchor="ms",
+                  slot="alarm.ora", bg="cream" if armed else "panel")
         rows = Box(b.x, top.bottom + g, b.w, b.bottom - top.bottom - g)
         if nxt:
             delta = nxt[1] - now
@@ -534,6 +767,9 @@ class CyberRenderer:
                         u, "tan", "ma", 11)
         for i, (voce, cb) in enumerate(zip(voci, riquadri)):
             active = scelta is not None and i == widget.idx % len(voci)
+            if active:
+                self._add_fx("outline", (cb.x, cb.y, cb.right - 1, cb.bottom - 1), "paper", "pink",
+                             extra=(r, max(1, round(2 * u))))
             togli = voce.azione == "del"
             fill = "pink" if active else "panel"
             d.rounded_rectangle(cb.rect, radius=r, fill=self.c[fill],
@@ -569,6 +805,7 @@ class CyberRenderer:
         for i, (k, v, col) in enumerate(cells):
             cb = Box(round(top.x + i * (cw + g)), top.y, round(cw), top.h)
             self._panel(d, cb, col, k, f"{v * 100:.0f}%" if v is not None else "--", "", u, r,
+                        slot=f"system.{k}", live=True,
                         ref="100%")
         # storici affiancati: cpu in percentuale, rete in scala sul massimo mostrato
         net = sysw.net_snapshot() if hasattr(sysw, "net_snapshot") else []
@@ -593,6 +830,8 @@ class CyberRenderer:
                             width=max(1, round(2 * u)))
         self._micro(d, (box.x + pad, box.y + round(6 * u)), label, u, "tan", "la", 11, lower=False)
         inner = box.inset(pad, round(20 * u))
+        self._add_fx("scan", (inner.x, inner.y, inner.right, inner.bottom), color, "panel",
+                     phase=0.5 if color == "orange" else 0.0)
         slots = 48
         vals = vals[-slots:]
         if not vals or top <= 0 or inner.w <= 0 or inner.h <= 0:

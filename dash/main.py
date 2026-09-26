@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import logging
 import queue
 import signal
 import sys
 import threading
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -18,6 +20,7 @@ from . import __version__
 from .config import ConfigError, load_config, save_local
 from .display import Display, make_display
 from .inputs import Buzzer, Event, Tap, start_gpio, start_keyboard, start_touch
+from .motion import BOOT_S, Motion
 from .widgets import ETICHETTE, WIDGET_NAMES, Widget, WidgetFactory
 from .widgets.new import NewWidget
 from .widgets.system import SystemWidget
@@ -51,6 +54,46 @@ def _slug(page: Page) -> str:
     """Nome del file dell'anteprima: dal nome della linguetta, o dal tipo se non è scrivibile."""
     s = "".join(c if c.isalnum() else "-" for c in page.name.lower()).strip("-")
     return s or page.kind
+
+
+# Copione dell'anteprima animata: (secondi, pagina da aprire all'inizio del tratto).
+ANIM_PAGES = [{"name": "Home", "widget": "clock"}, {"name": "Meteo", "widget": "weather"},
+              {"name": "Sistema", "widget": "system"}, {"name": "+", "widget": "new"}]
+ANIM_SCRIPT = [(BOOT_S + 1.6, None), (1.8, 1), (1.8, 2), (1.2, 3), (1.0, 0)]
+
+
+def save_animation(cfg: dict[str, Any], path: Path, now: datetime = SHOT_TIME,
+                   fps: float = 8.0) -> Path:
+    """GIF delle animazioni con dati demo: avvio, poi ogni pagina con il suo cambio."""
+    cfg["weather"]["demo"] = True
+    cfg["location"]["mode"] = "fixed"
+    cfg["pages"] = [dict(p) for p in ANIM_PAGES]
+    cfg["motion"] = {**cfg.get("motion", {}), "livello": "pieno", "fps": fps, "avvio": True}
+    d = cfg["display"]
+    if "auto" in (d["width"], d["height"]):
+        d["width"], d["height"] = 480, 320
+    app = App(cfg, _MemDisplay(d["width"], d["height"]), queue.Queue())
+    frames: list[Image.Image] = []
+    try:
+        for widget in app.widgets.values():
+            if isinstance(widget, SystemWidget):
+                widget.load_demo()
+        t = 0.0
+        app.motion.start(t)
+        for secs, page in ANIM_SCRIPT:
+            if page is not None:
+                app.page_idx = page
+            for _ in range(round(secs * fps)):
+                shown = app.step(now, t)
+                frames.append((shown or frames[-1]).convert("P", palette=Image.Palette.ADAPTIVE,
+                                                           colors=64))
+                t += 1 / fps
+    finally:
+        app.close()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    frames[0].save(path, save_all=True, append_images=frames[1:], duration=round(1000 / fps),
+                   loop=0, optimize=True, disposal=1)
+    return path
 
 
 def save_screenshots(cfg: dict[str, Any], out_dir: Path, now: datetime = SHOT_TIME) -> list[Path]:
@@ -106,6 +149,11 @@ class App:
         self._last_key: Any = None
         self.touch = False  # True se il touchscreen è attivo (cambia il testo dell'allarme)
         self._renderer: Any = None
+        self.motion = Motion.from_cfg(cfg.get("motion") or {})
+        self._base: Image.Image | None = None    # pagina ferma, ridisegnata solo se cambiano i dati
+        self._frame: Image.Image | None = None   # ultimo fotogramma mostrato (prima della rotazione)
+        self._shown_page = -1
+        self._last_fkey: int | None = None
 
     @property
     def page(self) -> Page:
@@ -180,6 +228,9 @@ class App:
         return None
 
     def handle(self, ev: Event, now: datetime) -> None:
+        if self.motion.boot_start is not None and ev is not Event.QUIT:
+            self.motion.skip_boot()  # un tasto durante l'avvio lo salta e basta
+            return
         if ev is Event.QUIT:
             self._stop.set()
         elif ev is Event.NEXT:
@@ -206,6 +257,9 @@ class App:
 
     def handle_tap(self, tap: Tap, now: datetime) -> None:
         """Linguetta → apre quella cartella; contenuto → azione del widget (timer, sveglia)."""
+        if self.motion.boot_start is not None:
+            self.motion.skip_boot()
+            return
         rot = self.cfg["display"]["rotate"]
         u, v = tap.x, tap.y  # coordinate del pannello → coordinate del fotogramma
         fx, fy = {0: (u, v), 90: (v, 1 - u), 180: (1 - u, 1 - v), 270: (1 - v, u)}[rot]
@@ -230,39 +284,68 @@ class App:
         self._stop.set()
 
     # --- disegno ---------------------------------------------------------
-    def render(self, now: datetime) -> Image.Image:
-        """Fotogramma della pagina corrente (immagine RGB), già ruotato per il pannello."""
-        img = self.renderer.render(self, now)
+    def _rotated(self, img: Image.Image) -> Image.Image:
         rotate = self.cfg["display"]["rotate"]
         return img.rotate(-rotate, expand=True) if rotate else img
 
+    def render(self, now: datetime) -> Image.Image:
+        """Fotogramma fermo della pagina corrente (immagine RGB), già ruotato per il pannello."""
+        return self._rotated(self.renderer.render(self, now))
+
     # --- ciclo -----------------------------------------------------------
-    def run(self, once: bool = False) -> None:
-        d = self.cfg["display"]
+    def step(self, now: datetime, t: float, animate: bool = True) -> Image.Image | None:
+        """Un giro del ciclo: eventi, dati, disegno. Restituisce il fotogramma mostrato, se c'è.
+
+        La pagina base si ridisegna solo quando cambiano i dati (`state_key`); con le animazioni
+        attive si mostrano in più `motion.fps` fotogrammi al secondo composti sopra di essa.
+        """
+        while True:
+            try:
+                ev = self.events.get_nowait()
+            except queue.Empty:
+                break
+            if isinstance(ev, Tap):
+                self.handle_tap(ev, now)
+            else:
+                self.handle(ev, now)
+        for widget in self.widgets.values():
+            widget.update(now)
+        alert = self.alerting()
+        self.buzzer.set(alert is not None)
+        if animate and self.page_idx != self._shown_page:
+            self.motion.page_changed(self._frame, t)  # scansione dalla pagina di prima
+        self._shown_page = self.page_idx
+        key = (self.page_idx, tuple(self.widgets), now.strftime("%Y%m%d%H%M"),
+               alert[1] if alert else None,
+               tuple(w.state_key(now) for w in self.widgets.values()))
+        dirty = key != self._last_key
+        if dirty:                          # dati cambiati: nuova pagina base
+            self._base = self.renderer.render(self, now)
+            if animate:
+                self.motion.slots_drawn(self.renderer.slots, t)
+            self._last_key = key
+        fkey = self.motion.frame_key(t) if animate else None
+        if self._base is None or not (dirty or fkey != self._last_fkey):
+            return None
+        self._last_fkey = fkey
+        self._frame = (self.renderer.compose(self._base, self, self.motion, t) if animate
+                       else self._base)
+        shown = self._rotated(self._frame)
+        self.display.show(shown)
+        return shown
+
+    def run(self, once: bool = False, clock: Any = time.monotonic) -> None:
+        """Ciclo principale; `once` disegna un solo fotogramma fermo (niente animazioni)."""
+        idle = self.cfg["display"]["tick_s"]
+        if not once:
+            self.motion.start(clock())
         while not self._stop.is_set():
-            now = datetime.now()
-            while True:
-                try:
-                    ev = self.events.get_nowait()
-                except queue.Empty:
-                    break
-                if isinstance(ev, Tap):
-                    self.handle_tap(ev, now)
-                else:
-                    self.handle(ev, now)
-            for widget in self.widgets.values():
-                widget.update(now)
-            alert = self.alerting()
-            self.buzzer.set(alert is not None)
-            key = (self.page_idx, tuple(self.widgets), now.strftime("%Y%m%d%H%M"),
-                   alert[1] if alert else None,
-                   tuple(w.state_key(now) for w in self.widgets.values()))
-            if key != self._last_key:      # ridisegna solo quando qualcosa è cambiato
-                self.display.show(self.render(now))
-                self._last_key = key
+            t = clock()
+            self.step(datetime.now(), t, animate=not once)
             if once:
                 break
-            self._stop.wait(d["tick_s"])
+            # il tempo di disegno conta: si aspetta solo ciò che manca al prossimo fotogramma
+            self._stop.wait(max(0.0, self.motion.interval(t, idle) - (clock() - t)))
 
     def close(self) -> None:
         for widget in self.widgets.values():
@@ -281,7 +364,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--page", type=int, default=1, help="pagina iniziale (1…n)")
     p.add_argument("--demo", action="store_true", help="meteo con dati finti (offline)")
     p.add_argument("--screenshots", type=Path, metavar="DIR",
-                   help="salva l'anteprima di ogni pagina in DIR ed esci (es. docs/img)")
+                   help="salva l'anteprima di ogni pagina e la GIF animata in DIR ed esci")
+    p.add_argument("--motion", choices=("off", "eventi", "pieno"),
+                   help="sovrascrive motion.livello (animazioni)")
     p.add_argument("--web", type=int, help="porta del simulatore web (0 = off)")
     p.add_argument("-v", "--verbose", action="store_true")
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -306,14 +391,18 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     if args.screenshots:
         try:
-            for path in save_screenshots(cfg, args.screenshots):
+            for path in save_screenshots(copy.deepcopy(cfg), args.screenshots):
                 log.info("anteprima: %s", path)
+            anim = save_animation(copy.deepcopy(cfg), args.screenshots / "animazione.gif")
+            log.info("anteprima animata: %s (%d kB)", anim, anim.stat().st_size // 1024)
         except OSError as exc:
             log.error("anteprime: %s", exc)
             return 3
         return 0
     if args.driver:
         cfg["display"]["driver"] = args.driver
+    if args.motion:
+        cfg["motion"]["livello"] = args.motion
     if args.demo:
         cfg["weather"]["demo"] = True
     if args.web is not None:
