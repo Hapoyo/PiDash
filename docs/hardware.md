@@ -1,6 +1,6 @@
 # pi-dash — Note hardware
 
-Versione 0.4.0 · 2026-09-26
+Versione 0.6.0 · 2026-09-27
 
 ## 1. Schermo 3,5" SPI
 | Voce | Dato |
@@ -36,6 +36,16 @@ Versione 0.4.0 · 2026-09-26
   A 24 MHz uno schermo intero scende a ~0,10 s (~10 fotogrammi/s). Se si alza `speed`, farlo a
   passi e controllare che l'immagine resti pulita: in caso di disturbi tornare a 18 MHz.
 
+### 1.2 Retroilluminazione
+- Sul "3.5inch RPi Display" il LED è di norma collegato fisso: nessun `/sys/class/backlight`, oppure
+  un dispositivo solo acceso/spento (`max_brightness` = 1). La luminosità delle Impostazioni
+  scurisce allora l'immagine (`dash/backlight.py`, modo software).
+- Se il pannello espone un dispositivo regolabile, il servizio lo rende scrivibile all'avvio
+  (`ExecStartPre` in `systemd/pi-dash.service`) e il dashboard regola il LED vero.
+- Prova: `ls /sys/class/backlight/ && cat /sys/class/backlight/*/max_brightness`.
+- Il GPIO 22 non è un'uscita PWM hardware: un PWM software dal programma farebbe sfarfallare il
+  pannello e contenderebbe il pin al driver, per questo non si usa.
+
 ## 2. Pulsanti e cicalino (opzionali)
 - Pulsanti verso GND con pull-up interno: `input.gpio` = `{"next": 5, "action": 13, "back": 19}`.
 - Cicalino: `input.buzzer_pin` su un GPIO libero (es. 26). Mai il 18, che alimenta lo schermo.
@@ -46,3 +56,16 @@ Versione 0.4.0 · 2026-09-26
 - Nessun orologio interno: dopo un'accensione senza rete l'ora è sbagliata finché NTP non sincronizza.
 - Il programma scrive direttamente nel framebuffer: non serve il desktop (Raspberry Pi OS Lite).
   L'utente del servizio deve stare nei gruppi `video`, `input` e `tty`.
+- Nessun GPS. Dopo `systemctl poweroff` lo schermo SPI resta alimentato (e acceso) finché non si
+  stacca l'alimentatore.
+
+## 4. GPS (opzionale)
+| Voce | Dato |
+|---|---|
+| Ricevitore consigliato | USB, chip u-blox 7/8 (compare come `/dev/ttyACM0`) |
+| Software | `gpsd` (`sudo apt install -y gpsd gpsd-clients`), prova con `cgps` |
+| Senza gpsd | lettura diretta NMEA (RMC/GGA) da `/dev/ttyACM0`, `/dev/ttyUSB0` o `location.gps_device` |
+| Seriale sui pin (GPIO 14/15) | possibile (`location.gps_device`: `/dev/serial0`), ma va disattivata la console seriale in `raspi-config` |
+
+- Il primo fix a freddo richiede da 30 s a qualche minuto con il cielo visibile; in casa può non
+  arrivare mai. In quel caso vale la posizione dalle reti Wi-Fi.

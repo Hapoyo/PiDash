@@ -19,3 +19,15 @@ sed -e "s|^User=pi$|User=${UTENTE}|" -e "s|/home/pi/pi-dash|${DIR}|g" \
 sudo systemctl daemon-reload
 sudo systemctl enable pi-dash >/dev/null 2>&1
 echo "servizio installato: $DEST (utente $UTENTE, cartella $DIR)"
+
+# "spegni" nelle Impostazioni: il servizio può spegnere il Pi senza password, e nient'altro.
+SUDOERS=/etc/sudoers.d/pi-dash
+TMP="$(mktemp)"
+echo "${UTENTE} ALL=(root) NOPASSWD: /usr/bin/systemctl poweroff" > "$TMP"
+if sudo visudo -cqf "$TMP"; then
+    sudo install -m 0440 -o root -g root "$TMP" "$SUDOERS"
+    echo "spegnimento dallo schermo consentito: $SUDOERS"
+else
+    echo "attenzione: regola sudoers non valida, spegnimento dallo schermo non attivo" >&2
+fi
+rm -f "$TMP"

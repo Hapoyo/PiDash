@@ -17,6 +17,8 @@ from .theme import fit
 if TYPE_CHECKING:
     from ..app import App
 
+SIGLA = "Pi-Dash"  # nome scritto dalla sequenza di avvio
+
 
 def draw_fx(cv: Canvas, e: Fx, t: float) -> None:
     """Effetto continuo registrato durante il disegno della pagina."""
@@ -80,10 +82,10 @@ def boot(w: int, h: int, u: float, colors: dict[str, tuple[int, int, int]], app:
     loc = getattr(getattr(app.pages[0].widget, "location", None), "name", "") or "--"
     righe = [f"schermo {w}×{h}", f"schede {len(app.pages)}", f"posizione {loc.lower()}",
              "meteo open-meteo", "sistema pronto"]
-    cv.label((m, m), f"pi-dash // v{__version__}", "tan", small=True)
+    cv.label((m, m), f"{SIGLA} // v{__version__}", "tan", small=True, lower=False)
     cv.label((w - m, m), "avvio", "tan", "ra", small=True)
     # sigla: si scrive una lettera alla volta, con il cursore a blocco
-    sigla = "pi-dash"
+    sigla = SIGLA
     n = min(len(sigla), int(len(sigla) * min(1.0, p / 0.35)) + 1)
     f = fit(sigla, "grotesk", 600, w - 2 * m, h * 0.24)
     base_y = round(h * 0.36)
@@ -116,10 +118,14 @@ def boot(w: int, h: int, u: float, colors: dict[str, tuple[int, int, int]], app:
 
 def alert(cv: Canvas, w: int, h: int, msg: str, touch: bool) -> None:
     """Riquadro rosa di sveglia o timer scaduto, sopra qualsiasi pagina."""
+    notice(cv, w, h, msg, "tocca lo schermo" if touch else "premi a")
+
+
+def notice(cv: Canvas, w: int, h: int, msg: str, hint: str) -> None:
+    """Riquadro rosa al centro dello schermo: allarmi e spegnimento."""
     b = Box(round(w * 0.15), round(h * 0.32), round(w * 0.7), round(h * 0.36))
     cv.rect(b, "pink", "cream", cv.px(3), r=cv.px(14))
-    hint = cv.height(cv.f_label) + 2 * cv.gap
-    num = Box(b.x + 2 * cv.pad, b.y + 2 * cv.pad, b.w - 4 * cv.pad, b.h - 3 * cv.pad - hint)
+    hint_h = cv.height(cv.f_label) + 2 * cv.gap
+    num = Box(b.x + 2 * cv.pad, b.y + 2 * cv.pad, b.w - 4 * cv.pad, b.h - 3 * cv.pad - hint_h)
     cv.big(num, msg.lower(), "paper", 600, pos=(b.x + b.w / 2, num.bottom), anchor="ms")
-    cv.label((b.x + b.w / 2, b.bottom - cv.pad), "tocca lo schermo" if touch else "premi a",
-             "paper", "md")
+    cv.label((b.x + b.w / 2, b.bottom - cv.pad), hint, "paper", "md")

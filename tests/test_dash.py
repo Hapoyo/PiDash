@@ -125,10 +125,49 @@ class TestTimer(unittest.TestCase):
         t.on_action(now)
         self.assertIs(t.state, TimerState.IDLE)
 
-    def test_back_cycles_preset(self) -> None:
-        t = TimerWidget({"presets_s": [60, 300]})
+    def test_back_adds_the_first_preset(self) -> None:
+        t = TimerWidget({"presets_s": [300, 60]})
+        self.assertEqual(t.duration, 300)          # all'accensione il primo della lista
         t.on_back(datetime.now())
-        self.assertEqual(t.duration, 300)
+        self.assertEqual(t.duration, 360)          # B somma il preset più corto
+
+    def test_buttons_add_subtract_and_clear(self) -> None:
+        clk = FakeClock()
+        now = datetime(2026, 9, 24, 7, 42)
+        t = TimerWidget({"presets_s": [900, 60, 300, 600], "labels": {"300": "partenza"}},
+                        clock=clk)
+        self.assertEqual([h for h, _ in t.buttons()],
+                         ["sub", "add:60", "add:300", "add:600", "add:900", "clear"])
+        self.assertEqual(dict(t.buttons())["sub"], "−1'")
+        self.assertEqual((t.duration, t.label()), (300, "PARTENZA"))  # parte dalla partenza
+        t.on_hit("add:300", now)
+        t.on_hit("add:300", now)
+        self.assertEqual(t.shown_remaining(), 900)                     # si sommano
+        self.assertEqual(t.flashing(), "add:300")
+        clk.t += 1
+        self.assertEqual(t.flashing(), "")
+        t.on_hit("sub", now)
+        self.assertEqual(t.shown_remaining(), 840)
+        t.on_hit("clear", now)
+        t.on_hit("sub", now)
+        self.assertEqual((t.shown_remaining(), t.duration), (0, 0))    # mai sotto zero
+        t.on_action(now)
+        self.assertIs(t.state, TimerState.IDLE)                        # a zero non parte
+
+    def test_adding_while_running_moves_the_deadline(self) -> None:
+        clk = FakeClock()
+        now = datetime(2026, 9, 24, 7, 42)
+        t = TimerWidget({"presets_s": [60], "step_s": 1}, clock=clk)
+        t.on_action(now)
+        clk.t += 50
+        t.on_hit("add:60", now)
+        self.assertEqual(t.shown_remaining(), 70)
+        self.assertIs(t.state, TimerState.RUNNING)
+        clk.t += 71
+        t.update(now)
+        self.assertIs(t.state, TimerState.DONE)
+        t.on_action(now)                                               # conferma
+        self.assertEqual((t.state, t.shown_remaining()), (TimerState.IDLE, 120))
 
 
 class TestAlarm(unittest.TestCase):
@@ -193,6 +232,82 @@ class TestLocation(unittest.TestCase):
         with mock.patch.object(L, "_get_json", return_value={"latitude": "Sign up to access"}):
             self.assertFalse(loc.refresh(force=True))
         self.assertEqual(loc.snapshot()[1:], (40.796, 13.436))
+
+    @staticmethod
+    def _nmea(body: str) -> str:
+        check = 0
+        for c in body:
+            check ^= ord(c)
+        return f"${body}*{check:02X}"
+
+    def test_parse_nmea(self) -> None:
+        from dash.location import parse_nmea
+        rmc = self._nmea("GPRMC,101512.00,A,4112.8220,N,01334.2600,E,0.02,,270926,,,A")
+        self.assertEqual(parse_nmea(rmc), (41.21370, 13.571))            # Gaeta
+        gga = self._nmea("GNGGA,101512.00,4112.8220,N,01334.2600,E,1,08,1.0,5.0,M,45.0,M,,")
+        self.assertEqual(parse_nmea(gga), (41.2137, 13.571))
+        self.assertIsNone(parse_nmea(self._nmea("GPRMC,101512.00,V,,,,,,,270926,,,N")))  # no fix
+        self.assertIsNone(parse_nmea(rmc[:-2] + "00"))                   # checksum sbagliato
+        self.assertIsNone(parse_nmea("rumore"))
+
+    def test_parse_nmcli(self) -> None:
+        from dash.location import parse_nmcli
+        text = "AA\\:BB\\:CC\\:DD\\:EE\\:FF:80\n11\\:22\\:33\\:44\\:55\\:66:30\n--:--\n"
+        self.assertEqual(parse_nmcli(text), [
+            {"macAddress": "aa:bb:cc:dd:ee:ff", "signalStrength": -60},
+            {"macAddress": "11:22:33:44:55:66", "signalStrength": -85}])
+
+    def test_auto_prefers_gps_then_wifi_then_ip(self) -> None:
+        from unittest import mock
+        from dash import location as L
+
+        def fake(url: str, timeout: float = 10, body: dict | None = None) -> dict:
+            if url.startswith(L.BEACONDB_URL):
+                return {"location": {"lat": 41.2137, "lng": 13.5710}, "accuracy": 40}
+            if url.startswith(L.REVERSE_URL):
+                return {"address": {"town": "Gaeta"}}
+            return {"status": "success", "lat": 41.62, "lon": 12.63, "city": "Lavinio"}
+
+        aps = [{"macAddress": "aa:bb:cc:dd:ee:ff", "signalStrength": -60}] * 2
+        loc = self._loc("auto")
+        with mock.patch.object(L, "_from_gpsd", return_value=(41.25, 13.6)), \
+                mock.patch.object(L, "_get_json", side_effect=fake):
+            loc.refresh(force=True)
+        self.assertEqual((loc.snapshot(), loc.kind()), (("Gaeta", 41.25, 13.6), "gps"))
+        loc = self._loc("auto")
+        with mock.patch.object(L, "_from_gpsd", return_value=None), \
+                mock.patch.object(L, "_from_nmea_device", return_value=None), \
+                mock.patch.object(L, "_scan_wifi", return_value=aps), \
+                mock.patch.object(L, "_get_json", side_effect=fake):
+            loc.refresh(force=True)
+        self.assertEqual((loc.snapshot(), loc.kind()), (("Gaeta", 41.2137, 13.571), "wifi"))
+        loc = self._loc("auto")
+        with mock.patch.object(L, "_from_gpsd", return_value=None), \
+                mock.patch.object(L, "_from_nmea_device", return_value=None), \
+                mock.patch.object(L, "_scan_wifi", return_value=[]), \
+                mock.patch.object(L, "_get_json", side_effect=fake):
+            loc.refresh(force=True)
+        self.assertEqual((loc.snapshot()[0], loc.kind()), ("Lavinio", "ip"))  # ultima risorsa
+
+    def test_precise_position_without_a_name_drops_the_old_one(self) -> None:
+        """Wi-Fi lontano dalle coordinate fisse e Nominatim giù: niente nome sbagliato."""
+        from unittest import mock
+        import urllib.error
+        from dash import location as L
+
+        def fake(url: str, timeout: float = 10, body: dict | None = None) -> dict:
+            if url.startswith(L.BEACONDB_URL):
+                return {"location": {"lat": 45.0, "lng": 9.0}}
+            raise urllib.error.URLError("giù")
+
+        loc = self._loc("auto")
+        aps = [{"macAddress": "aa:bb:cc:dd:ee:ff", "signalStrength": -60}] * 2
+        with mock.patch.object(L, "_from_gpsd", return_value=None), \
+                mock.patch.object(L, "_from_nmea_device", return_value=None), \
+                mock.patch.object(L, "_scan_wifi", return_value=aps), \
+                mock.patch.object(L, "_get_json", side_effect=fake):
+            loc.refresh(force=True)
+        self.assertEqual(loc.snapshot(), ("", 45.0, 9.0))
 
     def test_city(self) -> None:
         from unittest import mock
@@ -378,6 +493,39 @@ class TestFramebufferAndTouch(unittest.TestCase):
         t = cal.map(200, 0)
         self.assertEqual((t.x, t.y), (0.0, 1.0))
 
+    def test_tap_from_samples_ignores_touchdown_and_lift_off(self) -> None:
+        from dash.inputs import tap_from_samples
+        samples = [(3900, 100), (2000, 1500), (2010, 1490), (1990, 1510), (2005, 1500),
+                   (400, 3800), (4000, 0)]     # appoggio e distacco sballati, un salto nel mezzo
+        self.assertEqual(tap_from_samples(samples), (2005, 1500))
+        self.assertEqual(tap_from_samples([(10, 20)]), (10, 20))
+        self.assertIsNone(tap_from_samples([]))
+
+    def test_calibration_can_change_while_running(self) -> None:
+        from dash.inputs import ABS_X, ABS_Y, TouchCalibration
+        cal = TouchCalibration({}, {ABS_X: (0, 4095), ABS_Y: (0, 4095)})
+        cal.apply({"x_min": 300, "x_max": 3800, "y_min": 200, "y_max": 3900, "swap_xy": True})
+        t = cal.map(300, 3900)
+        self.assertEqual((t.x, t.y, t.raw), (1.0, 0.0, (300, 3900)))
+
+    def test_frame_and_panel_are_inverse(self) -> None:
+        from dash.inputs import frame_to_panel, panel_to_frame
+        for rot in (0, 90, 180, 270):
+            fx, fy = panel_to_frame(*frame_to_panel(0.2, 0.7, rot), rot)
+            self.assertAlmostEqual(fx, 0.2)
+            self.assertAlmostEqual(fy, 0.7)
+
+    def test_tap_just_outside_a_button_counts(self) -> None:
+        """Un tocco a pochi pixel da un bottone vale per quello; lontano da tutti, per nessuno."""
+        app = App(make_cfg(pages=[{"name": "Home", "widget": "clock"},
+                                  {"name": "+", "widget": "new"}]),
+                  MemDisplay(480, 320), queue.Queue())
+        app.page_idx = 1
+        b, hit = app.renderer.hit_boxes(app)[0]
+        self.assertEqual(app.hit_at(b.x + 3, b.y - 5), hit)       # sopra la prima riga
+        self.assertIsNone(app.hit_at(b.x + 3, b.y - 40))
+        app.close()
+
     def _app(self, rotate: int = 0) -> App:
         cfg = make_cfg(display={"width": 480, "height": 320, "rotate": rotate})
         return App(cfg, MemDisplay(480, 320), queue.Queue())
@@ -392,6 +540,13 @@ class TestFramebufferAndTouch(unittest.TestCase):
         content = app.renderer.content_inner(app)
         app.handle_tap(Tap((content.x + content.w / 2) / 480, (content.y + content.h / 2) / 320), now)
         self.assertIs(app.widgets["timer"].state, TimerState.RUNNING)
+        app.handle_tap(Tap((content.x + content.w / 2) / 480, (content.y + content.h / 2) / 320), now)
+        self.assertIs(app.widgets["timer"].state, TimerState.PAUSED)
+        before = app.widgets["timer"].remaining()
+        b, hit = next(bh for bh in app.renderer.hit_boxes(app) if bh[1] == "add:300")
+        app.handle_tap(Tap((b.x + b.w / 2) / 480, (b.y + b.h / 2) / 320), now)
+        self.assertAlmostEqual(app.widgets["timer"].remaining(), before + 300)
+        self.assertIs(app.widgets["timer"].state, TimerState.PAUSED)  # il bottone non avvia
         tab = app.renderer.nav_rows(app)[1]
         app.handle_tap(Tap((tab.x + tab.w / 2) / 480, (tab.y + tab.h / 2) / 320), now)
         self.assertEqual(app.page.name, "Meteo")
@@ -544,19 +699,156 @@ class TestPageEditing(unittest.TestCase):
             self.assertEqual([p.name for p in app.pages], ["Home", "+"])
             app.close()
 
-    def test_tap_on_a_chip_selects_it(self) -> None:
+    def test_tap_on_a_chip_runs_it_at_once(self) -> None:
+        """Un solo tocco sulla voce: la scheda si aggiunge subito, senza "seleziona e conferma"."""
         app = App(make_cfg(pages=[{"name": "Home", "widget": "clock"},
                                   {"name": "+", "widget": "new"}]),
                   MemDisplay(480, 320), queue.Queue())
         app.page_idx = 1
-        boxes = app.renderer.select_boxes(app)
+        boxes = [b for b, hit in app.renderer.hit_boxes(app) if hit.startswith("voce:")]
         self.assertEqual(len(boxes), len(app.pages[-1].widget.voci()))
         b = boxes[1]
         app.handle_tap(Tap((b.x + b.w / 2) / 480, (b.y + b.h / 2) / 320),
                        datetime(2026, 9, 24, 7, 42))
-        self.assertEqual(app.pages[-1].widget.idx, 1)
-        self.assertEqual(len(app.pages), 2)  # il tocco su una voce non crea nulla
+        self.assertEqual([p.widget.name for p in app.pages], ["clock", "alarm", "new"])
         app.close()
+
+
+class TestSettings(unittest.TestCase):
+    """Impostazioni: luminosità, calibrazione del touch, spegnimento con conferma."""
+
+    def _app(self, tmp: str) -> App:
+        main = Path(tmp) / "config.json"
+        main.write_text("{}", encoding="utf-8")
+        cfg = make_cfg(pages=[{"name": "Home", "widget": "clock"}, {"name": "+", "widget": "new"}])
+        app = App(cfg, MemDisplay(480, 320), queue.Queue(), config_path=main)
+        app.page_idx = 1
+        return app
+
+    def _tap(self, app: App, hit: str) -> None:
+        b = next(bx for bx, h in app.renderer.hit_boxes(app) if h == hit)
+        app.handle_tap(Tap((b.x + b.w / 2) / 480, (b.y + b.h / 2) / 320),
+                       datetime(2026, 9, 24, 7, 42))
+
+    def test_brightness_is_clamped_saved_and_dims_the_frame(self) -> None:
+        now = datetime(2026, 9, 24, 7, 42)
+        with tempfile.TemporaryDirectory() as tmp:
+            app = self._app(tmp)
+            self.assertTrue(app.backlight.software)             # nel simulatore mai il LED vero
+            bright = app.step(now, 0.0, animate=False)
+            for _ in range(12):
+                self._tap(app, "luce:-10")
+            self.assertEqual(app.backlight.level, 10)           # mai sotto il 10 %
+            dim = app.step(now, 0.1, animate=False)
+            self.assertIsNotNone(dim)
+            self.assertLess(sum(dim.convert("L").getdata()), sum(bright.convert("L").getdata()) / 5)
+            saved = json.loads((Path(tmp) / "config.local.json").read_text(encoding="utf-8"))
+            self.assertEqual(saved["backlight"], {"level": 10})
+            app.close()
+
+    def test_hardware_backlight_from_sysfs(self) -> None:
+        from dash.backlight import Backlight
+        with tempfile.TemporaryDirectory() as tmp:
+            dev = Path(tmp) / "backlight0"
+            dev.mkdir()
+            (dev / "max_brightness").write_text("255\n")
+            (dev / "brightness").write_text("255\n")
+            bl = Backlight(50, "auto", Path(tmp))
+            self.assertTrue(bl.hardware)
+            self.assertEqual((dev / "brightness").read_text().strip(), "128")
+            img = Image.new("RGB", (2, 2), (200, 200, 200))
+            self.assertIs(bl.apply(img), img)                   # col LED vero niente ritocchi
+            (dev / "max_brightness").write_text("1\n")         # solo acceso/spento
+            bl = Backlight(50, "auto", Path(tmp))
+            self.assertTrue(bl.software)
+            self.assertEqual(bl.apply(img).getpixel((0, 0)), (100, 100, 100))
+
+    def test_calibration_from_four_taps(self) -> None:
+        """Pannello con x invertito e assi scambiati: la calibrazione li riconosce e li salva."""
+        from dash.inputs import ABS_X, ABS_Y, TouchCalibration
+        from dash.widgets.calibrate import TARGETS
+        with tempfile.TemporaryDirectory() as tmp:
+            app = self._app(tmp)
+            app.touch_cal = TouchCalibration({}, {ABS_X: (0, 4095), ABS_Y: (0, 4095)})
+            self._tap(app, "calibra")
+            self.assertIsNotNone(app.calib)
+            for fx, fy in TARGETS:   # controller: raw x segue y dello schermo, raw y segue x al contrario
+                raw = (round(250 + fy * 3600), round(3850 - fx * 3500))
+                app.handle_tap(Tap(0.5, 0.5, raw), datetime(2026, 9, 24, 7, 42))
+            self.assertIsNone(app.calib)
+            self.assertEqual(app.notice(), "touch calibrato")
+            t = app.touch_cal.map(round(250 + 0.3 * 3600), round(3850 - 0.7 * 3500))
+            self.assertAlmostEqual(t.x, 0.7, delta=0.01)
+            self.assertAlmostEqual(t.y, 0.3, delta=0.01)
+            saved = json.loads((Path(tmp) / "config.local.json").read_text(encoding="utf-8"))
+            self.assertTrue(saved["input"]["touch"]["swap_xy"])
+            self.assertTrue(saved["input"]["touch"]["invert_x"])
+            app.close()
+
+    def test_calibration_rejects_random_taps(self) -> None:
+        from dash.widgets.calibrate import solve
+        self.assertIsNone(solve([(0.1, 0.1), (0.9, 0.1), (0.9, 0.9), (0.1, 0.9)],
+                                [(2000, 2000)] * 4))
+
+    def test_power_off_needs_a_second_tap_and_runs_the_command(self) -> None:
+        now = datetime(2026, 9, 24, 7, 42)
+        calls: list[list[str]] = []
+
+        class Done:
+            returncode, stderr = 0, ""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            app = self._app(tmp)
+            app.cfg["display"]["driver"] = "fb"
+            app.run_cmd = lambda cmd, **kw: calls.append(cmd) or Done()
+            self._tap(app, "spegni")
+            self.assertTrue(app.page.widget.armato())
+            self.assertFalse(app.shutting_down)                 # il primo tocco chiede conferma
+            self._tap(app, "spegni")
+            self.assertTrue(app.shutting_down)
+            app.step(now, 0.0, animate=False)                   # prima la schermata, poi il comando
+            assert app._power_thread is not None
+            app._power_thread.join(5)
+            self.assertEqual(calls, [["sudo", "-n", "/usr/bin/systemctl", "poweroff"]])
+            app.close()
+
+    def test_power_off_failure_is_shown(self) -> None:
+        now = datetime(2026, 9, 24, 7, 42)
+
+        class Denied:
+            returncode, stderr = 1, "sudo: a password is required"
+
+        with tempfile.TemporaryDirectory() as tmp:
+            app = self._app(tmp)
+            app.cfg["display"]["driver"] = "fb"
+            app.run_cmd = lambda cmd, **kw: Denied()
+            app.power_off()
+            app.step(now, 0.0, animate=False)
+            thread = app._power_thread
+            assert thread is not None
+            thread.join(5)
+            self.assertFalse(app.shutting_down)
+            self.assertIn("non consentito", app.notice())
+            app.close()
+
+    def test_power_off_is_simulated_off_the_pi(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            app = self._app(tmp)
+            app.run_cmd = lambda *a, **kw: self.fail("nessun comando nel simulatore")
+            app.power_off()
+            self.assertFalse(app.shutting_down)
+            self.assertIn("simulato", app.notice())
+            app.close()
+
+    def test_settings_tab_draws_a_gear(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            app = self._app(tmp)
+            img = app.render(datetime(2026, 9, 24, 7, 42))
+            tab = app.renderer.nav_rows(app)[1]
+            strip = img.crop((tab.right - 30, tab.y, tab.right - 6, tab.bottom))
+            cream = app.renderer.c["cream"]
+            self.assertGreater(sum(1 for px in strip.getdata() if px == cream), 30)
+            app.close()
 
 
 class TestCli(unittest.TestCase):
@@ -625,6 +917,7 @@ class TestMotion(unittest.TestCase):
         from dash.motion import BOOT_S, Motion, ease_in_out, ease_out, wave
         self.assertEqual((ease_out(0), ease_out(1), ease_in_out(0), ease_in_out(1)), (0, 1, 0, 1))
         self.assertEqual((wave(0, 2), wave(1, 2)), (0.0, 1.0))
+        self.assertGreaterEqual(BOOT_S, 5.0)                # avvio lento, la sigla si legge
         m = Motion()
         m.start(10.0)
         self.assertAlmostEqual(m.boot_progress(10.0 + BOOT_S / 2), 0.5)

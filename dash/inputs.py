@@ -24,9 +24,23 @@ class Event(Enum):
 
 
 class Tap(NamedTuple):
-    """Tocco sullo schermo: coordinate 0…1 nell'orientamento del pannello."""
+    """Tocco sullo schermo: coordinate 0…1 nell'orientamento del pannello.
+
+    `raw` porta i valori grezzi del controller (serve alla calibrazione a schermo).
+    """
     x: float
     y: float
+    raw: tuple[int, int] | None = None
+
+
+def panel_to_frame(x: float, y: float, rotate: int) -> tuple[float, float]:
+    """Coordinate 0…1 del pannello → coordinate 0…1 del fotogramma disegnato (prima della rotazione)."""
+    return {0: (x, y), 90: (y, 1 - x), 180: (1 - x, 1 - y), 270: (1 - y, x)}[rotate]
+
+
+def frame_to_panel(x: float, y: float, rotate: int) -> tuple[float, float]:
+    """Inversa di `panel_to_frame`: un punto del fotogramma nelle coordinate del pannello."""
+    return {0: (x, y), 90: (1 - y, x), 180: (1 - x, 1 - y), 270: (y, 1 - x)}[rotate]
 
 
 KEYMAP: dict[str, Event] = {"n": Event.NEXT, "f": Event.FOCUS, "a": Event.ACTION,
@@ -75,8 +89,8 @@ def start_gpio(q: queue.Queue[Event], pins: dict[str, int]) -> list[Any]:
 
 
 # --- touchscreen (evdev, senza dipendenze) ---------------------------------
-EV_KEY, EV_ABS = 0x01, 0x03
-ABS_X, ABS_Y = 0x00, 0x01
+EV_SYN, EV_KEY, EV_ABS = 0x00, 0x01, 0x03
+ABS_X, ABS_Y, ABS_PRESSURE = 0x00, 0x01, 0x18
 BTN_TOUCH = 0x14A
 _EVENT = struct.Struct("llHHi")  # struct input_event (timeval nativo)
 
@@ -101,15 +115,35 @@ def find_touch_device(text: str | None = None) -> str | None:
     return None
 
 
+def tap_from_samples(samples: list[tuple[int, int]]) -> tuple[int, int] | None:
+    """Punto grezzo di un tocco dai campioni raccolti mentre il dito preme.
+
+    Il resistivo XPT2046 sbaglia di più all'appoggio e al distacco (la pressione cala): si
+    scartano il primo e gli ultimi due campioni, poi la mediana per asse toglie i salti.
+    """
+    if not samples:
+        return None
+    keep = samples[1:-2] if len(samples) >= 6 else samples
+    xs = sorted(s[0] for s in keep)
+    ys = sorted(s[1] for s in keep)
+    return xs[len(xs) // 2], ys[len(ys) // 2]
+
+
 class TouchCalibration:
     """Porta i valori grezzi del controller in 0…1, con scambio/inversione degli assi."""
 
     def __init__(self, cfg: dict[str, Any], ranges: dict[int, tuple[int, int]]) -> None:
+        self.ranges = ranges
+        self.apply(cfg)
+
+    def apply(self, cfg: dict[str, Any]) -> None:
+        """Nuovi estremi e orientamento, anche mentre il touch è in uso (calibrazione a schermo)."""
         def pick(key: str, default: int) -> int:
             val = cfg.get(key)
             return int(val) if val is not None else default
-        self.x_min, self.x_max = pick("x_min", ranges[ABS_X][0]), pick("x_max", ranges[ABS_X][1])
-        self.y_min, self.y_max = pick("y_min", ranges[ABS_Y][0]), pick("y_max", ranges[ABS_Y][1])
+        rx, ry = self.ranges[ABS_X], self.ranges[ABS_Y]
+        self.x_min, self.x_max = pick("x_min", rx[0]), pick("x_max", rx[1])
+        self.y_min, self.y_max = pick("y_min", ry[0]), pick("y_max", ry[1])
         self.swap = bool(cfg.get("swap_xy", False))
         self.inv_x = bool(cfg.get("invert_x", False))
         self.inv_y = bool(cfg.get("invert_y", False))
@@ -120,23 +154,30 @@ class TouchCalibration:
         x, y = norm(raw_x, self.x_min, self.x_max), norm(raw_y, self.y_min, self.y_max)
         if self.swap:
             x, y = y, x
-        return Tap(1 - x if self.inv_x else x, 1 - y if self.inv_y else y)
+        return Tap(1 - x if self.inv_x else x, 1 - y if self.inv_y else y, (raw_x, raw_y))
 
 
-def start_touch(q: queue.Queue[Any], cfg: dict[str, Any]) -> bool:
-    """Avvia la lettura del touchscreen; un tocco rilasciato diventa un evento Tap."""
-    import fcntl
+def start_touch(q: queue.Queue[Any], cfg: dict[str, Any]) -> TouchCalibration | None:
+    """Avvia la lettura del touchscreen; un tocco rilasciato diventa un evento Tap.
+
+    Restituisce la calibrazione in uso (modificabile a caldo), None se il touch non c'è.
+    """
+    try:
+        import fcntl
+    except ImportError:  # Windows: niente evdev, nel simulatore si tocca col mouse
+        log.warning("touchscreen non disponibile su questo sistema")
+        return None
 
     device = cfg.get("device") or "auto"
     path = find_touch_device() if device == "auto" else str(device)
     if not path:
         log.warning("touchscreen non trovato (dtoverlay con ads7846?)")
-        return False
+        return None
     try:
         fd = os.open(path, os.O_RDONLY)
     except OSError as exc:
         log.warning("touchscreen %s non apribile (gruppo 'input'?): %s", path, exc)
-        return False
+        return None
     ranges = {}
     for code in (ABS_X, ABS_Y):
         try:
@@ -147,10 +188,13 @@ def start_touch(q: queue.Queue[Any], cfg: dict[str, Any]) -> bool:
             ranges[code] = (0, 4095)
     cal = TouchCalibration(cfg, ranges)
     debug = bool(cfg.get("debug", False))
-    min_gap = float(cfg.get("debounce_s", 0.3))
+    min_gap = float(cfg.get("debounce_s", 0.15))
 
     def loop() -> None:
         raw = [0, 0]
+        pressure: int | None = None      # None se il controller non la riporta
+        samples: list[tuple[int, int]] = []
+        down = False
         last_tap = 0.0
         while True:
             try:
@@ -163,19 +207,28 @@ def start_touch(q: queue.Queue[Any], cfg: dict[str, Any]) -> bool:
             _, _, etype, code, value = _EVENT.unpack(data)
             if etype == EV_ABS and code in (ABS_X, ABS_Y):
                 raw[0 if code == ABS_X else 1] = value
-            elif etype == EV_KEY and code == BTN_TOUCH and value == 0:  # dito sollevato
+            elif etype == EV_ABS and code == ABS_PRESSURE:
+                pressure = value
+            elif etype == EV_SYN and down and (pressure is None or pressure > 0):
+                samples.append((raw[0], raw[1]))   # un campione completo per ogni SYN_REPORT
+            elif etype == EV_KEY and code == BTN_TOUCH and value == 1:   # dito appoggiato
+                down, samples = True, []
+            elif etype == EV_KEY and code == BTN_TOUCH and value == 0:   # dito sollevato
+                down = False
                 now = time.monotonic()
                 if now - last_tap < min_gap:
                     continue
                 last_tap = now
-                tap = cal.map(raw[0], raw[1])
+                point = tap_from_samples(samples) or (raw[0], raw[1])
+                tap = cal.map(*point)
                 if debug:
-                    log.info("tocco: grezzo x=%d y=%d → %.2f, %.2f", raw[0], raw[1], tap.x, tap.y)
+                    log.info("tocco: grezzo x=%d y=%d (%d campioni) → %.2f, %.2f",
+                             point[0], point[1], len(samples), tap.x, tap.y)
                 q.put(tap)
 
     threading.Thread(target=loop, name="touch", daemon=True).start()
     log.info("touchscreen %s (x %d…%d, y %d…%d)", path, cal.x_min, cal.x_max, cal.y_min, cal.y_max)
-    return True
+    return cal
 
 
 class Buzzer:

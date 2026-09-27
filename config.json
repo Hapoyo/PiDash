@@ -22,12 +22,14 @@
     "palette": {}
   },
   "location": {
-    "mode": "ip",
+    "mode": "auto",
     "city": "",
-    "name": "Ventotene",
-    "lat": 40.796,
-    "lon": 13.436,
-    "refresh_h": 6
+    "name": "Gaeta",
+    "lat": 41.214,
+    "lon": 13.571,
+    "refresh_h": 6,
+    "gps_device": "",
+    "wifi": true
   },
   "weather": {
     "refresh_min": 30,
@@ -36,8 +38,8 @@
   },
   "timer": {
     "presets_s": [
-      300,
       60,
+      300,
       600,
       900
     ],
@@ -103,7 +105,7 @@
       "x_max": null,
       "y_min": null,
       "y_max": null,
-      "debounce_s": 0.3,
+      "debounce_s": 0.15,
       "debug": false
     }
   },

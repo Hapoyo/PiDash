@@ -10,6 +10,7 @@ class Widget:
 
     name: str = "widget"
     has_action: bool = False  # True se A/B fanno qualcosa (timer, sveglia)
+    tap_action: bool = True   # un tocco fuori dai bottoni della pagina vale come A (se has_action)
 
     def __init__(self, cfg: dict[str, Any]) -> None:
         self.cfg = cfg
@@ -27,8 +28,8 @@ class Widget:
     def on_back(self, now: datetime) -> None:
         """Pulsante B."""
 
-    def on_select(self, i: int) -> None:
-        """Tocco su una voce selezionabile della pagina (scheda "+")."""
+    def on_hit(self, hit: str, now: datetime) -> None:
+        """Tocco su un bottone della pagina: `hit` è l'id dato da `hits()` del modulo di disegno."""
 
     def alert(self) -> str | None:
         """Testo di allarme se il widget richiede attenzione, altrimenti None."""

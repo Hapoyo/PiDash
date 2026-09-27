@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import queue
+import subprocess
 import threading
 import time
 from dataclasses import dataclass
@@ -12,14 +13,20 @@ from typing import Any
 
 from PIL import Image
 
+from . import __version__
+from .backlight import Backlight
 from .config import save_local
 from .display import Display
-from .inputs import Buzzer, Event, Tap
+from .inputs import Buzzer, Event, Tap, panel_to_frame
 from .motion import Motion
 from .widgets import ETICHETTE, WIDGET_NAMES, Widget, WidgetFactory
+from .widgets.calibrate import TouchWizard
 from .widgets.new import NewWidget
 
 log = logging.getLogger("dash")
+
+TAP_TOLERANCE = 12  # pixel a 480×320: un tocco appena fuori da un bottone vale per il più vicino
+NOTICE_S = 4.0      # durata dei messaggi brevi nelle Impostazioni
 
 
 @dataclass
@@ -41,6 +48,17 @@ class App:
         self.events = events
         self.config_path = config_path  # dove salvare le pagine create dalla scheda "+"
         self.factory = WidgetFactory(cfg)
+        # la retroilluminazione vera solo sul Pi: nel simulatore si scurisce l'immagine
+        bl = dict(cfg.get("backlight") or {})
+        if cfg["display"]["driver"] != "fb":
+            bl["mode"] = "sw"
+        self.backlight = Backlight.from_cfg(bl)
+        self.calib: TouchWizard | None = None   # calibrazione del touch in corso
+        self.shutting_down = False
+        self.run_cmd: Any = subprocess.run       # sostituibile nei test
+        self._power_thread: threading.Thread | None = None
+        self._power_sent = False                  # comando di spegnimento già lanciato
+        self._notice = ("", 0.0)
         self.pages: list[Page] = []
         self.widgets: dict[str, Widget] = {}
         for p in cfg["pages"]:
@@ -51,6 +69,7 @@ class App:
         self.buttons: list[Any] = []  # riferimenti ai pulsanti GPIO (evita il GC)
         self._last_key: Any = None
         self.touch = False  # True se il touchscreen è attivo (cambia il testo dell'allarme)
+        self.touch_cal: Any = None  # TouchCalibration in uso, per la calibrazione a schermo
         self._renderer: Any = None
         self.motion = Motion.from_cfg(cfg.get("motion") or {})
         self._base: Image.Image | None = None    # pagina ferma, ridisegnata solo se cambiano i dati
@@ -74,6 +93,12 @@ class App:
             page.widget.pagine = self.page_kinds
             page.widget.aggiungi = self.add_page
             page.widget.togli = self.remove_page
+            page.widget.luce = lambda: self.backlight.level
+            page.widget.regola_luce = self.adjust_light
+            page.widget.calibra = self.start_calibration
+            page.widget.spegni = self.power_off
+            page.widget.avviso = self.notice
+            page.widget.info = self.info
         self.pages.insert(len(self.pages) if at is None else at, page)
         self.widgets[key] = page.widget
         return page
@@ -122,6 +147,74 @@ class App:
         except OSError as exc:
             log.error("pagine non salvate: %s", exc)
 
+    # --- impostazioni ----------------------------------------------------
+    def notify(self, text: str) -> None:
+        """Messaggio breve nella riga di stato delle Impostazioni."""
+        self._notice = (text, time.monotonic() + NOTICE_S)
+        log.info("[avviso] %s", text)
+
+    def notice(self) -> str:
+        text, until = self._notice
+        return text if time.monotonic() < until else ""
+
+    def info(self) -> str:
+        luce = "retroilluminazione" if self.backlight.hardware else "luce software"
+        return f"pi-dash v{__version__} · {luce}"
+
+    def adjust_light(self, delta: int) -> None:
+        """Luminosità ± (10…100 %), salvata in config.local.json."""
+        level = self.backlight.step(delta)
+        self.cfg.setdefault("backlight", {})["level"] = level
+        self._save_local({"backlight": {"level": level}}, "luminosità")
+
+    def _save_local(self, changes: dict[str, Any], what: str) -> None:
+        if self.config_path is None:
+            return
+        try:
+            save_local(self.config_path, changes)
+        except OSError as exc:
+            log.error("%s non salvata: %s", what, exc)
+
+    def start_calibration(self) -> None:
+        self.calib = TouchWizard(self.cfg["display"]["rotate"])
+
+    def _calibration_tap(self, tap: Tap) -> None:
+        assert self.calib is not None
+        if not self.calib.add(tap):
+            return
+        result = self.calib.result()
+        self.calib = None
+        if result is None:
+            self.notify("calibrazione non riuscita: riprova toccando le croci")
+            return
+        touch = self.cfg["input"].setdefault("touch", {})
+        touch.update(result)
+        if self.touch_cal is not None:
+            self.touch_cal.apply(touch)
+        self._save_local({"input": {"touch": result}}, "calibrazione")
+        self.notify("touch calibrato")
+
+    def power_off(self) -> None:
+        """Spegne il Raspberry: schermata di spegnimento, poi il comando in `power.cmd`."""
+        cmd = (self.cfg.get("power") or {}).get("cmd")
+        if self.cfg["display"]["driver"] != "fb" or not cmd:
+            log.info("[spegni] simulato: %s", " ".join(cmd or []))
+            self.notify("spegnimento simulato (solo sul raspberry)")
+            return
+        self.shutting_down = True  # il comando parte dopo aver mostrato la schermata
+        self._power_sent = False
+
+    def _run_power_off(self, cmd: list[str]) -> None:
+        try:
+            r = self.run_cmd(cmd, capture_output=True, text=True, timeout=30)
+            if r.returncode != 0:
+                raise OSError((r.stderr or "").strip() or f"codice {r.returncode}")
+            log.info("spegnimento avviato")
+        except (OSError, subprocess.SubprocessError) as exc:
+            log.error("spegnimento non riuscito (%s): %s", " ".join(cmd), exc)
+            self.shutting_down = False
+            self.notify("spegni non consentito: vedi scripts/installa-servizio.sh")
+
     # --- eventi ----------------------------------------------------------
     def alerting(self) -> tuple[Widget, str] | None:
         for w in self.widgets.values():
@@ -159,13 +252,16 @@ class App:
         self.page_idx = idx % len(self.pages)
 
     def handle_tap(self, tap: Tap, now: datetime) -> None:
-        """Linguetta → apre quella cartella; contenuto → azione del widget (timer, sveglia)."""
+        """Linguetta → apre quella cartella; bottone → la sua azione; resto → azione del widget."""
         if self.motion.boot_start is not None:
             self.motion.skip_boot()
             return
-        rot = self.cfg["display"]["rotate"]
-        u, v = tap.x, tap.y  # coordinate del pannello → coordinate del fotogramma
-        fx, fy = {0: (u, v), 90: (v, 1 - u), 180: (1 - u, 1 - v), 270: (1 - v, u)}[rot]
+        if self.shutting_down:
+            return
+        if self.calib is not None:
+            self._calibration_tap(tap)
+            return
+        fx, fy = panel_to_frame(tap.x, tap.y, self.cfg["display"]["rotate"])
         w, h = self.frame_size()
         px, py = fx * w, fy * h
         alert = self.alerting()
@@ -176,12 +272,25 @@ class App:
             if b.x <= px < b.right and b.y <= py < b.bottom:
                 self._goto(i)
                 return
-        for i, b in enumerate(self.renderer.select_boxes(self)):  # voci della scheda "+"
-            if b.x <= px < b.right and b.y <= py < b.bottom:
-                self.page.widget.on_select(i)
-                return
-        if self.page.widget.has_action:
+        hit = self.hit_at(px, py)
+        if hit is not None:
+            self.page.widget.on_hit(hit, now)
+        elif self.page.widget.has_action and self.page.widget.tap_action:
             self.page.widget.on_action(now)
+
+    def hit_at(self, px: float, py: float) -> str | None:
+        """Bottone sotto il dito; se nessuno, il più vicino entro `TAP_TOLERANCE`."""
+        best, best_d = None, float("inf")
+        tol = TAP_TOLERANCE * min(self.frame_size()[0] / 480, self.frame_size()[1] / 320)
+        for b, hit in self.renderer.hit_boxes(self):
+            dx = max(b.x - px, 0.0, px - b.right)
+            dy = max(b.y - py, 0.0, py - b.bottom)
+            d = (dx * dx + dy * dy) ** 0.5
+            if d == 0:
+                return hit
+            if d <= tol and d < best_d:
+                best, best_d = hit, d
+        return best
 
     def stop(self) -> None:
         self._stop.set()
@@ -213,13 +322,17 @@ class App:
                 self.handle(ev, now)
         for widget in self.widgets.values():
             widget.update(now)
+        if self.calib is not None and self.calib.expired():
+            self.calib = None
+            self.notify("calibrazione annullata")
         alert = self.alerting()
         self.buzzer.set(alert is not None)
         if animate and self.page_idx != self._shown_page:
             self.motion.page_changed(self._frame, t)  # scansione dalla pagina di prima
         self._shown_page = self.page_idx
         key = (self.page_idx, tuple(self.widgets), now.strftime("%Y%m%d%H%M"),
-               alert[1] if alert else None,
+               alert[1] if alert else None, self.backlight.level, self.shutting_down,
+               self.calib.step if self.calib is not None else None,
                tuple(w.state_key(now) for w in self.widgets.values()))
         dirty = key != self._last_key
         if dirty:                          # dati cambiati: nuova pagina base
@@ -233,8 +346,14 @@ class App:
         self._last_fkey = fkey
         self._frame = (self.renderer.compose(self._base, self, self.motion, t) if animate
                        else self._base)
-        shown = self._rotated(self._frame)
+        shown = self.backlight.apply(self._rotated(self._frame))
         self.display.show(shown)
+        if self.shutting_down and not self._power_sent:  # schermata già sul pannello
+            self._power_sent = True
+            cmd = list(self.cfg["power"]["cmd"])
+            self._power_thread = threading.Thread(target=self._run_power_off, args=(cmd,),
+                                                  name="spegni", daemon=True)
+            self._power_thread.start()
         return shown
 
     def run(self, once: bool = False, clock: Any = time.monotonic) -> None:

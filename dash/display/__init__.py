@@ -6,13 +6,15 @@ from typing import Any, Callable
 from .base import Display
 
 
-def make_display(cfg: dict[str, Any], on_key: Callable[[str], None] | None = None) -> Display:
+def make_display(cfg: dict[str, Any], on_key: Callable[[str], None] | None = None,
+                 on_tap: Callable[[float, float], None] | None = None) -> Display:
     """Crea il display indicato da `display.driver`."""
     d = cfg["display"]
     driver = d["driver"]
     if driver == "sim":
         from .sim import SimDisplay
-        return SimDisplay(d["width"], d["height"], cfg["sim"], on_key, rotate=d["rotate"])
+        return SimDisplay(d["width"], d["height"], cfg["sim"], on_key, rotate=d["rotate"],
+                          on_tap=on_tap)
     if driver == "fb":
         from .fb import FramebufferDisplay
         fbd = FramebufferDisplay(d["width"], d["height"], cfg["fb"])

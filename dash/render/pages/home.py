@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from ...app import App
 
 ANELLI = (("anno", "orange"), ("mese", "amber"), ("settimana", "cream"))  # dall'esterno
+CLOCK_RAISE = 5  # pixel a 480×320 di cui l'ora sale rispetto al suo riquadro
 
 
 def draw(cv: Canvas, b: Box, app: App, now: datetime) -> None:
@@ -30,7 +31,9 @@ def draw(cv: Canvas, b: Box, app: App, now: datetime) -> None:
     date_top = bar.y - gap - date_h
     # in alto: luogo e coordinate
     cv.label((b.x, b.y), f"loc // {name or 'n/d'}", "cream")
-    cv.label((b.right, b.y), f"{lat:.3f}n {lon:.3f}e", "tan", "ra", small=True)
+    fonte = loc.kind() if loc is not None else ""  # gps / wifi / ip: quanto è affidabile
+    coord = f"{lat:.3f}n {lon:.3f}e" + (f" · {fonte}" if fonte in ("gps", "wifi", "ip") else "")
+    cv.label((b.right, b.y), coord, "tan", "ra", small=True)
     # in mezzo: ora a sinistra, anelli a destra (alti quanto ora + data)
     band = Box(b.x, b.y + lab_h + gap, b.w, date_top - gap - (b.y + lab_h + gap))
     side = min(band.h + gap + date_h, round(b.w * 0.30))
@@ -38,8 +41,10 @@ def draw(cv: Canvas, b: Box, app: App, now: datetime) -> None:
     # di base e la data (ancora "ld") sale un filo sopra la sua riga, e con il riquadro pieno
     # l'ora toccava il giorno (3 px d'aria a 480×320 invece del passo `gap`).
     clock_box = Box(band.x, band.y, band.w - side - 2 * gap, band.h - gap // 2)
+    # Stessa taglia, ma la linea di base sale di CLOCK_RAISE: l'ora usa l'aria sotto l'etichetta
+    # del luogo (che ha spazio per le gambe delle lettere) e si stacca dalla data.
     ora = now.strftime("%H:%M")
-    pos = (clock_box.x, clock_box.bottom)
+    pos = (clock_box.x, clock_box.bottom - cv.px(CLOCK_RAISE))
     f = cv.big(clock_box, ora, "cream", pos=pos, anchor="ls", slot="clock.ora", ref="00:00")
     cv.colon_fx(ora, f, pos, "ls", "panel")
     if clock is not None and side > cv.px(40):

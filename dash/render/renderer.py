@@ -11,7 +11,7 @@ from ..layout import Box
 from ..motion import Fx, Motion, Slot
 from . import effects, folders
 from .canvas import Canvas
-from .pages import PAGES, new
+from .pages import HITS, PAGES, calibrate
 from .theme import PALETTE, unit
 
 if TYPE_CHECKING:
@@ -42,21 +42,26 @@ class CyberRenderer:
         w, h = app.frame_size()
         return folders.layout(w, h, len(app.pages), app.page_idx).tabs
 
-    def select_boxes(self, app: App) -> list[Box]:
-        """Riquadri selezionabili col tocco nella pagina aperta (solo la scheda "+")."""
+    def hit_boxes(self, app: App) -> list[tuple[Box, str]]:
+        """Bottoni della pagina aperta (rettangolo, id): stessa geometria del disegno."""
         widget: Any = app.page.widget
-        if widget.name != "new":
+        hits = HITS.get(widget.name)
+        if hits is None:
             return []
-        u = unit(*app.frame_size())
-        return new.chips(new.grid(self.content_inner(app), u), len(widget.voci()), u)
+        return hits(self.content_inner(app), widget, unit(*app.frame_size()))
 
     # --- pagina base -----------------------------------------------------------
     def render(self, app: App, now: datetime) -> Image.Image:
         """Disegna la pagina corrente: schedario + contenuto della cartella aperta."""
         w, h = app.frame_size()
         cv = Canvas(Image.new("RGB", (w, h), self.c["bg"]), self.c, unit(w, h))
+        if app.calib is not None:  # calibrazione del touch: schermo intero, niente schedario
+            calibrate.draw_screen(cv, w, h, app.calib)
+            self.slots, self.fx = cv.slots, cv.fx
+            return cv.img
         lay = folders.layout(w, h, len(app.pages), app.page_idx)
-        folders.draw_tabs(cv, lay, [p.name for p in app.pages], app.page_idx)
+        folders.draw_tabs(cv, lay, [p.name for p in app.pages], app.page_idx,
+                          [p.kind for p in app.pages])
         box = folders.inner(lay, cv.u)
         name = app.page.widget.name
         try:
@@ -65,7 +70,9 @@ class CyberRenderer:
             log.exception("errore nella pagina %s", app.page.name)
             cv.label((box.x + box.w / 2, box.y + box.h / 2), f"errore in {name}", "pink", "mm")
         alert = app.alerting()
-        if alert:
+        if app.shutting_down:
+            effects.notice(cv, w, h, "spegnimento", "attendi 20 s, poi stacca la corrente")
+        elif alert:
             effects.alert(cv, w, h, alert[1], app.touch)
         self.slots, self.fx = cv.slots, cv.fx
         return cv.img

@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.6.0 — 2026-09-27
+- **Impostazioni** al posto della scheda "+": linguetta con l'ingranaggio e tre righe,
+  - schede: timer e sveglia si aggiungono o tolgono con **un solo tocco** sulla voce;
+  - luminosità: − / + dal 10 al 100 %, salvata in `config.local.json`; LED vero se il pannello
+    lo espone in `/sys/class/backlight`, altrimenti immagine scurita (`dash/backlight.py`);
+  - sistema: **calibra touch** (quattro croci, estremi e orientamento calcolati e applicati
+    senza riavvio) e **spegni**, con secondo tocco di conferma e schermata di spegnimento.
+- **Tocco più preciso**: il punto è la mediana dei campioni letti mentre il dito preme (scartati
+  appoggio e distacco); ogni pagina espone i suoi bottoni (`hits`) e un tocco a meno di 12 px da
+  un bottone vale per quello; antirimbalzo da 0,3 a 0,15 s.
+- **Timer a somma**: bottoni −1′ · +1′ · +5′ · +10′ · +15′ · C. I preset si sommano a ogni tocco,
+  anche mentre il tempo scorre; il tocco sul tempo avvia e mette in pausa.
+- **Posizione**: nuovo modo `auto`, predefinito: GPS (gpsd o NMEA), poi reti Wi-Fi (BeaconDB),
+  poi IP, poi coordinate fisse (ora Gaeta). La home indica la fonte (gps, wifi, ip). L'IP da solo
+  mostrava Lavinio, il nodo del provider.
+- Avvio più lento (5 s invece di 2,4) con la sigla **Pi-Dash**.
+- Home: l'ora sale di altri 5 px, alla stessa taglia.
+- Servizio: retroilluminazione scrivibile all'avvio; `installa-servizio.sh` aggiunge
+  `/etc/sudoers.d/pi-dash` (solo `systemctl poweroff`). `aggiorna.sh` lo reinstalla da solo.
+- Simulatore web: un clic sull'anteprima è un tocco. Su Windows il simulatore non si ferma più
+  per la mancanza del touch.
+
 ## 0.5.2 — 2026-09-27
 - README riscritto con tono professionale: caratteristiche, schermate, requisiti, installazione,
   tabella delle voci di configurazione con i valori predefiniti, architettura, flusso di lavoro,

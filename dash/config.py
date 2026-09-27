@@ -14,7 +14,8 @@ DEFAULTS: dict[str, Any] = {
     "sim": {"out_dir": "out", "scale": 2, "keep_frames": False,
             "web_host": "127.0.0.1", "web_port": 0},
     "theme": {"palette": {}},
-    "location": {"mode": "fixed", "name": "", "city": "", "lat": 0.0, "lon": 0.0, "refresh_h": 6},
+    "location": {"mode": "fixed", "name": "", "city": "", "lat": 0.0, "lon": 0.0, "refresh_h": 6,
+                 "gps_device": "", "wifi": True},
     "clock": {"progress": "day"},
     "system": {"sample_s": 2, "refresh_s": 2, "history": 90},
     "weather": {"refresh_min": 30, "cache_dir": "out", "demo": False},
@@ -23,11 +24,13 @@ DEFAULTS: dict[str, Any] = {
     "pages": [{"name": "Home", "widget": "clock"}],
     "new": {"tipi": ["timer", "alarm"]},
     "motion": {"livello": "pieno", "fps": 8, "avvio": True},
+    "backlight": {"level": 100, "mode": "auto"},
+    "power": {"cmd": ["sudo", "-n", "/usr/bin/systemctl", "poweroff"]},
     "fb": {"device": "auto", "pixel_scale": 1, "console_off": True},
     "input": {"keyboard": True, "gpio": None, "buzzer_pin": None, "sound": False,
               "touch": {"enabled": False, "device": "auto", "swap_xy": False, "invert_x": False,
                         "invert_y": False, "x_min": None, "x_max": None, "y_min": None,
-                        "y_max": None, "debounce_s": 0.3, "debug": False}},
+                        "y_max": None, "debounce_s": 0.15, "debug": False}},
 }
 
 
@@ -59,10 +62,18 @@ def validate(cfg: dict[str, Any], known_widgets: set[str]) -> None:
         raise ConfigError("display.width/height devono essere interi > 0 oppure 'auto'")
     if d["rotate"] not in (0, 90, 180, 270):
         raise ConfigError("display.rotate deve essere 0, 90, 180 o 270")
-    if cfg["location"]["mode"] not in ("ip", "city", "fixed"):
-        raise ConfigError("location.mode deve essere 'ip', 'city' o 'fixed'")
+    if cfg["location"]["mode"] not in ("auto", "ip", "city", "fixed"):
+        raise ConfigError("location.mode deve essere 'auto', 'ip', 'city' o 'fixed'")
     if cfg["location"]["mode"] == "city" and not (cfg["location"].get("city") or cfg["location"].get("name")):
         raise ConfigError("location.mode 'city' richiede location.city")
+    bl = cfg["backlight"]
+    if bl.get("mode") not in ("auto", "hw", "sw"):
+        raise ConfigError("backlight.mode deve essere 'auto', 'hw' o 'sw'")
+    if not isinstance(bl.get("level"), (int, float)) or not 10 <= bl["level"] <= 100:
+        raise ConfigError("backlight.level deve essere un numero fra 10 e 100")
+    cmd = cfg["power"].get("cmd")
+    if cmd is not None and (not isinstance(cmd, list) or not all(isinstance(c, str) for c in cmd)):
+        raise ConfigError("power.cmd deve essere una lista di stringhe (o null per disattivarlo)")
     mo = cfg["motion"]
     if mo.get("livello") not in ("off", "eventi", "pieno"):
         raise ConfigError("motion.livello deve essere 'off', 'eventi' o 'pieno'")
@@ -111,11 +122,11 @@ def _read_json(p: Path) -> dict[str, Any]:
 def save_local(path: str | Path, changes: dict[str, Any]) -> Path:
     """Scrive le voci di `changes` in `config.local.json`, conservando le altre.
 
-    Serve alla scheda "+": le pagine create sul Raspberry restano fuori da Git.
+    Serve alle Impostazioni: pagine, calibrazione, luminosità restano fuori da Git. I dizionari
+    si uniscono in profondità: salvare `input.touch` non cancella `input.gpio`.
     """
     local = local_path(path)
-    data = _read_json(local) if local.exists() else {}
-    data.update(changes)
+    data = _merge(_read_json(local) if local.exists() else {}, changes)
     tmp = local.with_suffix(f"{local.suffix}.tmp")
     tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     tmp.replace(local)  # sostituzione atomica: niente file mezzo scritto se manca corrente

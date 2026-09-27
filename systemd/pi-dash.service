@@ -10,6 +10,9 @@ User=pi
 SupplementaryGroups=video input tty
 # permette di spegnere la console di testo sullo schermo (KDSETMODE) senza girare come root
 AmbientCapabilities=CAP_SYS_TTY_CONFIG
+# luminosità dalle Impostazioni: la retroilluminazione (se il pannello la espone) scrivibile
+# dal servizio; "+" = eseguito come root, "|| true" = nessun errore se non c'è
+ExecStartPre=+/bin/sh -c 'chmod a+w /sys/class/backlight/*/brightness 2>/dev/null || true'
 WorkingDirectory=/home/pi/pi-dash
 ExecStart=/home/pi/pi-dash/.venv/bin/python -m dash
 Environment=PYTHONUNBUFFERED=1
