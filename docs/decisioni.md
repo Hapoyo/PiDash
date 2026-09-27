@@ -32,6 +32,11 @@ le regole operative stanno in [CLAUDE.md](../CLAUDE.md).
 - Luminosità (`dash/backlight.py`): LED vero da `/sys/class/backlight` se `max_brightness > 1`,
   altrimenti immagine scurita con una tabella (`Image.point`) prima di `display.show`. Nel
   simulatore sempre software, per non toccare lo schermo del PC. Livelli 10–100 a passi di 10.
+- Alimentazione (`dash/power.py`): il Pi 3 dà solo sopra/sotto 4,63 V, non i volt. Si legge
+  hwmon `rpi_volt` (nessun processo), in ripiego `vcgencmd get_throttled`; campione ogni
+  `power.sample_s` (5 s) dentro `App.step`, storico di 48 colonne da un minuto (1 se nel minuto
+  c'è stato un calo). Un calo conta quando comincia. Tensione bassa adesso → linguetta delle
+  Impostazioni rosa con "tensione bassa", visibile da ogni pagina. Nel simulatore è spento.
 - Spegnimento: doppio tocco entro 4 s; la schermata "spegnimento" arriva sul pannello prima del
   comando `power.cmd` (predefinito `sudo -n /usr/bin/systemctl poweroff`, permesso da
   `/etc/sudoers.d/pi-dash` e da nient'altro). Fuori dal driver `fb` è solo simulato.

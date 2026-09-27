@@ -840,6 +840,58 @@ class TestSettings(unittest.TestCase):
             self.assertIn("simulato", app.notice())
             app.close()
 
+    def test_power_monitor_reads_hwmon_and_counts_dips(self) -> None:
+        from dash.power import SLOTS, PowerMonitor
+        now = datetime(2026, 9, 24, 7, 42)
+        with tempfile.TemporaryDirectory() as tmp:
+            dev = Path(tmp) / "hwmon1"
+            dev.mkdir()
+            (dev / "name").write_text("rpi_volt\n")
+            alarm = dev / "in0_lcrit_alarm"
+            alarm.write_text("0\n")
+            mon = PowerMonitor({"sample_s": 5}, hwmon_root=Path(tmp))
+            self.assertEqual(mon.source, "hwmon")
+            mon.sample(now, 0.0)
+            self.assertEqual((mon.under, list(mon.history)[-1]), (False, 0))
+            alarm.write_text("1\n")
+            mon.sample(now, 2.0)                                 # prima di sample_s: niente
+            self.assertFalse(mon.under)
+            mon.sample(now, 5.0)
+            mon.sample(now, 10.0)                                # stesso calo: uno solo
+            self.assertEqual((mon.under, mon.events, list(mon.history)[-1]), (True, 1, 1))
+            alarm.write_text("0\n")
+            mon.sample(now, 65.0)                                # minuto nuovo, di nuovo ok
+            self.assertEqual(list(mon.history)[-2:], [1, 0])
+            self.assertEqual(len(mon.history), SLOTS)
+
+    def test_power_monitor_falls_back_to_vcgencmd(self) -> None:
+        from unittest import mock
+        from dash import power as P
+
+        class Out:
+            stdout = "throttled=0x50005\n"               # bit 0: sottotensione adesso
+
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(P.shutil, "which", return_value="/usr/bin/vcgencmd"):
+            mon = P.PowerMonitor({}, hwmon_root=Path(tmp), run=lambda *a, **kw: Out())
+            self.assertEqual(mon.source, "vcgencmd")
+            self.assertTrue(mon.read())
+
+    def test_low_voltage_is_shown_on_every_page(self) -> None:
+        now = datetime(2026, 9, 24, 7, 42)
+        with tempfile.TemporaryDirectory() as tmp:
+            app = self._app(tmp)
+            app.page_idx = 0                                      # la home, non le Impostazioni
+            ok = app.render(now)
+            app.power.record(True, now, 0.0)
+            low = app.render(now)
+            tab = app.renderer.nav_rows(app)[1]
+            area = (tab.x, tab.y, tab.right, tab.bottom)
+            pink = app.renderer.c["pink"]
+            self.assertFalse(any(px == pink for px in ok.crop(area).getdata()))
+            self.assertTrue(any(px == pink for px in low.crop(area).getdata()))
+            app.close()
+
     def test_settings_tab_draws_a_gear(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             app = self._app(tmp)
@@ -1067,7 +1119,7 @@ class TestScreenshots(unittest.TestCase):
             paths = save_system_screens(make_cfg(display={"width": "auto", "height": "auto"}),
                                         Path(tmp))
             self.assertEqual([p.name for p in paths], ["avvio.png", "spegni-conferma.png",
-                             "calibrazione.png", "spegnimento.png"])
+                             "tensione-bassa.png", "calibrazione.png", "spegnimento.png"])
             for p in paths:
                 with Image.open(p) as img:
                     self.assertEqual(img.size, (480, 320))

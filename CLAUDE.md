@@ -1,6 +1,6 @@
 # pi-dash — CLAUDE.md
 
-Versione 0.6.0 · 2026-09-27
+Versione 0.6.1 · 2026-09-27
 
 ## 1. Scopo
 Dashboard da tavolo per Raspberry Pi 3 Model B con schermo SPI 3,5" 480×320 (ILI9486 + touch
@@ -32,6 +32,7 @@ dash/render/           tutto il disegno
 dash/layout.py         Box e nomi di giorni/mesi
 dash/location.py       posizione condivisa: "auto" (GPS → Wi-Fi → IP), "ip", "city", "fixed"
 dash/backlight.py      luminosità: /sys/class/backlight se regolabile, altrimenti immagine scurita
+dash/power.py          alimentazione: rilevatore di sottotensione (4,63 V), storico per minuto
 dash/astro.py          alba/tramonto calcolati in locale (NOAA semplificato, ±1–2 min)
 dash/sysinfo.py        CPU/RAM/disco/temperatura/uptime/IP da /proc e /sys
 dash/inputs.py         Event, tastiera (stdin), pulsanti GPIO, touch evdev, cicalino
@@ -51,7 +52,7 @@ tests/                 unittest
 - Simulatore: `python -m dash --demo --web 8080 --driver sim` → `http://localhost:8080`
 - Un fotogramma: `python -m dash --once --demo --driver sim --page 2` → `out/frame.png`
 - Anteprime README: `TZ=Europe/Rome python -m dash --screenshots docs/img` → `docs/img/NN-pagina.png`,
-  le schermate di sistema (`avvio`, `spegni-conferma`, `calibrazione`, `spegnimento`)
+  le schermate di sistema (`avvio`, `spegni-conferma`, `tensione-bassa`, `calibrazione`, `spegnimento`)
   e `docs/img/animazione.gif` (dati demo, posizione fissa, istante 24/09/2026 07:42, nessuna rete).
   Rigenerarle quando cambia il disegno.
 - Animazioni: `--motion off|eventi|pieno` sovrascrive `motion.livello`.

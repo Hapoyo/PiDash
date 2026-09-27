@@ -15,6 +15,7 @@ from PIL import Image
 
 from . import __version__
 from .backlight import Backlight
+from .power import PowerMonitor
 from .config import save_local
 from .display import Display
 from .inputs import Buzzer, Event, Tap, panel_to_frame
@@ -53,6 +54,10 @@ class App:
         if cfg["display"]["driver"] != "fb":
             bl["mode"] = "sw"
         self.backlight = Backlight.from_cfg(bl)
+        power = dict(cfg.get("power") or {})
+        if cfg["display"]["driver"] != "fb":
+            power["monitor"] = False  # il PC non ha il rilevatore del Raspberry
+        self.power = PowerMonitor(power)
         self.calib: TouchWizard | None = None   # calibrazione del touch in corso
         self.shutting_down = False
         self.run_cmd: Any = subprocess.run       # sostituibile nei test
@@ -99,6 +104,7 @@ class App:
             page.widget.spegni = self.power_off
             page.widget.avviso = self.notice
             page.widget.info = self.info
+            page.widget.alimentazione = lambda: self.power
         self.pages.insert(len(self.pages) if at is None else at, page)
         self.widgets[key] = page.widget
         return page
@@ -322,6 +328,7 @@ class App:
                 self.handle(ev, now)
         for widget in self.widgets.values():
             widget.update(now)
+        self.power.sample(now, t)
         if self.calib is not None and self.calib.expired():
             self.calib = None
             self.notify("calibrazione annullata")
@@ -332,7 +339,7 @@ class App:
         self._shown_page = self.page_idx
         key = (self.page_idx, tuple(self.widgets), now.strftime("%Y%m%d%H%M"),
                alert[1] if alert else None, self.backlight.level, self.shutting_down,
-               self.calib.step if self.calib is not None else None,
+               self.calib.step if self.calib is not None else None, self.power.state_key(),
                tuple(w.state_key(now) for w in self.widgets.values()))
         dirty = key != self._last_key
         if dirty:                          # dati cambiati: nuova pagina base

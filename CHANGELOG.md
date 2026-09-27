@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.1 — 2026-09-27
+- Impostazioni: nuova riga **tensione** in fondo, con il grafico degli ultimi 48 minuti (una
+  colonna al minuto, rosa dove l'alimentazione è scesa sotto 4,63 V), il numero di cali e l'ora
+  dell'ultimo. Con la tensione bassa adesso il riquadro lampeggia e la linguetta delle
+  Impostazioni diventa rosa con "tensione bassa", su ogni pagina.
+- Fonte: il rilevatore di sottotensione del Raspberry (hwmon `rpi_volt`, in ripiego
+  `vcgencmd get_throttled`), letto ogni 5 s (`power.sample_s`); `power.monitor: false` lo spegne.
+  Il Pi 3 non misura i volt: il grafico dice sopra o sotto soglia.
+- README: anteprima "tensione bassa" fra le schermate di sistema.
+
 ## 0.6.0 — 2026-09-27
 - **Impostazioni** al posto della scheda "+": linguetta con l'ingranaggio e tre righe,
   - schede: timer e sveglia si aggiungono o tolgono con **un solo tocco** sulla voce;

@@ -1,6 +1,6 @@
 # pi-dash — Installazione
 
-Versione 0.6.0 · 2026-09-27
+Versione 0.6.1 · 2026-09-27
 
 Guida passo passo per chi è nuovo del Raspberry Pi. Si lavora dal PC Windows: il Raspberry non
 ha bisogno di monitor né di tastiera ("headless"). Le parti in `grassetto monospazio` si scrivono
@@ -211,6 +211,7 @@ l'ultima). Dentro, tre righe:
 | schede | `+ timer`, `+ sveglia`: un tocco aggiunge la scheda; la stessa voce diventa `− timer` e la toglie |
 | luminosità | `−` e `+` dal 10 al 100 %, a passi di 10 |
 | sistema | `calibra touch` (§ 5.4) e `spegni`: al primo tocco diventa "conferma", al secondo (entro 4 s) spegne il Raspberry |
+| tensione | grafico degli ultimi 48 minuti, una colonna al minuto: grigia se l'alimentazione è rimasta sopra 4,63 V, rosa se è scesa sotto |
 
 Con i pulsanti GPIO: B passa alla scheda seguente dell'elenco, A la aggiunge o la toglie.
 
@@ -227,6 +228,21 @@ Raspberry smette di lampeggiare, si può staccare l'alimentatore. Lo schermo 3,5
 anche a Raspberry spento (prende corrente dal connettore): è normale. Lo spegnimento dallo
 schermo richiede la regola installata da `scripts/installa-servizio.sh` (§ 5.5); se manca, in
 fondo alle Impostazioni compare "spegni non consentito".
+
+**Tensione di alimentazione.** Il Raspberry Pi 3 non misura i volt in ingresso, ma il suo
+rilevatore di sottotensione scatta quando scendono sotto circa 4,63 V (il "fulmine giallo"). Il
+dashboard lo legge ogni 5 s. A destra del grafico:
+
+| Scritta | Significato |
+|---|---|
+| `ok ≥ 4,63 V` | nessun calo da quando il dashboard è partito |
+| `cali 2 · 07:31` (ambra) | la tensione è scesa sotto soglia 2 volte, l'ultima alle 07:31 |
+| `sotto 4,63 V` (rosa, riquadro che lampeggia) | la tensione è bassa adesso |
+| `non misurabile qui` | nel simulatore sul PC |
+
+Mentre la tensione è bassa, la linguetta delle Impostazioni diventa rosa con scritto
+"tensione bassa", ed è visibile da ogni pagina. Rimedio: alimentatore da 5,1 V 2,5 A e cavo
+corto e spesso (i cavi sottili perdono tensione sotto carico).
 
 Le schede elencate sono quelle di `new.tipi` (`timer`, `alarm`). Le pagine fisse — home, meteo,
 sistema — stanno in `pages`: si cambiano dal file, non dal dashboard.
@@ -367,7 +383,7 @@ Se continui a installare dallo zip:
 | "spegni non consentito" | lancia `scripts/installa-servizio.sh` (installa la regola per lo spegnimento) |
 | Località sbagliata (es. Lavinio invece di Gaeta) | posizione da IP: § 5.8 (Wi-Fi, GPS o coordinate fisse) |
 | Orario sbagliato | serve la rete all'avvio; controlla il fuso con `timedatectl` (deve dire Europe/Rome) |
-| Blocchi o riavvii improvvisi, fulmine giallo sullo schermo | alimentatore insufficiente: usa 5,1 V 2,5 A |
+| Blocchi o riavvii improvvisi, fulmine giallo, "tensione bassa" sulla linguetta | alimentatore o cavo insufficiente: usa 5,1 V 2,5 A e un cavo corto (§ 5.6) |
 | `unzip: command not found` | `sudo apt install -y unzip` |
 
 ## 9. Aspetto
