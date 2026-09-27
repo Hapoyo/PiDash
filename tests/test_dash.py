@@ -233,6 +233,82 @@ class TestLocation(unittest.TestCase):
             self.assertFalse(loc.refresh(force=True))
         self.assertEqual(loc.snapshot()[1:], (40.796, 13.436))
 
+    @staticmethod
+    def _nmea(body: str) -> str:
+        check = 0
+        for c in body:
+            check ^= ord(c)
+        return f"${body}*{check:02X}"
+
+    def test_parse_nmea(self) -> None:
+        from dash.location import parse_nmea
+        rmc = self._nmea("GPRMC,101512.00,A,4112.8220,N,01334.2600,E,0.02,,270926,,,A")
+        self.assertEqual(parse_nmea(rmc), (41.21370, 13.571))            # Gaeta
+        gga = self._nmea("GNGGA,101512.00,4112.8220,N,01334.2600,E,1,08,1.0,5.0,M,45.0,M,,")
+        self.assertEqual(parse_nmea(gga), (41.2137, 13.571))
+        self.assertIsNone(parse_nmea(self._nmea("GPRMC,101512.00,V,,,,,,,270926,,,N")))  # no fix
+        self.assertIsNone(parse_nmea(rmc[:-2] + "00"))                   # checksum sbagliato
+        self.assertIsNone(parse_nmea("rumore"))
+
+    def test_parse_nmcli(self) -> None:
+        from dash.location import parse_nmcli
+        text = "AA\\:BB\\:CC\\:DD\\:EE\\:FF:80\n11\\:22\\:33\\:44\\:55\\:66:30\n--:--\n"
+        self.assertEqual(parse_nmcli(text), [
+            {"macAddress": "aa:bb:cc:dd:ee:ff", "signalStrength": -60},
+            {"macAddress": "11:22:33:44:55:66", "signalStrength": -85}])
+
+    def test_auto_prefers_gps_then_wifi_then_ip(self) -> None:
+        from unittest import mock
+        from dash import location as L
+
+        def fake(url: str, timeout: float = 10, body: dict | None = None) -> dict:
+            if url.startswith(L.BEACONDB_URL):
+                return {"location": {"lat": 41.2137, "lng": 13.5710}, "accuracy": 40}
+            if url.startswith(L.REVERSE_URL):
+                return {"address": {"town": "Gaeta"}}
+            return {"status": "success", "lat": 41.62, "lon": 12.63, "city": "Lavinio"}
+
+        aps = [{"macAddress": "aa:bb:cc:dd:ee:ff", "signalStrength": -60}] * 2
+        loc = self._loc("auto")
+        with mock.patch.object(L, "_from_gpsd", return_value=(41.25, 13.6)), \
+                mock.patch.object(L, "_get_json", side_effect=fake):
+            loc.refresh(force=True)
+        self.assertEqual((loc.snapshot(), loc.kind()), (("Gaeta", 41.25, 13.6), "gps"))
+        loc = self._loc("auto")
+        with mock.patch.object(L, "_from_gpsd", return_value=None), \
+                mock.patch.object(L, "_from_nmea_device", return_value=None), \
+                mock.patch.object(L, "_scan_wifi", return_value=aps), \
+                mock.patch.object(L, "_get_json", side_effect=fake):
+            loc.refresh(force=True)
+        self.assertEqual((loc.snapshot(), loc.kind()), (("Gaeta", 41.2137, 13.571), "wifi"))
+        loc = self._loc("auto")
+        with mock.patch.object(L, "_from_gpsd", return_value=None), \
+                mock.patch.object(L, "_from_nmea_device", return_value=None), \
+                mock.patch.object(L, "_scan_wifi", return_value=[]), \
+                mock.patch.object(L, "_get_json", side_effect=fake):
+            loc.refresh(force=True)
+        self.assertEqual((loc.snapshot()[0], loc.kind()), ("Lavinio", "ip"))  # ultima risorsa
+
+    def test_precise_position_without_a_name_drops_the_old_one(self) -> None:
+        """Wi-Fi lontano dalle coordinate fisse e Nominatim giù: niente nome sbagliato."""
+        from unittest import mock
+        import urllib.error
+        from dash import location as L
+
+        def fake(url: str, timeout: float = 10, body: dict | None = None) -> dict:
+            if url.startswith(L.BEACONDB_URL):
+                return {"location": {"lat": 45.0, "lng": 9.0}}
+            raise urllib.error.URLError("giù")
+
+        loc = self._loc("auto")
+        aps = [{"macAddress": "aa:bb:cc:dd:ee:ff", "signalStrength": -60}] * 2
+        with mock.patch.object(L, "_from_gpsd", return_value=None), \
+                mock.patch.object(L, "_from_nmea_device", return_value=None), \
+                mock.patch.object(L, "_scan_wifi", return_value=aps), \
+                mock.patch.object(L, "_get_json", side_effect=fake):
+            loc.refresh(force=True)
+        self.assertEqual(loc.snapshot(), ("", 45.0, 9.0))
+
     def test_city(self) -> None:
         from unittest import mock
         from dash import location as L

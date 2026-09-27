@@ -31,7 +31,9 @@ def draw(cv: Canvas, b: Box, app: App, now: datetime) -> None:
     date_top = bar.y - gap - date_h
     # in alto: luogo e coordinate
     cv.label((b.x, b.y), f"loc // {name or 'n/d'}", "cream")
-    cv.label((b.right, b.y), f"{lat:.3f}n {lon:.3f}e", "tan", "ra", small=True)
+    fonte = loc.kind() if loc is not None else ""  # gps / wifi / ip: quanto è affidabile
+    coord = f"{lat:.3f}n {lon:.3f}e" + (f" · {fonte}" if fonte in ("gps", "wifi", "ip") else "")
+    cv.label((b.right, b.y), coord, "tan", "ra", small=True)
     # in mezzo: ora a sinistra, anelli a destra (alti quanto ora + data)
     band = Box(b.x, b.y + lab_h + gap, b.w, date_top - gap - (b.y + lab_h + gap))
     side = min(band.h + gap + date_h, round(b.w * 0.30))

@@ -14,7 +14,8 @@ DEFAULTS: dict[str, Any] = {
     "sim": {"out_dir": "out", "scale": 2, "keep_frames": False,
             "web_host": "127.0.0.1", "web_port": 0},
     "theme": {"palette": {}},
-    "location": {"mode": "fixed", "name": "", "city": "", "lat": 0.0, "lon": 0.0, "refresh_h": 6},
+    "location": {"mode": "fixed", "name": "", "city": "", "lat": 0.0, "lon": 0.0, "refresh_h": 6,
+                 "gps_device": "", "wifi": True},
     "clock": {"progress": "day"},
     "system": {"sample_s": 2, "refresh_s": 2, "history": 90},
     "weather": {"refresh_min": 30, "cache_dir": "out", "demo": False},
@@ -61,8 +62,8 @@ def validate(cfg: dict[str, Any], known_widgets: set[str]) -> None:
         raise ConfigError("display.width/height devono essere interi > 0 oppure 'auto'")
     if d["rotate"] not in (0, 90, 180, 270):
         raise ConfigError("display.rotate deve essere 0, 90, 180 o 270")
-    if cfg["location"]["mode"] not in ("ip", "city", "fixed"):
-        raise ConfigError("location.mode deve essere 'ip', 'city' o 'fixed'")
+    if cfg["location"]["mode"] not in ("auto", "ip", "city", "fixed"):
+        raise ConfigError("location.mode deve essere 'auto', 'ip', 'city' o 'fixed'")
     if cfg["location"]["mode"] == "city" and not (cfg["location"].get("city") or cfg["location"].get("name")):
         raise ConfigError("location.mode 'city' richiede location.city")
     bl = cfg["backlight"]
