@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.2 — 2026-09-27
+- README riscritto con tono professionale: caratteristiche, schermate, requisiti, installazione,
+  tabella delle voci di configurazione con i valori predefiniti, architettura, flusso di lavoro,
+  crediti e licenze (Open-Meteo CC BY 4.0 e uso non commerciale, font OFL, codice senza licenza).
+- Installazione: `git clone -b main`, così il Raspberry segue sempre il ramo stabile anche se il
+  ramo predefinito del repository è un altro (README e guida § 4.3, § 7.1).
+
 ## 0.5.1 — 2026-09-27
 - Home: l'ora sale di mezzo passo di griglia e non tocca più la data. A 480×320 fra le cifre
   e il giorno restavano 3 px (le cifre tonde scendono sotto la linea di base, la data sale

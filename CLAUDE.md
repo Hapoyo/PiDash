@@ -1,6 +1,6 @@
 # pi-dash — CLAUDE.md
 
-Versione 0.5.1 · 2026-09-27
+Versione 0.5.2 · 2026-09-27
 
 ## 1. Scopo
 Dashboard da tavolo per Raspberry Pi 3 Model B con schermo SPI 3,5" 480×320 (ILI9486 + touch

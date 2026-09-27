@@ -1,110 +1,183 @@
-# pi-dash
+# PiDash
 
-Versione 0.5.1 · 2026-09-27
+> Versione 0.5.2 · 2026-09-27
 
-Dashboard da tavolo per Raspberry Pi 3 Model B con schermo SPI 3,5" touch: orologio, meteo e vento
-in nodi, timer di partenza regata, sveglia e statistiche del sistema.
+Cruscotto da tavolo per Raspberry Pi con schermo touch SPI da 3,5": ora, meteo con vento in nodi,
+timer di partenza regata, sveglia e stato del sistema, in un'interfaccia a schedario ispirata ai
+computer di bordo.
 
-![Animazioni: avvio, cambio pagina, numeri che si decodificano](docs/img/animazione.gif)
+![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)
+![Raspberry Pi 3](https://img.shields.io/badge/Raspberry%20Pi-3%20Model%20B-C51A4A?logo=raspberrypi&logoColor=white)
+![Schermo 480×320](https://img.shields.io/badge/schermo-480%C3%97320%20SPI-5b514a)
+![Dipendenze](https://img.shields.io/badge/dipendenze-Pillow-ee7b50)
 
-Le pagine sono le cartelle di uno schedario: si tocca la linguetta numerata e la cartella si apre
-sotto di essa. Stesso stile ovunque — pannelli arrotondati a colori su fondo scuro, numeri in
-Space Grotesk, microetichette in Space Mono — e motion graphics da computer di bordo: sequenza di
-accensione, scansione al cambio pagina, cifre che si decodificano, aloni e spie che vivono.
+![Accensione, cambio pagina e numeri che si decodificano](docs/img/animazione.gif)
 
-Lo schedario si compone a piacere: la scheda **+** elenca le schede opzionali — timer e sveglia —
-e ogni voce fa da interruttore: le aggiunge se mancano, le toglie se ci sono. La scelta si salva
-in `config.local.json` e torna al riavvio.
+## 1. Caratteristiche
 
-## 1. Pagine
-| # | Pagina | In partenza | Contenuto |
+- **Schedario componibile**: ogni funzione è una cartella con la sua linguetta; timer e sveglia si
+  aggiungono e si tolgono direttamente dallo schermo, dalla scheda **+**.
+- **Meteo per chi va in mare**: vento in nodi con direzione, raffiche e forza Beaufort, pressione,
+  pioggia e previsione a 15 ore da [Open-Meteo](https://open-meteo.com), senza chiave API.
+- **Timer di partenza regata** con preset configurabili e **sveglie settimanali**.
+- **Funziona anche senza rete**: alba e tramonto calcolati in locale, ultimo meteo in cache.
+- **Motion graphics leggere**: sequenza di accensione, transizioni, cifre che si decodificano,
+  pensate per il bus SPI (si aggiornano solo le righe cambiate).
+- **Nessun desktop richiesto**: disegna direttamente nel framebuffer su Raspberry Pi OS Lite.
+- **Aggiornamento con un comando**, con test e ritorno automatico alla versione precedente.
+- **Una sola dipendenza Python**: Pillow.
+
+## 2. Schermate
+
+| # | Pagina | Presente | Contenuto |
 |---|---|---|---|
-| 001 | Home | sì | ora, data, luogo e coordinate, alba/tramonto, barra della giornata, anelli di settimana/mese/anno |
-| 002 | Meteo | sì | temperatura, vento con anello della direzione e gradi, raffiche e Beaufort, pioggia, umidità, pressione, previsione oraria, sole e luna |
-| 003 | Timer | da aggiungere | conto alla rovescia con preset (5' = sequenza di partenza) |
-| 004 | Sveglia | da aggiungere | prossima sveglia, stato, elenco per giorno della settimana |
-| 005 | Sistema | sì | CPU, RAM, disco, storici di CPU e rete, host, IP, temperatura, uptime |
-| + | Nuova scheda | sì | elenco delle schede opzionali: le aggiunge o le toglie |
+| 001 | Home | sempre | ora e data, luogo e coordinate, alba/tramonto, avanzamento del giorno, anelli di settimana, mese e anno |
+| 002 | Meteo | sempre | temperatura, vento (nodi, direzione, raffiche, Beaufort), pioggia, umidità, pressione, previsione oraria, fase lunare |
+| 003 | Timer | a scelta | conto alla rovescia con preset; 5′ = sequenza di partenza |
+| 004 | Sveglia | a scelta | prossima sveglia, stato, sveglie per giorno della settimana |
+| 005 | Sistema | sempre | CPU, RAM, disco, storici di CPU e rete, host, IP, temperatura, uptime |
+| + | Nuova scheda | sempre | aggiunge o toglie le schede opzionali |
 
-### 1.1 Anteprime
 | 001 · Home | 002 · Meteo |
 |:---:|:---:|
-| ![Home: ora, data, luogo, alba e tramonto, anelli di settimana, mese e anno](docs/img/01-home.png) | ![Meteo: temperatura, vento in nodi con anello della direzione, pioggia, umidità, pressione, previsione oraria](docs/img/02-meteo.png) |
+| ![Home](docs/img/01-home.png) | ![Meteo](docs/img/02-meteo.png) |
 | **003 · Timer** | **004 · Sveglia** |
-| ![Timer: conto alla rovescia di partenza con preset](docs/img/03-timer.png) | ![Sveglia: orario, stato e prossima attivazione](docs/img/04-sveglia.png) |
+| ![Timer](docs/img/03-timer.png) | ![Sveglia](docs/img/04-sveglia.png) |
 | **005 · Sistema** | **+ · Nuova scheda** |
-| ![Sistema: CPU, RAM, disco, storici di CPU e rete, host, IP, temperatura, uptime](docs/img/05-sistema.png) | ![Nuova scheda: elenco delle schede opzionali, timer e sveglia](docs/img/06-new.png) |
+| ![Sistema](docs/img/05-sistema.png) | ![Nuova scheda](docs/img/06-new.png) |
 
-Le anteprime mostrano tutte le pagine, comprese quelle da aggiungere.
-Immagini a 480×320, risoluzione nativa dello schermo, generate dal codice con dati demo:
-`python -m dash --screenshots docs/img` (fuori dal Pi anteporre `TZ=Europe/Rome`).
+Immagini a 480×320, risoluzione nativa dello schermo, generate dal codice con dati dimostrativi.
 
-### 1.2 Animazioni
-| Effetto | Dove | Livello |
-|---|---|---|
-| Accensione: sigla che si scrive, righe di controllo, barra di carico (2,4 s, un tocco la salta) | all'avvio | eventi |
-| Scansione dall'alto con riga arancio | a ogni cambio pagina | eventi |
-| Cifre che scorrono e si fermano da sinistra a destra | numeri grandi che cambiano o all'apertura della pagina | eventi |
-| Due punti che lampeggiano | ora della home, timer in corsa | pieno |
-| Aloni che pulsano attorno alle sfere | anelli della home e del vento | pieno |
-| Spia accanto al numero della linguetta aperta | tutte le pagine | pieno |
+## 3. Requisiti
 
-`motion.livello` in `config.local.json`: `"pieno"` (predefinito), `"eventi"` o `"off"`;
-`motion.fps` (predefinito 8). Durante un allarme gli effetti continui si fermano.
-
-Dati meteo: [Open-Meteo](https://open-meteo.com), senza chiave. Alba e tramonto della Home sono
-calcolati in locale: funzionano anche senza rete.
-
-## 2. Hardware
-| Voce | Dato |
+| Componente | Specifica |
 |---|---|
 | Scheda | Raspberry Pi 3 Model B, Raspberry Pi OS Lite 64 bit |
-| Schermo | "3.5inch RPi Display" 480×320, ILI9486 + touch XPT2046 (overlay `piscreen,drm`) |
-| Alimentatore | 5,1 V 2,5 A |
-| Opzionali | pulsanti su GPIO 5/13/19, cicalino su GPIO 26 |
+| Schermo | "3.5inch RPi Display" 480×320, controller ILI9486, touch XPT2046 (overlay `piscreen,drm`) |
+| Alimentatore | 5,1 V · 2,5 A |
+| Opzionali | pulsanti fisici su GPIO 5/13/19, cicalino su GPIO 26 |
+| Software | Python ≥ 3.11, Pillow ≥ 10.1 |
+| Rete | facoltativa: serve per meteo e posizione, non per ora, alba e tramonto |
 
-Pin e vincoli: [docs/hardware.md](docs/hardware.md).
+Collegamenti, overlay e banda del bus SPI: [docs/hardware.md](docs/hardware.md).
 
-## 3. Installazione
-Guida passo passo, anche per chi non ha mai usato un Raspberry:
-[docs/installazione.md](docs/installazione.md).
+## 4. Installazione
 
-```
+Guida completa passo per passo, anche per chi usa un Raspberry per la prima volta:
+[docs/installazione.md](docs/installazione.md). In sintesi, sul Raspberry:
+
+```bash
 sudo apt install -y git python3-venv python3-pil
-git clone https://github.com/Hapoyo/PiDash.git ~/pi-dash
+git clone -b main https://github.com/Hapoyo/PiDash.git ~/pi-dash
 cd ~/pi-dash
 python3 -m venv --system-site-packages .venv
 .venv/bin/pip install -r requirements.txt
 .venv/bin/python -m dash --once --demo --driver sim   # prova: scrive out/frame.png
-scripts/installa-servizio.sh && sudo systemctl start pi-dash   # avvio automatico
+scripts/installa-servizio.sh && sudo systemctl start pi-dash
 ```
 
-### 3.1 Aggiornamento
-```
+### 4.1 Aggiornamento
+
+```bash
 ~/pi-dash/scripts/aggiorna.sh
 ```
-Scarica da GitHub, esegue i test, riavvia il servizio; se qualcosa non va torna alla versione
-precedente. Dettagli e passaggio da un'installazione via zip: guida § 7.
 
-## 4. Configurazione
-Lo schedario si cambia dalla scheda **+** senza toccare i file: B (o il tocco su una voce) sceglie,
-A (o il tocco sul "+") conferma. Le schede opzionali sono elencate in `new.tipi`; la scelta
-finisce in `config.local.json`.
+Lo script scarica la nuova versione, aggiorna le dipendenze, esegue i test e riavvia il servizio.
+Se un controllo fallisce ripristina da solo la versione precedente. Passaggio da un'installazione
+copiata a mano: guida, § 7.1.
 
-`config.json` (in Git) contiene i valori del progetto: posizione, sveglie, preset del timer,
-pagine, colori, touch. Le modifiche fatte sul Raspberry vanno in `config.local.json`
-(fuori da Git, solo le voci da cambiare): gli aggiornamenti non le toccano.
-Schedario, voci, calibrazione del tocco, animazioni e colori: guida § 5.6, § 5.7, § 5.4, § 9.1
-e § 9.2.
+## 5. Configurazione
 
-## 5. Sviluppo senza hardware
+La configurazione è su due livelli:
+
+- `config.json`, nel repository: i valori del progetto;
+- `config.local.json`, solo sul Raspberry e fuori da Git: le impostazioni personali. Contiene solo
+  le voci da cambiare, ha la precedenza e non viene toccato dagli aggiornamenti.
+
+| Voce | Significato | Predefinito |
+|---|---|---|
+| `location.mode` | posizione: `ip` (dall'indirizzo pubblico), `city` (per nome), `fixed` (coordinate) | `ip` |
+| `location.name`, `lat`, `lon` | luogo e coordinate di riserva | Ventotene, 40,796 N 13,436 E |
+| `timer.presets_s`, `timer.labels` | durate in secondi ed etichette dei preset | 300, 60, 600, 900 · 300 = "partenza" |
+| `alarm.alarms` | sveglie: ora, giorni (0 = lunedì), attiva | 07:00, lunedì–venerdì |
+| `motion.livello`, `motion.fps` | animazioni: `pieno`, `eventi`, `off`; fotogrammi al secondo | `pieno`, 8 |
+| `theme.palette` | colori dell'interfaccia, per nome (`orange`, `amber`…) | tema originale |
+| `input.touch` | calibrazione del tocco | automatica |
+| `display.rotate` | rotazione dell'immagine: 0, 90, 180, 270 | 0 |
+
+Esempio di `config.local.json`:
+
+```json
+{
+  "location": {"mode": "fixed", "name": "Gaeta", "lat": 41.213, "lon": 13.571},
+  "motion": {"livello": "eventi"}
+}
 ```
-python -m dash --demo --driver sim --web 8080   # simulatore nel browser
-python -m dash --screenshots docs/img           # rigenera anteprime e GIF del README
-python -m dash --demo --driver sim --motion off # senza animazioni
+
+Timer e sveglia si aggiungono dalla scheda **+**: B (o il tocco su una voce) sceglie, A (o il
+tocco sul simbolo) conferma. Voci complete e calibrazione del tocco: guida, § 5 e § 9.
+
+### 5.1 Animazioni
+
+| Effetto | Quando | Livello |
+|---|---|---|
+| Accensione: sigla, righe di controllo, barra di carico (2,4 s; un tocco la salta) | all'avvio | eventi |
+| Scansione dall'alto con riga arancio | al cambio pagina | eventi |
+| Cifre che scorrono e si fermano | numeri che cambiano, apertura della pagina | eventi |
+| Due punti che lampeggiano | ora, timer in corsa | pieno |
+| Aloni attorno alle sfere | anelli della home e del vento | pieno |
+| Spia della linguetta aperta | tutte le pagine | pieno |
+
+Durante un allarme gli effetti continui si fermano.
+
+## 6. Sviluppo
+
+Non serve l'hardware: il simulatore disegna le stesse immagini in PNG e le mostra nel browser.
+
+```bash
+python3 -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt
+python -m dash --demo --driver sim --web 8080   # simulatore: http://localhost:8080
+python -m dash --screenshots docs/img           # rigenera anteprime e GIF
 python -m unittest -v                           # 60 test
 ```
-Regole del progetto e decisioni: [CLAUDE.md](CLAUDE.md). Modifiche: [CHANGELOG.md](CHANGELOG.md).
 
-## 6. Font
-Space Grotesk e Space Mono: SIL Open Font License 1.1 (licenze in `fonts/`).
+### 6.1 Architettura
+
+```
+dash/
+  app.py          ciclo dell'applicazione, pagine, eventi
+  main.py         riga di comando
+  config.py       configurazione a due livelli e validazione
+  motion.py       tempi delle animazioni
+  widgets/        dati e stato di ogni pagina (nessun disegno)
+  render/         disegno: tema e griglia, primitive, schedario, una pagina per modulo, effetti
+  display/        uscite: framebuffer Linux e simulatore
+```
+
+Ogni pagina è un widget (dati) più una funzione di disegno in `dash/render/pages/`. Misure e
+colori stanno in un solo punto, `dash/render/theme.py`. Regole di stile del codice e convenzioni:
+[CLAUDE.md](CLAUDE.md); motivazioni delle scelte: [docs/decisioni.md](docs/decisioni.md).
+
+### 6.2 Flusso di lavoro
+
+Ogni modifica passa da un ramo e da una pull request verso `main`. Il Raspberry si aggiorna solo
+da `main`, e solo se tutti i test passano. Storico delle versioni: [CHANGELOG.md](CHANGELOG.md).
+
+## 7. Documentazione
+
+| Documento | Contenuto |
+|---|---|
+| [docs/installazione.md](docs/installazione.md) | installazione, schermo, calibrazione, avvio automatico, aggiornamento, problemi comuni |
+| [docs/hardware.md](docs/hardware.md) | pin, overlay, alimentazione, banda del bus SPI |
+| [docs/decisioni.md](docs/decisioni.md) | scelte di progetto e motivi |
+| [CHANGELOG.md](CHANGELOG.md) | modifiche per versione |
+
+## 8. Crediti e licenze
+
+- **Dati meteo e geocodifica**: [Open-Meteo.com](https://open-meteo.com), dati con licenza
+  [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). L'API gratuita è riservata all'uso
+  non commerciale ([termini](https://open-meteo.com/en/terms)).
+- **Posizione dall'indirizzo IP**: ipapi.co, con ip-api.com come riserva.
+- **Caratteri**: Space Grotesk e Space Mono, SIL Open Font License 1.1 (testi in `fonts/`).
+- **Codice**: il repository non contiene ancora un file di licenza; finché non viene aggiunto,
+  valgono i diritti d'autore predefiniti.

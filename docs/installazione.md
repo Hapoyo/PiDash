@@ -1,6 +1,6 @@
 # pi-dash — Installazione
 
-Versione 0.4.0 · 2026-09-26
+Versione 0.5.2 · 2026-09-27
 
 Guida passo passo per chi è nuovo del Raspberry Pi. Si lavora dal PC Windows: il Raspberry non
 ha bisogno di monitor né di tastiera ("headless"). Le parti in `grassetto monospazio` si scrivono
@@ -115,10 +115,10 @@ App → Funzionalità facoltative → Aggiungi → **Client OpenSSH**.
 Il Raspberry scarica il progetto da solo, senza passare dal PC. Nel terminale SSH:
 ```
 sudo apt install -y git
-git clone https://github.com/Hapoyo/PiDash.git ~/pi-dash
+git clone -b main https://github.com/Hapoyo/PiDash.git ~/pi-dash
 ls ~/pi-dash
 ```
-Il progetto finisce in `~/pi-dash` qualunque sia il nome del repository. Se il repository è privato, `git clone`
+`-b main` scarica il ramo stabile, quello da cui arrivano gli aggiornamenti. Il progetto finisce in `~/pi-dash` qualunque sia il nome del repository. Se il repository è privato, `git clone`
 chiede nome utente e **token** (non la password del sito): si crea su GitHub → Settings →
 Developer settings → Personal access tokens.
 
@@ -279,7 +279,7 @@ Una volta sola, poi si aggiorna con `aggiorna.sh`. Le tue impostazioni diventano
 ```
 sudo systemctl stop pi-dash
 mv ~/pi-dash ~/pi-dash-vecchio
-git clone https://github.com/Hapoyo/PiDash.git ~/pi-dash
+git clone -b main https://github.com/Hapoyo/PiDash.git ~/pi-dash
 cp ~/pi-dash-vecchio/config.json ~/pi-dash/config.local.json
 cd ~/pi-dash
 python3 -m venv --system-site-packages .venv
