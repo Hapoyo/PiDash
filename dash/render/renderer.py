@@ -61,7 +61,8 @@ class CyberRenderer:
             return cv.img
         lay = folders.layout(w, h, len(app.pages), app.page_idx)
         folders.draw_tabs(cv, lay, [p.name for p in app.pages], app.page_idx,
-                          [p.kind for p in app.pages])
+                          [p.kind for p in app.pages],
+                          "tensione bassa" if app.power.under else "")
         box = folders.inner(lay, cv.u)
         name = app.page.widget.name
         try:

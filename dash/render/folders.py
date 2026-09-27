@@ -60,8 +60,11 @@ SETTINGS = "impostazioni"  # testo della linguetta della scheda "new", accanto a
 
 
 def draw_tabs(cv: Canvas, lay: Layout, names: list[str], current: int,
-              kinds: list[str] | None = None) -> None:
-    """Cartelle sovrapposte: le linguette sotto passano davanti al collo di quella aperta."""
+              kinds: list[str] | None = None, warn: str = "") -> None:
+    """Cartelle sovrapposte: le linguette sotto passano davanti al collo di quella aperta.
+
+    `warn` sostituisce, in rosa, la parola della linguetta delle Impostazioni (tensione bassa).
+    """
     lw = cv.line
     body = lay.content
     neck = lay.tabs[current]
@@ -79,8 +82,9 @@ def draw_tabs(cv: Canvas, lay: Layout, names: list[str], current: int,
         # Impostazioni: ingranaggio a destra, la parola accanto
         r = b.h * 0.34
         gx = b.right - side - r
-        cv.gear((gx, cy), r, col, "panel" if active else "cream")
-        cv.label((gx - r - cv.px(6), cy), SETTINGS, col, "rm", bold=active)
+        cv.gear((gx, cy), r, "pink" if warn else col, "panel" if active else "cream")
+        cv.label((gx - r - cv.px(6), cy), warn or SETTINGS, "pink" if warn else col, "rm",
+                 bold=active or bool(warn))
 
     for i in range(current):  # pila sopra: ogni linguetta copre il fondo della precedente
         b = lay.tabs[i]

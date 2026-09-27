@@ -81,7 +81,8 @@ def save_animation(cfg: dict[str, Any], path: Path, now: datetime = SHOT_TIME,
 
 
 def save_system_screens(cfg: dict[str, Any], out_dir: Path, now: datetime = SHOT_TIME) -> list[Path]:
-    """Schermate fuori dallo schedario: avvio, conferma di spegni, calibrazione, spegnimento."""
+    """Schermate fuori dallo schedario e stati: avvio, conferma di spegni, tensione bassa,
+    calibrazione, spegnimento."""
     from .inputs import Tap
     from .render import effects
     from .render.theme import unit
@@ -102,6 +103,10 @@ def save_system_screens(cfg: dict[str, Any], out_dir: Path, now: datetime = SHOT
         app.page_idx = next(i for i, p in enumerate(app.pages) if p.kind == "new")
         app.page.widget.on_hit("spegni", now)          # primo tocco: chiede conferma
         save("spegni-conferma.png", app.renderer.render(app, now))
+        app.page.widget._armato = -1e9                 # conferma scaduta
+        app.power.load_demo(now)
+        app.power.record(True, now, 1e6)               # calo in corso: minuto nuovo, rosa
+        save("tensione-bassa.png", app.renderer.render(app, now))
         app.start_calibration()
         assert app.calib is not None
         app.calib.add(Tap(0.1, 0.12))                  # prima croce toccata, tocca alla seconda
@@ -129,6 +134,7 @@ def save_screenshots(cfg: dict[str, Any], out_dir: Path, now: datetime = SHOT_TI
                 widget.load_demo()
             if isinstance(widget, NewWidget):
                 widget.pagine = dict  # anteprima: catalogo nello stato iniziale (tutto da aggiungere)
+        app.power.load_demo(now)
         for widget in app.widgets.values():
             widget.update(now)
         for i, page in enumerate(app.pages):

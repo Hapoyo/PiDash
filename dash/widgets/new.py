@@ -56,6 +56,7 @@ class NewWidget(Widget):
         self.spegni: Callable[[], None] = lambda: None
         self.avviso: Callable[[], str] = lambda: ""   # messaggio breve (es. "touch calibrato")
         self.info: Callable[[], str] = lambda: ""     # riga in fondo (versione, tipo di luce)
+        self.alimentazione: Callable[[], Any] = lambda: None  # PowerMonitor, se c'è
 
     def voci(self) -> list[Voce]:
         """Una voce per tipo: "aggiungi" se manca, "togli" se la scheda è già nello schedario."""
@@ -105,5 +106,6 @@ class NewWidget(Widget):
         self.idx = 0
 
     def state_key(self, now: datetime) -> Hashable:
+        power = self.alimentazione()
         return (self.idx, tuple(sorted(self.pagine())), self.luce(), self.armato(), self.avviso(),
-                self.info())
+                self.info(), power.state_key() if power is not None else None)

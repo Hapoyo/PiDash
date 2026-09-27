@@ -1,6 +1,7 @@
 """Impostazioni: schede da aggiungere o togliere, luminosità, calibrazione del touch, spegnimento.
 
-Tre righe con il nome a sinistra e i bottoni a destra, una riga di stato in fondo. `hits`
+Tre righe con il nome a sinistra e i bottoni a destra, poi il grafico della tensione di
+alimentazione (sotto soglia o no, minuto per minuto) e una riga di stato in fondo. `hits`
 restituisce gli stessi rettangoli del disegno: il tocco li trova senza ricalcolarli.
 """
 from __future__ import annotations
@@ -9,6 +10,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from ...layout import Box
+from ...power import THRESHOLD_V
 from ..canvas import Canvas
 from ..theme import GRID, fit, font, px
 
@@ -18,17 +20,20 @@ if TYPE_CHECKING:
 CHIP_H = 48    # altezza massima di una riga di bottoni (pixel a 480×320): comoda da toccare
 NAME_W = 92    # colonna dei nomi delle righe
 SEZIONI = ("schede", "luminosità", "sistema")
+POWER_H = 30   # riga del grafico della tensione
 
 
-def _rows(b: Box, u: float) -> tuple[list[Box], Box]:
-    """Tre righe di bottoni (già senza la colonna dei nomi) e la riga di stato in fondo."""
+def _rows(b: Box, u: float) -> tuple[list[Box], Box, Box]:
+    """Tre righe di bottoni e il grafico della tensione (senza la colonna dei nomi), stato in fondo."""
     g = px(GRID.gap, u)
     foot_h = font("mono", px(GRID.small, u)).getbbox("Hgjà", anchor="la")[3] + g
-    avail = b.h - foot_h
+    power_h = px(POWER_H, u)
+    avail = b.h - foot_h - power_h - g
     h = min(px(CHIP_H, u), (avail - 2 * g) // 3)
     x = b.x + px(NAME_W, u)
     rows = [Box(x, b.y + i * (h + g), b.right - x, h) for i in range(3)]
-    return rows, Box(b.x, b.bottom - foot_h + g, b.w, foot_h - g)
+    power = Box(x, rows[-1].bottom + g, b.right - x, power_h)
+    return rows, power, Box(b.x, b.bottom - foot_h + g, b.w, foot_h - g)
 
 
 def chips(box: Box, n: int, u: float, per_row: int = 0) -> list[Box]:
@@ -61,7 +66,7 @@ def _system(row: Box, u: float) -> tuple[Box, Box]:
 
 
 def hits(b: Box, widget: Any, u: float) -> list[tuple[Box, str]]:
-    rows, _ = _rows(b, u)
+    rows, _, _ = _rows(b, u)
     out = [(cb, f"voce:{i}") for i, cb in enumerate(chips(rows[0], len(widget.voci()), u))]
     minus, _, plus = _light(rows[1], u)
     calibra, spegni = _system(rows[2], u)
@@ -76,10 +81,11 @@ def _button(cv: Canvas, box: Box, text: str, f: Any, fill: str = "panel", ink: s
 
 def draw(cv: Canvas, b: Box, app: App, now: datetime) -> None:
     widget: Any = app.page.widget
-    rows, foot = _rows(b, cv.u)
+    rows, power_box, foot = _rows(b, cv.u)
     pad = cv.pad
-    for name, row in zip(SEZIONI, rows):
+    for name, row in zip(SEZIONI + ("tensione",), rows + [power_box]):
         cv.label((b.x, row.y + row.h / 2), name, "tan", "lm")
+    _power(cv, power_box, widget.alimentazione())
     # schede: una voce per tipo, "+" aggiunge, "−" toglie (in tan)
     voci = widget.voci()
     riquadri = chips(rows[0], len(voci), cv.u)
@@ -125,3 +131,38 @@ def draw(cv: Canvas, b: Box, app: App, now: datetime) -> None:
         avviso = "tocca ancora spegni per spegnere il raspberry"
     cv.label((foot.x, foot.bottom), avviso or widget.info(), "orange" if avviso else "tan", "ld",
              small=True)
+
+
+def _power(cv: Canvas, box: Box, mon: Any) -> None:
+    """Grafico della tensione: una colonna per minuto, rosa dove è scesa sotto la soglia."""
+    under = mon is not None and mon.under
+    cv.rect(box, "panel", "pink" if under else "line", cv.stroke if under else cv.line)
+    soglia = f"{THRESHOLD_V:.2f}".replace(".", ",") + " V"
+    if mon is None or mon.source is None:
+        stato, col = "non misurabile qui", "tan"
+    elif under:
+        stato, col = f"sotto {soglia}", "pink"
+    elif mon.events:
+        ora = mon.last_event.strftime("%H:%M") if mon.last_event else "--:--"
+        stato, col = f"cali {mon.events} · {ora}", "amber"
+    else:
+        stato, col = f"ok ≥ {soglia}", "cream"
+    pad = cv.pad
+    text_w = round(cv.f_bold.getlength("cali 99 · 00:00"))
+    cv.label((box.right - pad, box.y + box.h / 2), stato, col, "rm", bold=True, lower=False)
+    strip = Box(box.x + pad, box.y + cv.px(5), box.w - 3 * pad - text_w, box.h - 2 * cv.px(5))
+    hist = list(mon.history) if mon is not None else []
+    if not hist or strip.w <= 0:
+        return
+    cw = strip.w / len(hist)
+    low = max(1, round(strip.h * 0.3))
+    for i, v in enumerate(hist):  # None = non campionato, 0 = sopra soglia, 1 = sotto
+        if v is None:
+            continue
+        x0 = strip.x + i * cw
+        top = strip.y if v else strip.bottom - low
+        cv.d.rectangle((x0, top, x0 + max(1, cw - 1), strip.bottom - 1),
+                       fill=cv.c["pink" if v else "line"])
+    if under:  # il riquadro lampeggia finché la tensione resta bassa
+        cv.add_fx("outline", (box.x, box.y, box.right - 1, box.bottom - 1), "paper", "pink",
+                  extra=(cv.radius, cv.stroke))

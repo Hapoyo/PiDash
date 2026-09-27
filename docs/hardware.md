@@ -1,6 +1,6 @@
 # pi-dash — Note hardware
 
-Versione 0.6.0 · 2026-09-27
+Versione 0.6.1 · 2026-09-27
 
 ## 1. Schermo 3,5" SPI
 | Voce | Dato |
@@ -52,6 +52,11 @@ Versione 0.6.0 · 2026-09-27
 
 ## 3. Raspberry Pi 3 Model B
 - Alimentatore 5,1 V 2,5 A: sotto questa soglia il Pi si riavvia o rallenta (fulmine giallo).
+- Nessun convertitore analogico: la tensione in ingresso non si misura in volt. Il firmware segnala
+  solo quando scende sotto circa 4,63 V: hwmon `rpi_volt`, file `in0_lcrit_alarm` (1 = bassa
+  adesso), oppure `vcgencmd get_throttled` (bit 0 adesso, bit 16 dall'accensione). Prova:
+  `cat /sys/class/hwmon/hwmon*/name` deve elencare `rpi_volt`.
+- Per i volt veri servirebbe un sensore esterno su I²C (per esempio INA219 fra alimentatore e Pi).
 - Wi-Fi solo a 2,4 GHz.
 - Nessun orologio interno: dopo un'accensione senza rete l'ora è sbagliata finché NTP non sincronizza.
 - Il programma scrive direttamente nel framebuffer: non serve il desktop (Raspberry Pi OS Lite).

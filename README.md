@@ -1,6 +1,6 @@
 # PiDash
 
-> Versione 0.6.0 · 2026-09-27
+> Versione 0.6.1 · 2026-09-27
 
 Cruscotto da tavolo per Raspberry Pi con schermo touch SPI da 3,5": ora, meteo con vento in nodi,
 timer di partenza regata, sveglia e stato del sistema, in un'interfaccia a schedario ispirata ai
@@ -25,6 +25,8 @@ computer di bordo.
 - **Timer di partenza regata**: il tempo si compone sommando i bottoni (+1′, +5′, +10′, +15′,
   −1′, C per azzerare); **sveglie settimanali**.
 - **Posizione precisa**: GPS se c'è un ricevitore, altrimenti le reti Wi-Fi vicine, poi l'IP.
+- **Controllo dell'alimentazione**: grafico degli ultimi 48 minuti e avviso in rosa quando la
+  tensione in ingresso scende sotto 4,63 V (rilevatore di sottotensione del Raspberry).
 - **Funziona anche senza rete**: alba e tramonto calcolati in locale, ultimo meteo in cache.
 - **Motion graphics leggere**: sequenza di accensione, transizioni, cifre che si decodificano,
   pensate per il bus SPI (si aggiornano solo le righe cambiate).
@@ -41,7 +43,7 @@ computer di bordo.
 | 003 | Timer | a scelta | conto alla rovescia composto con i bottoni; 5′ = sequenza di partenza |
 | 004 | Sveglia | a scelta | prossima sveglia, stato, sveglie per giorno della settimana |
 | 005 | Sistema | sempre | CPU, RAM, disco, storici di CPU e rete, host, IP, temperatura, uptime |
-| ⚙ | Impostazioni | sempre | schede opzionali, luminosità, calibrazione del tocco, spegnimento |
+| ⚙ | Impostazioni | sempre | schede opzionali, luminosità, calibrazione del tocco, spegnimento, grafico della tensione di alimentazione |
 
 | 001 · Home | 002 · Meteo |
 |:---:|:---:|
@@ -56,8 +58,10 @@ Schermate fuori dallo schedario:
 | Avvio (5 s, un tocco lo salta) | Spegni: il primo tocco chiede conferma |
 |:---:|:---:|
 | ![Avvio](docs/img/avvio.png) | ![Conferma dello spegnimento](docs/img/spegni-conferma.png) |
-| **Calibra touch: quattro croci, una alla volta** | **Spegnimento** |
-| ![Calibrazione del touch](docs/img/calibrazione.png) | ![Spegnimento](docs/img/spegnimento.png) |
+| **Tensione sotto 4,63 V: grafico e linguetta in rosa** | **Calibra touch: quattro croci, una alla volta** |
+| ![Tensione bassa](docs/img/tensione-bassa.png) | ![Calibrazione del touch](docs/img/calibrazione.png) |
+| **Spegnimento** | |
+| ![Spegnimento](docs/img/spegnimento.png) | |
 
 Immagini a 480×320, risoluzione nativa dello schermo, generate dal codice con dati dimostrativi.
 
