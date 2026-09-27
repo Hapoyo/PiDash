@@ -13,6 +13,15 @@ computer di bordo.
 
 ![Accensione, cambio pagina e numeri che si decodificano](docs/img/animazione.gif)
 
+> **In English** — PiDash is a desk dashboard for a Raspberry Pi 3 with a 3.5" SPI touch display
+> (480×320, ILI9486). It shows the time, weather with wind in knots, a regatta start timer,
+> alarms and system stats, laid out as a filing cabinet of tabs. It draws straight to the
+> framebuffer, so no desktop is needed, and Pillow is its only dependency. A Settings tab adds
+> or removes tabs, sets the brightness, calibrates the touch screen, shuts the Pi down and warns
+> when the supply voltage drops below 4.63 V. Location comes from GPS, nearby Wi-Fi networks or
+> the IP address. The on-screen text and the documentation below are in Italian; installation
+> is covered in [section 4](#4-installazione).
+
 ## 1. Caratteristiche
 
 - **Schedario componibile**: ogni funzione è una cartella con la sua linguetta; timer e sveglia si
