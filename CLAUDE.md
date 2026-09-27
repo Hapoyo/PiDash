@@ -50,7 +50,8 @@ tests/                 unittest
 - Setup sviluppo: `python3 -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt`
 - Simulatore: `python -m dash --demo --web 8080 --driver sim` → `http://localhost:8080`
 - Un fotogramma: `python -m dash --once --demo --driver sim --page 2` → `out/frame.png`
-- Anteprime README: `TZ=Europe/Rome python -m dash --screenshots docs/img` → `docs/img/NN-pagina.png`
+- Anteprime README: `TZ=Europe/Rome python -m dash --screenshots docs/img` → `docs/img/NN-pagina.png`,
+  le schermate di sistema (`avvio`, `spegni-conferma`, `calibrazione`, `spegnimento`)
   e `docs/img/animazione.gif` (dati demo, posizione fissa, istante 24/09/2026 07:42, nessuna rete).
   Rigenerarle quando cambia il disegno.
 - Animazioni: `--motion off|eventi|pieno` sovrascrive `motion.livello`.

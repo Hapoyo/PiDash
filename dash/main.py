@@ -15,7 +15,7 @@ from .app import App
 from .config import ConfigError, load_config
 from .display import make_display
 from .inputs import Event, Tap, start_gpio, start_keyboard, start_touch
-from .preview import save_animation, save_screenshots
+from .preview import save_animation, save_screenshots, save_system_screens
 from .widgets import WIDGET_NAMES
 
 log = logging.getLogger("dash")
@@ -59,6 +59,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.screenshots:
         try:
             for path in save_screenshots(copy.deepcopy(cfg), args.screenshots):
+                log.info("anteprima: %s", path)
+            for path in save_system_screens(copy.deepcopy(cfg), args.screenshots):
                 log.info("anteprima: %s", path)
             anim = save_animation(copy.deepcopy(cfg), args.screenshots / "animazione.gif")
             log.info("anteprima animata: %s (%d kB)", anim, anim.stat().st_size // 1024)

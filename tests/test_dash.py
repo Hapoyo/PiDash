@@ -1061,6 +1061,17 @@ class TestScreenshots(unittest.TestCase):
                     self.assertEqual(img.size, (480, 320))
         self.assertEqual(cfg["location"]["mode"], "fixed")  # nessuna richiesta di rete
 
+    def test_system_screens_offline(self) -> None:
+        from dash.preview import save_system_screens
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = save_system_screens(make_cfg(display={"width": "auto", "height": "auto"}),
+                                        Path(tmp))
+            self.assertEqual([p.name for p in paths], ["avvio.png", "spegni-conferma.png",
+                             "calibrazione.png", "spegnimento.png"])
+            for p in paths:
+                with Image.open(p) as img:
+                    self.assertEqual(img.size, (480, 320))
+
 
 if __name__ == "__main__":
     unittest.main()
