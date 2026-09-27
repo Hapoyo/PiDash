@@ -56,19 +56,31 @@ def _folder(cv: Canvas, box: Box, fill: str, outline: str) -> None:
                            width=cv.line, corners=(True, True, False, False))
 
 
-def draw_tabs(cv: Canvas, lay: Layout, names: list[str], current: int) -> None:
+SETTINGS = "impostazioni"  # testo della linguetta della scheda "new", accanto all'ingranaggio
+
+
+def draw_tabs(cv: Canvas, lay: Layout, names: list[str], current: int,
+              kinds: list[str] | None = None) -> None:
     """Cartelle sovrapposte: le linguette sotto passano davanti al collo di quella aperta."""
     lw = cv.line
     body = lay.content
     neck = lay.tabs[current]
     side = cv.px(10)  # margine orizzontale del testo nella linguetta
+    kinds = kinds or [""] * len(names)
 
     def label(i: int, active: bool) -> None:
         b = lay.tabs[i]
         col = "cream" if active else "ink"
         cy = b.y + b.h / 2
         cv.label((b.x + side, cy), f"{i + 1:03d}", col, "lm")
-        cv.label((b.right - side, cy), names[i], col, "rm", bold=active)
+        if kinds[i] != "new":
+            cv.label((b.right - side, cy), names[i], col, "rm", bold=active)
+            return
+        # Impostazioni: ingranaggio a destra, la parola accanto
+        r = b.h * 0.34
+        gx = b.right - side - r
+        cv.gear((gx, cy), r, col, "panel" if active else "cream")
+        cv.label((gx - r - cv.px(6), cy), SETTINGS, col, "rm", bold=active)
 
     for i in range(current):  # pila sopra: ogni linguetta copre il fondo della precedente
         b = lay.tabs[i]

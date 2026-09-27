@@ -446,8 +446,8 @@ class TestFramebufferAndTouch(unittest.TestCase):
                   MemDisplay(480, 320), queue.Queue())
         app.page_idx = 1
         b, hit = app.renderer.hit_boxes(app)[0]
-        self.assertEqual(app.hit_at(b.x + 3, b.bottom + 6), hit)
-        self.assertIsNone(app.hit_at(b.x + 3, b.bottom + 40))
+        self.assertEqual(app.hit_at(b.x + 3, b.y - 5), hit)       # sopra la prima riga
+        self.assertIsNone(app.hit_at(b.x + 3, b.y - 40))
         app.close()
 
     def _app(self, rotate: int = 0) -> App:
@@ -636,6 +636,143 @@ class TestPageEditing(unittest.TestCase):
                        datetime(2026, 9, 24, 7, 42))
         self.assertEqual([p.widget.name for p in app.pages], ["clock", "alarm", "new"])
         app.close()
+
+
+class TestSettings(unittest.TestCase):
+    """Impostazioni: luminosità, calibrazione del touch, spegnimento con conferma."""
+
+    def _app(self, tmp: str) -> App:
+        main = Path(tmp) / "config.json"
+        main.write_text("{}", encoding="utf-8")
+        cfg = make_cfg(pages=[{"name": "Home", "widget": "clock"}, {"name": "+", "widget": "new"}])
+        app = App(cfg, MemDisplay(480, 320), queue.Queue(), config_path=main)
+        app.page_idx = 1
+        return app
+
+    def _tap(self, app: App, hit: str) -> None:
+        b = next(bx for bx, h in app.renderer.hit_boxes(app) if h == hit)
+        app.handle_tap(Tap((b.x + b.w / 2) / 480, (b.y + b.h / 2) / 320),
+                       datetime(2026, 9, 24, 7, 42))
+
+    def test_brightness_is_clamped_saved_and_dims_the_frame(self) -> None:
+        now = datetime(2026, 9, 24, 7, 42)
+        with tempfile.TemporaryDirectory() as tmp:
+            app = self._app(tmp)
+            self.assertTrue(app.backlight.software)             # nel simulatore mai il LED vero
+            bright = app.step(now, 0.0, animate=False)
+            for _ in range(12):
+                self._tap(app, "luce:-10")
+            self.assertEqual(app.backlight.level, 10)           # mai sotto il 10 %
+            dim = app.step(now, 0.1, animate=False)
+            self.assertIsNotNone(dim)
+            self.assertLess(sum(dim.convert("L").getdata()), sum(bright.convert("L").getdata()) / 5)
+            saved = json.loads((Path(tmp) / "config.local.json").read_text(encoding="utf-8"))
+            self.assertEqual(saved["backlight"], {"level": 10})
+            app.close()
+
+    def test_hardware_backlight_from_sysfs(self) -> None:
+        from dash.backlight import Backlight
+        with tempfile.TemporaryDirectory() as tmp:
+            dev = Path(tmp) / "backlight0"
+            dev.mkdir()
+            (dev / "max_brightness").write_text("255\n")
+            (dev / "brightness").write_text("255\n")
+            bl = Backlight(50, "auto", Path(tmp))
+            self.assertTrue(bl.hardware)
+            self.assertEqual((dev / "brightness").read_text().strip(), "128")
+            img = Image.new("RGB", (2, 2), (200, 200, 200))
+            self.assertIs(bl.apply(img), img)                   # col LED vero niente ritocchi
+            (dev / "max_brightness").write_text("1\n")         # solo acceso/spento
+            bl = Backlight(50, "auto", Path(tmp))
+            self.assertTrue(bl.software)
+            self.assertEqual(bl.apply(img).getpixel((0, 0)), (100, 100, 100))
+
+    def test_calibration_from_four_taps(self) -> None:
+        """Pannello con x invertito e assi scambiati: la calibrazione li riconosce e li salva."""
+        from dash.inputs import ABS_X, ABS_Y, TouchCalibration
+        from dash.widgets.calibrate import TARGETS
+        with tempfile.TemporaryDirectory() as tmp:
+            app = self._app(tmp)
+            app.touch_cal = TouchCalibration({}, {ABS_X: (0, 4095), ABS_Y: (0, 4095)})
+            self._tap(app, "calibra")
+            self.assertIsNotNone(app.calib)
+            for fx, fy in TARGETS:   # controller: raw x segue y dello schermo, raw y segue x al contrario
+                raw = (round(250 + fy * 3600), round(3850 - fx * 3500))
+                app.handle_tap(Tap(0.5, 0.5, raw), datetime(2026, 9, 24, 7, 42))
+            self.assertIsNone(app.calib)
+            self.assertEqual(app.notice(), "touch calibrato")
+            t = app.touch_cal.map(round(250 + 0.3 * 3600), round(3850 - 0.7 * 3500))
+            self.assertAlmostEqual(t.x, 0.7, delta=0.01)
+            self.assertAlmostEqual(t.y, 0.3, delta=0.01)
+            saved = json.loads((Path(tmp) / "config.local.json").read_text(encoding="utf-8"))
+            self.assertTrue(saved["input"]["touch"]["swap_xy"])
+            self.assertTrue(saved["input"]["touch"]["invert_x"])
+            app.close()
+
+    def test_calibration_rejects_random_taps(self) -> None:
+        from dash.widgets.calibrate import solve
+        self.assertIsNone(solve([(0.1, 0.1), (0.9, 0.1), (0.9, 0.9), (0.1, 0.9)],
+                                [(2000, 2000)] * 4))
+
+    def test_power_off_needs_a_second_tap_and_runs_the_command(self) -> None:
+        now = datetime(2026, 9, 24, 7, 42)
+        calls: list[list[str]] = []
+
+        class Done:
+            returncode, stderr = 0, ""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            app = self._app(tmp)
+            app.cfg["display"]["driver"] = "fb"
+            app.run_cmd = lambda cmd, **kw: calls.append(cmd) or Done()
+            self._tap(app, "spegni")
+            self.assertTrue(app.page.widget.armato())
+            self.assertFalse(app.shutting_down)                 # il primo tocco chiede conferma
+            self._tap(app, "spegni")
+            self.assertTrue(app.shutting_down)
+            app.step(now, 0.0, animate=False)                   # prima la schermata, poi il comando
+            assert app._power_thread is not None
+            app._power_thread.join(5)
+            self.assertEqual(calls, [["sudo", "-n", "/usr/bin/systemctl", "poweroff"]])
+            app.close()
+
+    def test_power_off_failure_is_shown(self) -> None:
+        now = datetime(2026, 9, 24, 7, 42)
+
+        class Denied:
+            returncode, stderr = 1, "sudo: a password is required"
+
+        with tempfile.TemporaryDirectory() as tmp:
+            app = self._app(tmp)
+            app.cfg["display"]["driver"] = "fb"
+            app.run_cmd = lambda cmd, **kw: Denied()
+            app.power_off()
+            app.step(now, 0.0, animate=False)
+            thread = app._power_thread
+            assert thread is not None
+            thread.join(5)
+            self.assertFalse(app.shutting_down)
+            self.assertIn("non consentito", app.notice())
+            app.close()
+
+    def test_power_off_is_simulated_off_the_pi(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            app = self._app(tmp)
+            app.run_cmd = lambda *a, **kw: self.fail("nessun comando nel simulatore")
+            app.power_off()
+            self.assertFalse(app.shutting_down)
+            self.assertIn("simulato", app.notice())
+            app.close()
+
+    def test_settings_tab_draws_a_gear(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            app = self._app(tmp)
+            img = app.render(datetime(2026, 9, 24, 7, 42))
+            tab = app.renderer.nav_rows(app)[1]
+            strip = img.crop((tab.right - 30, tab.y, tab.right - 6, tab.bottom))
+            cream = app.renderer.c["cream"]
+            self.assertGreater(sum(1 for px in strip.getdata() if px == cream), 30)
+            app.close()
 
 
 class TestCli(unittest.TestCase):

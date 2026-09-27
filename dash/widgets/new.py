@@ -1,10 +1,12 @@
-"""Scheda "+": elenco delle schede che si possono aggiungere (timer, sveglia).
+"""Scheda Impostazioni (linguetta con l'ingranaggio): schede, luminosità, touch, spegnimento.
 
-Ogni voce fa da interruttore: se la scheda non c'è la aggiunge, se c'è la toglie — quindi una
-sola scheda per tipo. A esegue la voce scelta, B passa alla seguente.
+Ogni voce delle schede fa da interruttore: se la scheda non c'è la aggiunge, se c'è la toglie,
+quindi una sola scheda per tipo. Col tocco ogni bottone agisce subito; coi tasti A esegue la
+voce scelta e B passa alla seguente. Lo spegnimento chiede un secondo tocco di conferma.
 """
 from __future__ import annotations
 
+import time
 from collections.abc import Hashable
 from dataclasses import dataclass
 from datetime import datetime
@@ -21,6 +23,7 @@ ETICHETTE: dict[str, str] = {
     "system": "Sistema",
 }
 ORDINE = ("timer", "alarm")  # schede opzionali: le altre pagine stanno in config.json
+CONFERMA_S = 4.0             # tempo per il secondo tocco su "spegni"
 
 
 @dataclass(frozen=True)
@@ -36,15 +39,23 @@ class NewWidget(Widget):
     has_action = True
     tap_action = False  # fuori dai bottoni il tocco non fa nulla: A esegue la voce scelta
 
-    def __init__(self, cfg: dict[str, Any]) -> None:
+    def __init__(self, cfg: dict[str, Any], clock: Callable[[], float] = time.monotonic) -> None:
         super().__init__(cfg)
         tipi = [t for t in cfg.get("tipi") or ORDINE if t in ETICHETTE]
         self.tipi: list[str] = tipi or list(ORDINE)
         self.idx = 0
-        # Impostati da App: pagine presenti ({tipo: chiave}) e azioni sullo schedario.
+        self._clock = clock
+        self._armato = -CONFERMA_S * 2
+        # Impostati da App: pagine presenti ({tipo: chiave}) e azioni sul dashboard.
         self.pagine: Callable[[], dict[str, str]] = dict
         self.aggiungi: Callable[[str], None] = lambda tipo: None
         self.togli: Callable[[str], None] = lambda chiave: None
+        self.luce: Callable[[], int] = lambda: 100
+        self.regola_luce: Callable[[int], None] = lambda delta: None
+        self.calibra: Callable[[], None] = lambda: None
+        self.spegni: Callable[[], None] = lambda: None
+        self.avviso: Callable[[], str] = lambda: ""   # messaggio breve (es. "touch calibrato")
+        self.info: Callable[[], str] = lambda: ""     # riga in fondo (versione, tipo di luce)
 
     def voci(self) -> list[Voce]:
         """Una voce per tipo: "aggiungi" se manca, "togli" se la scheda è già nello schedario."""
@@ -56,17 +67,32 @@ class NewWidget(Widget):
         voci = self.voci()
         return voci[self.idx % len(voci)] if voci else None
 
+    def armato(self) -> bool:
+        """True nei secondi in cui un altro tocco su "spegni" spegne davvero."""
+        return self._clock() - self._armato < CONFERMA_S
+
     def on_back(self, now: datetime) -> None:
         voci = self.voci()
         self.idx = (self.idx + 1) % len(voci) if voci else 0
 
     def on_hit(self, hit: str, now: datetime) -> None:
-        """Tocco su una voce: la esegue subito (niente "seleziona, poi conferma")."""
+        """Tocco su un bottone: voce delle schede, luce ±, calibrazione, spegnimento."""
         kind, _, arg = hit.partition(":")
-        voci = self.voci()
-        if kind == "voce" and voci:
-            self.idx = int(arg) % len(voci)
-            self.on_action(now)
+        if kind == "voce":
+            voci = self.voci()
+            if voci:
+                self.idx = int(arg) % len(voci)
+                self.on_action(now)
+        elif kind == "luce":
+            self.regola_luce(int(arg))
+        elif kind == "calibra":
+            self.calibra()
+        elif kind == "spegni":
+            if self.armato():
+                self._armato = -CONFERMA_S * 2
+                self.spegni()
+            else:
+                self._armato = self._clock()
 
     def on_action(self, now: datetime) -> None:
         voce = self.scelta()
@@ -79,4 +105,5 @@ class NewWidget(Widget):
         self.idx = 0
 
     def state_key(self, now: datetime) -> Hashable:
-        return (self.idx, tuple(sorted(self.pagine())))
+        return (self.idx, tuple(sorted(self.pagine())), self.luce(), self.armato(), self.avviso(),
+                self.info())

@@ -116,10 +116,14 @@ def boot(w: int, h: int, u: float, colors: dict[str, tuple[int, int, int]], app:
 
 def alert(cv: Canvas, w: int, h: int, msg: str, touch: bool) -> None:
     """Riquadro rosa di sveglia o timer scaduto, sopra qualsiasi pagina."""
+    notice(cv, w, h, msg, "tocca lo schermo" if touch else "premi a")
+
+
+def notice(cv: Canvas, w: int, h: int, msg: str, hint: str) -> None:
+    """Riquadro rosa al centro dello schermo: allarmi e spegnimento."""
     b = Box(round(w * 0.15), round(h * 0.32), round(w * 0.7), round(h * 0.36))
     cv.rect(b, "pink", "cream", cv.px(3), r=cv.px(14))
-    hint = cv.height(cv.f_label) + 2 * cv.gap
-    num = Box(b.x + 2 * cv.pad, b.y + 2 * cv.pad, b.w - 4 * cv.pad, b.h - 3 * cv.pad - hint)
+    hint_h = cv.height(cv.f_label) + 2 * cv.gap
+    num = Box(b.x + 2 * cv.pad, b.y + 2 * cv.pad, b.w - 4 * cv.pad, b.h - 3 * cv.pad - hint_h)
     cv.big(num, msg.lower(), "paper", 600, pos=(b.x + b.w / 2, num.bottom), anchor="ms")
-    cv.label((b.x + b.w / 2, b.bottom - cv.pad), "tocca lo schermo" if touch else "premi a",
-             "paper", "md")
+    cv.label((b.x + b.w / 2, b.bottom - cv.pad), hint, "paper", "md")

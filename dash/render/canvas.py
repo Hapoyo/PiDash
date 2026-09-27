@@ -86,6 +86,26 @@ class Canvas:
         self.d.ellipse((px - dot, py - dot, px + dot, py + dot), fill=self.c[color])
         self.add_fx("pulse", (px - dot, py - dot, px + dot, py + dot), color, bg, phase=frac)
 
+    def gear(self, center: tuple[float, float], r: float, color: Color, bg: Color,
+             teeth: int = 8) -> None:
+        """Ingranaggio (linguetta delle Impostazioni): corona dentata con il foro al centro."""
+        cx, cy = center
+        inner, step = r * 0.74, 2 * math.pi / teeth
+        pts: list[tuple[float, float]] = []
+        for i in range(teeth):  # dente da -0,2 a +0,2 del passo, gola da 0,3 a 0,7
+            for da, rr in ((-0.2, r), (0.2, r), (0.3, inner), (0.7, inner)):
+                a = (i + da) * step - math.pi / 2
+                pts.append((cx + rr * math.cos(a), cy + rr * math.sin(a)))
+        self.d.polygon(pts, fill=self.rgb(color))
+        hole = r * 0.34
+        self.d.ellipse((cx - hole, cy - hole, cx + hole, cy + hole), fill=self.rgb(bg))
+
+    def power(self, center: tuple[float, float], r: float, color: Color, width: int) -> None:
+        """Simbolo di accensione: cerchio aperto in alto con la barra verticale."""
+        cx, cy = center
+        self.d.arc((cx - r, cy - r, cx + r, cy + r), -60, 240, fill=self.rgb(color), width=width)
+        self.d.line((cx, cy - r - width / 2, cx, cy), fill=self.rgb(color), width=width)
+
     # --- testo -------------------------------------------------------------
     def text(self, xy: tuple[float, float], s: str, f: Any, fill: Color, anchor: str = "la") -> None:
         mask, dx, dy = text_mask(s, f, anchor)
