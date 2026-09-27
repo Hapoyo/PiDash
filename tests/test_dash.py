@@ -841,6 +841,7 @@ class TestMotion(unittest.TestCase):
         from dash.motion import BOOT_S, Motion, ease_in_out, ease_out, wave
         self.assertEqual((ease_out(0), ease_out(1), ease_in_out(0), ease_in_out(1)), (0, 1, 0, 1))
         self.assertEqual((wave(0, 2), wave(1, 2)), (0.0, 1.0))
+        self.assertGreaterEqual(BOOT_S, 5.0)                # avvio lento, la sigla si legge
         m = Motion()
         m.start(10.0)
         self.assertAlmostEqual(m.boot_progress(10.0 + BOOT_S / 2), 0.5)

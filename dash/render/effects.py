@@ -17,6 +17,8 @@ from .theme import fit
 if TYPE_CHECKING:
     from ..app import App
 
+SIGLA = "Pi-Dash"  # nome scritto dalla sequenza di avvio
+
 
 def draw_fx(cv: Canvas, e: Fx, t: float) -> None:
     """Effetto continuo registrato durante il disegno della pagina."""
@@ -80,10 +82,10 @@ def boot(w: int, h: int, u: float, colors: dict[str, tuple[int, int, int]], app:
     loc = getattr(getattr(app.pages[0].widget, "location", None), "name", "") or "--"
     righe = [f"schermo {w}×{h}", f"schede {len(app.pages)}", f"posizione {loc.lower()}",
              "meteo open-meteo", "sistema pronto"]
-    cv.label((m, m), f"pi-dash // v{__version__}", "tan", small=True)
+    cv.label((m, m), f"{SIGLA} // v{__version__}", "tan", small=True, lower=False)
     cv.label((w - m, m), "avvio", "tan", "ra", small=True)
     # sigla: si scrive una lettera alla volta, con il cursore a blocco
-    sigla = "pi-dash"
+    sigla = SIGLA
     n = min(len(sigla), int(len(sigla) * min(1.0, p / 0.35)) + 1)
     f = fit(sigla, "grotesk", 600, w - 2 * m, h * 0.24)
     base_y = round(h * 0.36)

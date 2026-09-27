@@ -18,7 +18,7 @@ from typing import Any
 from PIL import Image
 
 LIVELLI = ("off", "eventi", "pieno")
-BOOT_S = 2.4        # sequenza di avvio
+BOOT_S = 5.0        # sequenza di avvio (lenta: la sigla si scrive con calma)
 WIPE_S = 0.45       # scansione al cambio pagina
 DECODE_S = 0.55     # cifre che "si decodificano" prima di fermarsi
 GLIFI = "0123456789"
