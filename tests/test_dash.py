@@ -125,10 +125,49 @@ class TestTimer(unittest.TestCase):
         t.on_action(now)
         self.assertIs(t.state, TimerState.IDLE)
 
-    def test_back_cycles_preset(self) -> None:
-        t = TimerWidget({"presets_s": [60, 300]})
+    def test_back_adds_the_first_preset(self) -> None:
+        t = TimerWidget({"presets_s": [300, 60]})
+        self.assertEqual(t.duration, 300)          # all'accensione il primo della lista
         t.on_back(datetime.now())
-        self.assertEqual(t.duration, 300)
+        self.assertEqual(t.duration, 360)          # B somma il preset più corto
+
+    def test_buttons_add_subtract_and_clear(self) -> None:
+        clk = FakeClock()
+        now = datetime(2026, 9, 24, 7, 42)
+        t = TimerWidget({"presets_s": [900, 60, 300, 600], "labels": {"300": "partenza"}},
+                        clock=clk)
+        self.assertEqual([h for h, _ in t.buttons()],
+                         ["sub", "add:60", "add:300", "add:600", "add:900", "clear"])
+        self.assertEqual(dict(t.buttons())["sub"], "−1'")
+        self.assertEqual((t.duration, t.label()), (300, "PARTENZA"))  # parte dalla partenza
+        t.on_hit("add:300", now)
+        t.on_hit("add:300", now)
+        self.assertEqual(t.shown_remaining(), 900)                     # si sommano
+        self.assertEqual(t.flashing(), "add:300")
+        clk.t += 1
+        self.assertEqual(t.flashing(), "")
+        t.on_hit("sub", now)
+        self.assertEqual(t.shown_remaining(), 840)
+        t.on_hit("clear", now)
+        t.on_hit("sub", now)
+        self.assertEqual((t.shown_remaining(), t.duration), (0, 0))    # mai sotto zero
+        t.on_action(now)
+        self.assertIs(t.state, TimerState.IDLE)                        # a zero non parte
+
+    def test_adding_while_running_moves_the_deadline(self) -> None:
+        clk = FakeClock()
+        now = datetime(2026, 9, 24, 7, 42)
+        t = TimerWidget({"presets_s": [60], "step_s": 1}, clock=clk)
+        t.on_action(now)
+        clk.t += 50
+        t.on_hit("add:60", now)
+        self.assertEqual(t.shown_remaining(), 70)
+        self.assertIs(t.state, TimerState.RUNNING)
+        clk.t += 71
+        t.update(now)
+        self.assertIs(t.state, TimerState.DONE)
+        t.on_action(now)                                               # conferma
+        self.assertEqual((t.state, t.shown_remaining()), (TimerState.IDLE, 120))
 
 
 class TestAlarm(unittest.TestCase):
@@ -425,6 +464,13 @@ class TestFramebufferAndTouch(unittest.TestCase):
         content = app.renderer.content_inner(app)
         app.handle_tap(Tap((content.x + content.w / 2) / 480, (content.y + content.h / 2) / 320), now)
         self.assertIs(app.widgets["timer"].state, TimerState.RUNNING)
+        app.handle_tap(Tap((content.x + content.w / 2) / 480, (content.y + content.h / 2) / 320), now)
+        self.assertIs(app.widgets["timer"].state, TimerState.PAUSED)
+        before = app.widgets["timer"].remaining()
+        b, hit = next(bh for bh in app.renderer.hit_boxes(app) if bh[1] == "add:300")
+        app.handle_tap(Tap((b.x + b.w / 2) / 480, (b.y + b.h / 2) / 320), now)
+        self.assertAlmostEqual(app.widgets["timer"].remaining(), before + 300)
+        self.assertIs(app.widgets["timer"].state, TimerState.PAUSED)  # il bottone non avvia
         tab = app.renderer.nav_rows(app)[1]
         app.handle_tap(Tap((tab.x + tab.w / 2) / 480, (tab.y + tab.h / 2) / 320), now)
         self.assertEqual(app.page.name, "Meteo")

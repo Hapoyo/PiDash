@@ -31,6 +31,7 @@ PAGES: dict[str, PageDraw] = {
 
 HITS: dict[str, PageHits] = {
     "new": new.hits,
+    "timer": timer.hits,
 }
 
 __all__ = ["HITS", "PAGES", "new"]
