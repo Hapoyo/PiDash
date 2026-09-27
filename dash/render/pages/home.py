@@ -34,7 +34,10 @@ def draw(cv: Canvas, b: Box, app: App, now: datetime) -> None:
     # in mezzo: ora a sinistra, anelli a destra (alti quanto ora + data)
     band = Box(b.x, b.y + lab_h + gap, b.w, date_top - gap - (b.y + lab_h + gap))
     side = min(band.h + gap + date_h, round(b.w * 0.30))
-    clock_box = Box(band.x, band.y, band.w - side - 2 * gap, band.h)
+    # Mezzo passo di griglia in meno sotto l'ora: le cifre tonde scendono un filo sotto la linea
+    # di base e la data (ancora "ld") sale un filo sopra la sua riga, e con il riquadro pieno
+    # l'ora toccava il giorno (3 px d'aria a 480×320 invece del passo `gap`).
+    clock_box = Box(band.x, band.y, band.w - side - 2 * gap, band.h - gap // 2)
     ora = now.strftime("%H:%M")
     pos = (clock_box.x, clock_box.bottom)
     f = cv.big(clock_box, ora, "cream", pos=pos, anchor="ls", slot="clock.ora", ref="00:00")

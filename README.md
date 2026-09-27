@@ -1,6 +1,6 @@
 # pi-dash
 
-Versione 0.5.0 · 2026-09-27
+Versione 0.5.1 · 2026-09-27
 
 Dashboard da tavolo per Raspberry Pi 3 Model B con schermo SPI 3,5" touch: orologio, meteo e vento
 in nodi, timer di partenza regata, sveglia e statistiche del sistema.

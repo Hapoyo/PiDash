@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.1 — 2026-09-27
+- Home: l'ora sale di mezzo passo di griglia e non tocca più la data. A 480×320 fra le cifre
+  e il giorno restavano 3 px (le cifre tonde scendono sotto la linea di base, la data sale
+  sopra la sua riga); ora sono 6, il passo `gap`. Cifre 3 px più basse, resto invariato.
+- CLAUDE.md: lo sviluppo passa solo da Claude Code e GitHub, con unione sempre in `main`.
+
 ## 0.5.0 — 2026-09-27
 - Codice riorganizzato, a parità di immagine (95 impronte identiche: pagine a quattro
   risoluzioni, compresa quella ruotata, e ogni fotogramma della GIF):

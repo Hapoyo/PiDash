@@ -1,6 +1,6 @@
 # pi-dash — CLAUDE.md
 
-Versione 0.5.0 · 2026-09-27
+Versione 0.5.1 · 2026-09-27
 
 ## 1. Scopo
 Dashboard da tavolo per Raspberry Pi 3 Model B con schermo SPI 3,5" 480×320 (ILI9486 + touch
@@ -85,6 +85,9 @@ tests/                 unittest
 - Testo sempre con `cv.text` (cache delle maschere): mai `ImageDraw.text` diretto nelle pagine.
 - Refactor del disegno: le immagini devono restare identiche. Confrontare le impronte SHA-1 delle
   pagine (più risoluzioni) e dei fotogrammi della GIF prima e dopo.
+- Sviluppo solo tramite Claude Code e GitHub, nessun file locale: lavorare su un ramo, aprire
+  una PR verso `main` e unirla in `main` appena i controlli sono verdi. Mai lasciare lavoro
+  fuori da `main`: il Pi si aggiorna solo da lì.
 - Commit: uno per intervento, messaggi in italiano all'imperativo.
 - Il Pi si aggiorna da `main`: ciò che arriva su `main` deve passare `python -m unittest`
   (altrimenti `aggiorna.sh` rifiuta l'aggiornamento e torna indietro).
