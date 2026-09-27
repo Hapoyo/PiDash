@@ -11,7 +11,7 @@ from ..layout import Box
 from ..motion import Fx, Motion, Slot
 from . import effects, folders
 from .canvas import Canvas
-from .pages import PAGES, new
+from .pages import HITS, PAGES
 from .theme import PALETTE, unit
 
 if TYPE_CHECKING:
@@ -42,13 +42,13 @@ class CyberRenderer:
         w, h = app.frame_size()
         return folders.layout(w, h, len(app.pages), app.page_idx).tabs
 
-    def select_boxes(self, app: App) -> list[Box]:
-        """Riquadri selezionabili col tocco nella pagina aperta (solo la scheda "+")."""
+    def hit_boxes(self, app: App) -> list[tuple[Box, str]]:
+        """Bottoni della pagina aperta (rettangolo, id): stessa geometria del disegno."""
         widget: Any = app.page.widget
-        if widget.name != "new":
+        hits = HITS.get(widget.name)
+        if hits is None:
             return []
-        u = unit(*app.frame_size())
-        return new.chips(new.grid(self.content_inner(app), u), len(widget.voci()), u)
+        return hits(self.content_inner(app), widget, unit(*app.frame_size()))
 
     # --- pagina base -----------------------------------------------------------
     def render(self, app: App, now: datetime) -> Image.Image:

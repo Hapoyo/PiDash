@@ -34,6 +34,7 @@ class Voce:
 class NewWidget(Widget):
     name = "new"
     has_action = True
+    tap_action = False  # fuori dai bottoni il tocco non fa nulla: A esegue la voce scelta
 
     def __init__(self, cfg: dict[str, Any]) -> None:
         super().__init__(cfg)
@@ -59,10 +60,13 @@ class NewWidget(Widget):
         voci = self.voci()
         self.idx = (self.idx + 1) % len(voci) if voci else 0
 
-    def on_select(self, i: int) -> None:
+    def on_hit(self, hit: str, now: datetime) -> None:
+        """Tocco su una voce: la esegue subito (niente "seleziona, poi conferma")."""
+        kind, _, arg = hit.partition(":")
         voci = self.voci()
-        if voci:
-            self.idx = i % len(voci)
+        if kind == "voce" and voci:
+            self.idx = int(arg) % len(voci)
+            self.on_action(now)
 
     def on_action(self, now: datetime) -> None:
         voce = self.scelta()

@@ -103,7 +103,7 @@
       "x_max": null,
       "y_min": null,
       "y_max": null,
-      "debounce_s": 0.3,
+      "debounce_s": 0.15,
       "debug": false
     }
   },

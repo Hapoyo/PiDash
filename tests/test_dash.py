@@ -378,6 +378,39 @@ class TestFramebufferAndTouch(unittest.TestCase):
         t = cal.map(200, 0)
         self.assertEqual((t.x, t.y), (0.0, 1.0))
 
+    def test_tap_from_samples_ignores_touchdown_and_lift_off(self) -> None:
+        from dash.inputs import tap_from_samples
+        samples = [(3900, 100), (2000, 1500), (2010, 1490), (1990, 1510), (2005, 1500),
+                   (400, 3800), (4000, 0)]     # appoggio e distacco sballati, un salto nel mezzo
+        self.assertEqual(tap_from_samples(samples), (2005, 1500))
+        self.assertEqual(tap_from_samples([(10, 20)]), (10, 20))
+        self.assertIsNone(tap_from_samples([]))
+
+    def test_calibration_can_change_while_running(self) -> None:
+        from dash.inputs import ABS_X, ABS_Y, TouchCalibration
+        cal = TouchCalibration({}, {ABS_X: (0, 4095), ABS_Y: (0, 4095)})
+        cal.apply({"x_min": 300, "x_max": 3800, "y_min": 200, "y_max": 3900, "swap_xy": True})
+        t = cal.map(300, 3900)
+        self.assertEqual((t.x, t.y, t.raw), (1.0, 0.0, (300, 3900)))
+
+    def test_frame_and_panel_are_inverse(self) -> None:
+        from dash.inputs import frame_to_panel, panel_to_frame
+        for rot in (0, 90, 180, 270):
+            fx, fy = panel_to_frame(*frame_to_panel(0.2, 0.7, rot), rot)
+            self.assertAlmostEqual(fx, 0.2)
+            self.assertAlmostEqual(fy, 0.7)
+
+    def test_tap_just_outside_a_button_counts(self) -> None:
+        """Un tocco a pochi pixel da un bottone vale per quello; lontano da tutti, per nessuno."""
+        app = App(make_cfg(pages=[{"name": "Home", "widget": "clock"},
+                                  {"name": "+", "widget": "new"}]),
+                  MemDisplay(480, 320), queue.Queue())
+        app.page_idx = 1
+        b, hit = app.renderer.hit_boxes(app)[0]
+        self.assertEqual(app.hit_at(b.x + 3, b.bottom + 6), hit)
+        self.assertIsNone(app.hit_at(b.x + 3, b.bottom + 40))
+        app.close()
+
     def _app(self, rotate: int = 0) -> App:
         cfg = make_cfg(display={"width": 480, "height": 320, "rotate": rotate})
         return App(cfg, MemDisplay(480, 320), queue.Queue())
@@ -544,18 +577,18 @@ class TestPageEditing(unittest.TestCase):
             self.assertEqual([p.name for p in app.pages], ["Home", "+"])
             app.close()
 
-    def test_tap_on_a_chip_selects_it(self) -> None:
+    def test_tap_on_a_chip_runs_it_at_once(self) -> None:
+        """Un solo tocco sulla voce: la scheda si aggiunge subito, senza "seleziona e conferma"."""
         app = App(make_cfg(pages=[{"name": "Home", "widget": "clock"},
                                   {"name": "+", "widget": "new"}]),
                   MemDisplay(480, 320), queue.Queue())
         app.page_idx = 1
-        boxes = app.renderer.select_boxes(app)
+        boxes = [b for b, hit in app.renderer.hit_boxes(app) if hit.startswith("voce:")]
         self.assertEqual(len(boxes), len(app.pages[-1].widget.voci()))
         b = boxes[1]
         app.handle_tap(Tap((b.x + b.w / 2) / 480, (b.y + b.h / 2) / 320),
                        datetime(2026, 9, 24, 7, 42))
-        self.assertEqual(app.pages[-1].widget.idx, 1)
-        self.assertEqual(len(app.pages), 2)  # il tocco su una voce non crea nulla
+        self.assertEqual([p.widget.name for p in app.pages], ["clock", "alarm", "new"])
         app.close()
 
 

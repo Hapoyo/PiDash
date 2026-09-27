@@ -14,7 +14,7 @@ from . import __version__
 from .app import App
 from .config import ConfigError, load_config
 from .display import make_display
-from .inputs import Event, start_gpio, start_keyboard, start_touch
+from .inputs import Event, Tap, start_gpio, start_keyboard, start_touch
 from .preview import save_animation, save_screenshots
 from .widgets import WIDGET_NAMES
 
@@ -86,7 +86,8 @@ def main(argv: list[str] | None = None) -> int:
 
     events: queue.Queue[Any] = queue.Queue()
     try:
-        display = make_display(cfg, on_key=lambda k: events.put(Event(k)))
+        display = make_display(cfg, on_key=lambda k: events.put(Event(k)),
+                               on_tap=lambda x, y: events.put(Tap(x, y)))
     except (RuntimeError, ValueError, OSError) as exc:
         log.error("display: %s", exc)
         return 3
@@ -98,7 +99,8 @@ def main(argv: list[str] | None = None) -> int:
             start_keyboard(events)
         touch_cfg = cfg["input"].get("touch") or {}
         if touch_cfg.get("enabled"):
-            app.touch = start_touch(events, touch_cfg)
+            app.touch_cal = start_touch(events, touch_cfg)
+            app.touch = app.touch_cal is not None
         gpio = cfg["input"].get("gpio")
         if gpio and cfg["display"]["driver"] == "fb":
             app.buttons = start_gpio(events, gpio)

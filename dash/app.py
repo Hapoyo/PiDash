@@ -14,12 +14,14 @@ from PIL import Image
 
 from .config import save_local
 from .display import Display
-from .inputs import Buzzer, Event, Tap
+from .inputs import Buzzer, Event, Tap, panel_to_frame
 from .motion import Motion
 from .widgets import ETICHETTE, WIDGET_NAMES, Widget, WidgetFactory
 from .widgets.new import NewWidget
 
 log = logging.getLogger("dash")
+
+TAP_TOLERANCE = 12  # pixel a 480×320: un tocco appena fuori da un bottone vale per il più vicino
 
 
 @dataclass
@@ -51,6 +53,7 @@ class App:
         self.buttons: list[Any] = []  # riferimenti ai pulsanti GPIO (evita il GC)
         self._last_key: Any = None
         self.touch = False  # True se il touchscreen è attivo (cambia il testo dell'allarme)
+        self.touch_cal: Any = None  # TouchCalibration in uso, per la calibrazione a schermo
         self._renderer: Any = None
         self.motion = Motion.from_cfg(cfg.get("motion") or {})
         self._base: Image.Image | None = None    # pagina ferma, ridisegnata solo se cambiano i dati
@@ -159,13 +162,11 @@ class App:
         self.page_idx = idx % len(self.pages)
 
     def handle_tap(self, tap: Tap, now: datetime) -> None:
-        """Linguetta → apre quella cartella; contenuto → azione del widget (timer, sveglia)."""
+        """Linguetta → apre quella cartella; bottone → la sua azione; resto → azione del widget."""
         if self.motion.boot_start is not None:
             self.motion.skip_boot()
             return
-        rot = self.cfg["display"]["rotate"]
-        u, v = tap.x, tap.y  # coordinate del pannello → coordinate del fotogramma
-        fx, fy = {0: (u, v), 90: (v, 1 - u), 180: (1 - u, 1 - v), 270: (1 - v, u)}[rot]
+        fx, fy = panel_to_frame(tap.x, tap.y, self.cfg["display"]["rotate"])
         w, h = self.frame_size()
         px, py = fx * w, fy * h
         alert = self.alerting()
@@ -176,12 +177,25 @@ class App:
             if b.x <= px < b.right and b.y <= py < b.bottom:
                 self._goto(i)
                 return
-        for i, b in enumerate(self.renderer.select_boxes(self)):  # voci della scheda "+"
-            if b.x <= px < b.right and b.y <= py < b.bottom:
-                self.page.widget.on_select(i)
-                return
-        if self.page.widget.has_action:
+        hit = self.hit_at(px, py)
+        if hit is not None:
+            self.page.widget.on_hit(hit, now)
+        elif self.page.widget.has_action and self.page.widget.tap_action:
             self.page.widget.on_action(now)
+
+    def hit_at(self, px: float, py: float) -> str | None:
+        """Bottone sotto il dito; se nessuno, il più vicino entro `TAP_TOLERANCE`."""
+        best, best_d = None, float("inf")
+        tol = TAP_TOLERANCE * min(self.frame_size()[0] / 480, self.frame_size()[1] / 320)
+        for b, hit in self.renderer.hit_boxes(self):
+            dx = max(b.x - px, 0.0, px - b.right)
+            dy = max(b.y - py, 0.0, py - b.bottom)
+            d = (dx * dx + dy * dy) ** 0.5
+            if d == 0:
+                return hit
+            if d <= tol and d < best_d:
+                best, best_d = hit, d
+        return best
 
     def stop(self) -> None:
         self._stop.set()

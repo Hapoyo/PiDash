@@ -27,7 +27,7 @@ DEFAULTS: dict[str, Any] = {
     "input": {"keyboard": True, "gpio": None, "buzzer_pin": None, "sound": False,
               "touch": {"enabled": False, "device": "auto", "swap_xy": False, "invert_x": False,
                         "invert_y": False, "x_min": None, "x_max": None, "y_min": None,
-                        "y_max": None, "debounce_s": 0.3, "debug": False}},
+                        "y_max": None, "debounce_s": 0.15, "debug": False}},
 }
 
 
@@ -111,11 +111,11 @@ def _read_json(p: Path) -> dict[str, Any]:
 def save_local(path: str | Path, changes: dict[str, Any]) -> Path:
     """Scrive le voci di `changes` in `config.local.json`, conservando le altre.
 
-    Serve alla scheda "+": le pagine create sul Raspberry restano fuori da Git.
+    Serve alle Impostazioni: pagine, calibrazione, luminosità restano fuori da Git. I dizionari
+    si uniscono in profondità: salvare `input.touch` non cancella `input.gpio`.
     """
     local = local_path(path)
-    data = _read_json(local) if local.exists() else {}
-    data.update(changes)
+    data = _merge(_read_json(local) if local.exists() else {}, changes)
     tmp = local.with_suffix(f"{local.suffix}.tmp")
     tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     tmp.replace(local)  # sostituzione atomica: niente file mezzo scritto se manca corrente

@@ -34,6 +34,12 @@ def chips(box: Box, n: int, u: float, per_row: int = 0) -> list[Box]:
                 round(cw), round(ch)) for i in range(n)]
 
 
+def hits(b: Box, widget: Any, u: float) -> list[tuple[Box, str]]:
+    """Bottoni della scheda: un tocco su una voce la esegue."""
+    riquadri = chips(grid(b, u), len(widget.voci()), u)
+    return [(cb, f"voce:{i}") for i, cb in enumerate(riquadri)]
+
+
 def draw(cv: Canvas, b: Box, app: App, now: datetime) -> None:
     widget: Any = app.page.widget
     voci = widget.voci()
