@@ -162,7 +162,11 @@ def start_touch(q: queue.Queue[Any], cfg: dict[str, Any]) -> TouchCalibration | 
 
     Restituisce la calibrazione in uso (modificabile a caldo), None se il touch non c'è.
     """
-    import fcntl
+    try:
+        import fcntl
+    except ImportError:  # Windows: niente evdev, nel simulatore si tocca col mouse
+        log.warning("touchscreen non disponibile su questo sistema")
+        return None
 
     device = cfg.get("device") or "auto"
     path = find_touch_device() if device == "auto" else str(device)
