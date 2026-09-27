@@ -51,6 +51,14 @@ computer di bordo.
 | **005 · Sistema** | **⚙ · Impostazioni** |
 | ![Sistema](docs/img/05-sistema.png) | ![Impostazioni](docs/img/06-new.png) |
 
+Schermate fuori dallo schedario:
+
+| Avvio (5 s, un tocco lo salta) | Spegni: il primo tocco chiede conferma |
+|:---:|:---:|
+| ![Avvio](docs/img/avvio.png) | ![Conferma dello spegnimento](docs/img/spegni-conferma.png) |
+| **Calibra touch: quattro croci, una alla volta** | **Spegnimento** |
+| ![Calibrazione del touch](docs/img/calibrazione.png) | ![Spegnimento](docs/img/spegnimento.png) |
+
 Immagini a 480×320, risoluzione nativa dello schermo, generate dal codice con dati dimostrativi.
 
 ## 3. Requisiti

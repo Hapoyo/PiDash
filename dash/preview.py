@@ -80,6 +80,41 @@ def save_animation(cfg: dict[str, Any], path: Path, now: datetime = SHOT_TIME,
     return path
 
 
+def save_system_screens(cfg: dict[str, Any], out_dir: Path, now: datetime = SHOT_TIME) -> list[Path]:
+    """Schermate fuori dallo schedario: avvio, conferma di spegni, calibrazione, spegnimento."""
+    from .inputs import Tap
+    from .render import effects
+    from .render.theme import unit
+    out_dir.mkdir(parents=True, exist_ok=True)
+    w, h = _demo(cfg, SHOT_PAGES)
+    app = App(cfg, NullDisplay(w, h), queue.Queue())
+    paths: list[Path] = []
+
+    def save(name: str, img: Image.Image) -> None:
+        path = out_dir / name
+        img.save(path, optimize=True)
+        paths.append(path)
+
+    try:
+        for widget in app.widgets.values():
+            widget.update(now)
+        save("avvio.png", effects.boot(w, h, unit(w, h), app.renderer.c, app, 0.8))
+        app.page_idx = next(i for i, p in enumerate(app.pages) if p.kind == "new")
+        app.page.widget.on_hit("spegni", now)          # primo tocco: chiede conferma
+        save("spegni-conferma.png", app.renderer.render(app, now))
+        app.start_calibration()
+        assert app.calib is not None
+        app.calib.add(Tap(0.1, 0.12))                  # prima croce toccata, tocca alla seconda
+        save("calibrazione.png", app.renderer.render(app, now))
+        app.calib = None
+        app.shutting_down = True
+        save("spegnimento.png", app.renderer.render(app, now))
+        app.shutting_down = False
+    finally:
+        app.close()
+    return paths
+
+
 def save_screenshots(cfg: dict[str, Any], out_dir: Path, now: datetime = SHOT_TIME) -> list[Path]:
     """Salva un PNG per pagina (`NN-nome.png`) con dati demo e posizione fissa, senza rete.
 
