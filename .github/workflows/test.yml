@@ -1,0 +1,35 @@
+# Test su Linux a ogni pull request e a ogni modifica di main: lo stesso controllo che
+# scripts/aggiorna.sh fa sul Raspberry prima di accettare un aggiornamento.
+name: test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  unittest:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.11 = minimo del progetto (Raspberry Pi OS Bookworm), 3.13 = Raspberry Pi OS Trixie
+        python: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: python -m unittest
+        env:
+          TZ: Europe/Rome
+        run: python -m unittest -v
+      - name: config.json del progetto valido
+        run: >
+          python -c "from dash.config import load_config;
+          from dash.widgets import WIDGET_NAMES; load_config('config.json', WIDGET_NAMES)"
