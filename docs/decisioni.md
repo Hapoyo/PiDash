@@ -1,6 +1,6 @@
 # pi-dash — Decisioni di progetto
 
-Versione 0.5.0 · 2026-09-27
+Versione 0.6.0 · 2026-09-27
 
 Scelte prese e motivi. Da leggere prima di cambiare il comportamento di una parte;
 le regole operative stanno in [CLAUDE.md](../CLAUDE.md).
@@ -12,12 +12,29 @@ le regole operative stanno in [CLAUDE.md](../CLAUDE.md).
 - Home: ora, data, luogo e coordinate, alba/tramonto, barra della giornata, settimana n:X,
   giorno X/365 (366 negli anni bisestili), tre anelli concentrici (anno arancio, mese ambra,
   settimana crema) con una sfera in testa all'arco: `ClockWidget.cycles`.
-- Schedario componibile: la scheda "+" (`widgets/new.py`) elenca solo i tipi opzionali
-  (`new.tipi`, di norma timer e sveglia); ogni voce fa da interruttore, quindi una sola pagina
-  per tipo. `App.add_page`/`remove_page` creano il widget e salvano `pages` in
+- Schedario componibile: le Impostazioni (pagina `new`, `widgets/new.py`; linguetta con
+  ingranaggio e "impostazioni", disegnati da `folders.draw_tabs` al posto del nome, che resta "+"
+  nei config) elencano solo i tipi opzionali (`new.tipi`, di norma timer e sveglia); ogni voce fa
+  da interruttore, quindi una sola pagina per tipo. `App.add_page`/`remove_page` creano il widget e salvano `pages` in
   `config.local.json`; `App.page_kinds()` dice al widget cosa è già presente. Chiave della pagina
   `tipo` o `tipo#N`, sempre libera anche dopo una rimozione (più copie restano possibili da
-  configurazione). La scheda "+" resta ultima e non si può togliere.
+  configurazione). La scheda resta ultima e non si può togliere.
+- Tocco: bottoni individuali. Ogni modulo di pagina con bottoni espone `hits(box, widget, u)` →
+  [(Box, id)] (registro `HITS`), usato da `draw` e da `CyberRenderer.hit_boxes`; `App.handle_tap`
+  prova linguette, poi bottoni (un tocco entro `TAP_TOLERANCE` = 12 px vale per il più vicino),
+  poi l'azione della pagina se `widget.tap_action`. Nelle Impostazioni il tocco fuori dai bottoni
+  non fa nulla. Il punto grezzo è la mediana dei campioni fra appoggio e distacco, scartati il
+  primo e gli ultimi due (sul resistivo sono i più sbagliati).
+- Calibrazione a schermo: quattro croci al 10–12 % dai bordi, retta ai minimi quadrati per asse,
+  scambio degli assi dalla correlazione più forte; rifiutata se la correlazione è < 0,9 o
+  l'escursione < 300 unità grezze. `TouchCalibration.apply` la rende attiva senza riavvio; il
+  risultato va in `config.local.json` (`save_local` unisce i dizionari in profondità).
+- Luminosità (`dash/backlight.py`): LED vero da `/sys/class/backlight` se `max_brightness > 1`,
+  altrimenti immagine scurita con una tabella (`Image.point`) prima di `display.show`. Nel
+  simulatore sempre software, per non toccare lo schermo del PC. Livelli 10–100 a passi di 10.
+- Spegnimento: doppio tocco entro 4 s; la schermata "spegnimento" arriva sul pannello prima del
+  comando `power.cmd` (predefinito `sudo -n /usr/bin/systemctl poweroff`, permesso da
+  `/etc/sudoers.d/pi-dash` e da nient'altro). Fuori dal driver `fb` è solo simulato.
 - Meteo: direzione del vento come anello della home (`pages/weather._wind_ring` → `cv.ring`): arco
   da nord in senso orario fino alla direzione **da cui** soffia il vento (uso nautico), sfera in
   testa, gradi al centro, tacca sul nord. Niente aghi né radar. `cv.panel(reserve=...)` libera lo
@@ -27,12 +44,21 @@ le regole operative stanno in [CLAUDE.md](../CLAUDE.md).
 - Meteo: Open-Meteo (nessuna chiave), `wind_speed_unit=kn`, `timezone=auto`, 2 giorni orari;
   cache in `out/weather_cache.json`, contatore di versione per il ridisegno. Fase lunare calcolata
   localmente (mese sinodico medio).
-- Posizione: `location.mode` = `ip` (ipapi.co poi ip-api.com), `city` (geocoding Open-Meteo),
-  `fixed`. `name/lat/lon` fanno da ripiego; cache in `out/location.json`, aggiornata ogni
-  `refresh_h`. Cambio di posizione → dati meteo vecchi scartati.
+- Posizione: `location.mode` = `auto` (predefinito: GPS da gpsd o NMEA, poi Wi-Fi con nmcli +
+  BeaconDB, poi IP), `ip` (ipapi.co poi ip-api.com), `city` (geocoding Open-Meteo), `fixed`.
+  L'IP da solo dava il nodo del provider (Lavinio invece di Gaeta). Con GPS e Wi-Fi il nome viene
+  da Nominatim, altrimenti dal nome fisso se entro 10 km, altrimenti resta vuoto (mai il nome di
+  un altro posto). `name/lat/lon` fanno da ripiego (Gaeta); cache in `out/location.json`,
+  aggiornata ogni `refresh_h`, al ritmo del meteo. Cambio di posizione → dati meteo vecchi
+  scartati.
 - Alba/tramonto della Home: calcolo locale (funziona senza rete), nel fuso del sistema, quindi il
   Pi deve avere Europe/Rome. La pagina meteo usa i valori Open-Meteo.
-- Timer: etichette per preset `timer.labels` (es. 300 s → "PARTENZA"); B cambia preset.
+- Timer: il tempo si compone con i bottoni: `presets_s` ordinati diventano "+N" che si sommano
+  (anche in corsa, spostando la scadenza), "−1'" toglie un minuto senza scendere sotto zero, "C"
+  azzera. Tocco sul pannello del tempo = avvia/pausa; B somma il preset più corto. All'avvio il
+  primo preset con etichetta (`timer.labels`, 300 s → "PARTENZA"), altrimenti il primo. La barra
+  si misura sul tempo impostato.
+- Avvio: 5 s (la sigla "Pi-Dash" si scrive in circa 1,75 s); un tocco lo salta.
 - Sistema: campioni ogni `system.sample_s`, storici di CPU e rete su 48 colonne a larghezza fissa.
 - Driver `fb`: scrive nel framebuffer (RGB565 o XRGB8888), niente desktop; trova il pannello per
   nome del driver (ili9486…). Con `console_off` mette la console in modalità grafica (KDSETMODE,

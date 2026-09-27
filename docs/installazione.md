@@ -1,6 +1,6 @@
 # pi-dash — Installazione
 
-Versione 0.5.2 · 2026-09-27
+Versione 0.6.0 · 2026-09-27
 
 Guida passo passo per chi è nuovo del Raspberry Pi. Si lavora dal PC Windows: il Raspberry non
 ha bisogno di monitor né di tastiera ("headless"). Le parti in `grassetto monospazio` si scrivono
@@ -163,12 +163,19 @@ python3 -m venv --system-site-packages .venv
 `.venv` è un ambiente Python dedicato al progetto: non tocca il Python del sistema.
 
 ### 5.4 Prova e calibrazione del tocco
+Il modo più semplice è dallo schermo: **Impostazioni** (la linguetta con l'ingranaggio) →
+**calibra touch**, poi tocca il centro delle quattro croci arancio, una alla volta. Estremi,
+scambio e inversione degli assi vengono calcolati, applicati subito e salvati in
+`config.local.json` (§ 5.7). Se i tocchi non sono coerenti compare "calibrazione non riuscita":
+basta ripetere. Senza tocchi la calibrazione si annulla da sola dopo 30 s.
+
+Se il tocco è così storto da non riuscire a premere "calibra touch", c'è la procedura a mano:
 ```
 cd ~/pi-dash
 .venv/bin/python -m dash -c config.json --touch-debug
 ```
 Il dashboard compare sullo schermo. Ogni tocco scrive nel terminale
-`tocco: grezzo x=… y=… → fx, fy`:
+`tocco: grezzo x=… y=… (N campioni) → fx, fy`:
 1. Tocca l'angolo in alto a sinistra: deve dare circa `0.0, 0.0`; in basso a destra circa `1.0, 1.0`.
 2. Assi scambiati → `"swap_xy": true`; destra/sinistra al contrario → `"invert_x": true`;
    alto/basso al contrario → `"invert_y": true`. Si modificano con
@@ -184,7 +191,9 @@ scripts/installa-servizio.sh
 sudo systemctl start pi-dash
 ```
 Lo script scrive in `/etc/systemd/system/pi-dash.service` il tuo nome utente e la cartella del
-progetto, senza modificare i file del repository.
+progetto, senza modificare i file del repository. Installa anche `/etc/sudoers.d/pi-dash`, che
+permette al dashboard un solo comando da amministratore, `systemctl poweroff`, per il bottone
+"spegni" delle Impostazioni.
 Controllo: `systemctl status pi-dash` deve dire `active (running)`; `q` per uscire.
 
 Se il cursore o il login della console compaiono sopra il dashboard:
@@ -193,25 +202,39 @@ Se il cursore o il login della console compaiono sopra il dashboard:
    aggiungi uno spazio e `vt.global_cursor_default=0`, senza andare a capo. Salva, esci,
    `sudo reboot`.
 
-### 5.6 Comporre lo schedario: la scheda "+"
-In partenza ci sono home, meteo, sistema e la scheda **+**. Timer e sveglia si aggiungono quando
-servono: apri il **+**, scegli la voce e conferma.
+### 5.6 Le Impostazioni: schede, luminosità, spegnimento
+In partenza ci sono home, meteo, sistema e le **Impostazioni** (linguetta con l'ingranaggio,
+l'ultima). Dentro, tre righe:
 
-| Con il tocco | Con i pulsanti |
+| Riga | Cosa fa |
 |---|---|
-| tocca una voce per sceglierla, poi il riquadro "+" in alto per confermare | B passa alla voce seguente, A conferma |
+| schede | `+ timer`, `+ sveglia`: un tocco aggiunge la scheda; la stessa voce diventa `− timer` e la toglie |
+| luminosità | `−` e `+` dal 10 al 100 %, a passi di 10 |
+| sistema | `calibra touch` (§ 5.4) e `spegni`: al primo tocco diventa "conferma", al secondo (entro 4 s) spegne il Raspberry |
 
-La stessa voce fa da interruttore: `+ timer` aggiunge la scheda, `− timer` la toglie. Lo schedario
-risultante viene salvato in `config.local.json` (§ 5.7) e torna al riavvio; la scheda "+" resta
-sempre l'ultima e non si può togliere.
+Con i pulsanti GPIO: B passa alla scheda seguente dell'elenco, A la aggiunge o la toglie.
+
+Lo schedario e la luminosità vengono salvati in `config.local.json` (§ 5.7) e tornano al
+riavvio; le Impostazioni restano sempre l'ultima scheda e non si possono togliere.
+
+**Luminosità.** Se il pannello espone la retroilluminazione (`ls /sys/class/backlight` non è
+vuoto e `max_brightness` è più di 1) si regola il LED vero; sulla maggior parte degli schermi
+3,5" il LED è collegato fisso, e allora il dashboard scurisce l'immagine. In fondo alle
+Impostazioni c'è scritto quale dei due modi è in uso ("retroilluminazione" o "luce software").
+
+**Spegnimento.** Compare la schermata "spegnimento": dopo circa 20 s, quando il LED verde del
+Raspberry smette di lampeggiare, si può staccare l'alimentatore. Lo schermo 3,5" resta acceso
+anche a Raspberry spento (prende corrente dal connettore): è normale. Lo spegnimento dallo
+schermo richiede la regola installata da `scripts/installa-servizio.sh` (§ 5.5); se manca, in
+fondo alle Impostazioni compare "spegni non consentito".
 
 Le schede elencate sono quelle di `new.tipi` (`timer`, `alarm`). Le pagine fisse — home, meteo,
 sistema — stanno in `pages`: si cambiano dal file, non dal dashboard.
 
-**Se vieni da una versione precedente** e il tuo `config.local.json` contiene `pages`, la scheda
-"+" non compare: quell'elenco sostituisce quello del progetto. Due rimedi, a scelta:
+**Se vieni da una versione precedente** e il tuo `config.local.json` contiene `pages`, le
+Impostazioni non compaiono: quell'elenco sostituisce quello del progetto. Due rimedi, a scelta:
 1. togli tutto il blocco `pages` dal tuo `config.local.json` (`nano ~/pi-dash/config.local.json`):
-   riprendi lo schedario del progetto e aggiungi timer e sveglia dal "+";
+   riprendi lo schedario del progetto e aggiungi timer e sveglia dalle Impostazioni;
 2. oppure aggiungi la scheda in fondo al tuo elenco: `{"name": "+", "widget": "new"}`.
 
 Poi `sudo systemctl restart pi-dash`. Nel log (`journalctl -u pi-dash -n 20`) l'avviso lo ricorda.
@@ -222,13 +245,37 @@ Poi `sudo systemctl restart pi-dash`. Nel log (`journalctl -u pi-dash -n 20`) l'
 `config.json`. Non è in Git, quindi gli aggiornamenti non lo toccano. Esempio:
 ```json
 {
-  "location": {"mode": "fixed", "name": "Gaeta", "lat": 41.213, "lon": 13.571},
+  "location": {"mode": "fixed", "name": "Ventotene", "lat": 40.796, "lon": 13.436},
   "alarm": {"alarms": [{"time": "06:30", "days": [0, 1, 2, 3, 4], "enabled": true}]},
   "input": {"touch": {"swap_xy": true, "invert_x": true}}
 }
 ```
 Le sezioni si fondono voce per voce; gli elenchi (`alarms`, `pages`, `presets_s`) si sostituiscono
-per intero. Dopo una modifica: `sudo systemctl restart pi-dash`.
+per intero. Dopo una modifica: `sudo systemctl restart pi-dash`. Calibrazione del touch,
+schedario e luminosità ci finiscono da soli quando li cambi dalle Impostazioni.
+
+### 5.8 Posizione: GPS, Wi-Fi, IP
+Con `"mode": "auto"` (quella del progetto) il dashboard prova, in ordine:
+1. **GPS**, se c'è un ricevitore: tramite `gpsd` o leggendo direttamente la seriale
+   (`/dev/ttyACM0`, `/dev/ttyUSB0`, oppure quella in `location.gps_device`);
+2. **reti Wi-Fi vicine**: l'elenco delle reti visibili (`nmcli`) va a
+   [BeaconDB](https://beacondb.net), che restituisce la posizione con la precisione di una via.
+   Vengono inviati gli identificativi (BSSID) delle reti vicine, non il loro traffico; per non
+   usarlo: `"location": {"wifi": false}`;
+3. **indirizzo IP**: solo a livello di città, e spesso indica il nodo del provider, non il paese
+   vero (per esempio Lavinio invece di Gaeta);
+4. le coordinate fisse `name`/`lat`/`lon` (nel progetto: Gaeta).
+
+La home mostra accanto alle coordinate da dove arriva la posizione: `gps`, `wifi` o `ip`. La
+posizione si aggiorna insieme al meteo, al più ogni `refresh_h` ore.
+
+Il Raspberry Pi 3 non ha un GPS. Per aggiungerlo basta un ricevitore USB (per esempio con
+chip u-blox 7 o 8, 10–15 €):
+```
+sudo apt install -y gpsd gpsd-clients
+cgps     # deve comparire un fix con latitudine e longitudine (serve il cielo aperto)
+```
+Se non vuoi nessuna ricerca automatica: `"location": {"mode": "fixed"}` in `config.local.json`.
 
 ## 6. Comandi di tutti i giorni
 Nome del servizio: `pi-dash`.
@@ -241,16 +288,17 @@ Nome del servizio: `pi-dash`.
 | Riavviare il dashboard | `sudo systemctl restart pi-dash` |
 | Fermarlo (per le prove a mano) | `sudo systemctl stop pi-dash` |
 | Non avviarlo più all'accensione | `sudo systemctl disable pi-dash` |
-| Aggiungere o togliere una pagina | scheda "+" sul dashboard (§ 5.6) |
+| Aggiungere o togliere una pagina | Impostazioni sul dashboard (§ 5.6) |
+| Luminosità, calibrazione, spegnimento | Impostazioni sul dashboard (§ 5.6) |
 | Modificare le impostazioni | `nano ~/pi-dash/config.local.json`, poi riavviare il dashboard (§ 5.7) |
 | Aggiornare dal repository | `~/pi-dash/scripts/aggiorna.sh` (§ 7) |
 | Indirizzo IP | `hostname -I` |
 | Temperatura del processore | `vcgencmd measure_temp` |
 | Spazio libero | `df -h /` |
 | Riavviare il Raspberry | `sudo reboot` |
-| Spegnere il Raspberry | `sudo poweroff`, poi staccare quando il LED verde smette di lampeggiare |
+| Spegnere il Raspberry | Impostazioni → spegni → conferma, oppure `sudo poweroff`; poi staccare quando il LED verde smette di lampeggiare |
 
-Non staccare mai l'alimentazione senza `sudo poweroff`: si rischia di rovinare la microSD.
+Non staccare mai l'alimentazione senza spegnere prima: si rischia di rovinare la microSD.
 
 ## 7. Aggiornare il programma a una nuova versione
 Se hai installato da GitHub (§ 4.3), un solo comando:
@@ -312,10 +360,12 @@ Se continui a installare dallo zip:
 | Schermo 3,5" bianco | righe mancanti o scritte male in `config.txt` (§ 5.2) |
 | `aggiorna.sh`: "ci sono file modificati a mano" | l'elenco dice quali; salva le modifiche che ti servono in `config.local.json`, poi `git checkout -- <file>` |
 | Animazioni a scatti o processore caldo | abbassa `motion.fps` o usa `"livello": "eventi"` (§ 9.1) |
-| Manca la scheda "+" dopo un aggiornamento | il tuo `config.local.json` contiene `pages`: § 5.6, in fondo |
+| Mancano le Impostazioni dopo un aggiornamento | il tuo `config.local.json` contiene `pages`: § 5.6, in fondo |
 | `aggiorna.sh`: "test falliti" o "configurazione non valida" | la versione precedente è già ripristinata; manda l'output a chi sviluppa |
 | Schermo acceso ma dashboard assente | `sudo journalctl -u pi-dash -n 50` e leggi l'ultimo errore |
-| Tocco nel punto sbagliato | calibrazione (§ 5.4) |
+| Tocco nel punto sbagliato | Impostazioni → calibra touch (§ 5.4) |
+| "spegni non consentito" | lancia `scripts/installa-servizio.sh` (installa la regola per lo spegnimento) |
+| Località sbagliata (es. Lavinio invece di Gaeta) | posizione da IP: § 5.8 (Wi-Fi, GPS o coordinate fisse) |
 | Orario sbagliato | serve la rete all'avvio; controlla il fuso con `timedatectl` (deve dire Europe/Rome) |
 | Blocchi o riavvii improvvisi, fulmine giallo sullo schermo | alimentatore insufficiente: usa 5,1 V 2,5 A |
 | `unzip: command not found` | `sudo apt install -y unzip` |

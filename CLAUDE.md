@@ -1,11 +1,12 @@
 # pi-dash — CLAUDE.md
 
-Versione 0.5.2 · 2026-09-27
+Versione 0.6.0 · 2026-09-27
 
 ## 1. Scopo
 Dashboard da tavolo per Raspberry Pi 3 Model B con schermo SPI 3,5" 480×320 (ILI9486 + touch
 XPT2046): orologio, meteo e vento in nodi, timer di partenza regata, sveglia, statistiche del
-sistema. Schedario componibile: le pagine si aggiungono e si tolgono dalla scheda "+".
+sistema. Schedario componibile: le pagine si aggiungono e si tolgono dalle Impostazioni
+(scheda `new`, linguetta con l'ingranaggio), che regolano anche luminosità, touch e spegnimento.
 Unico stile: pannelli arrotondati a colori su fondo scuro, numeri in Space Grotesk,
 microetichette in Space Mono.
 
@@ -23,16 +24,20 @@ dash/render/           tutto il disegno
   theme.py             colori, font, `fit`, cache dei testi
   canvas.py            Canvas: primitive dello stile + registro di numeri ed effetti
   folders.py           schedario: geometria delle linguette (disegno e tocco), cartelle
-  pages/               una `draw(cv, box, app, now)` per tipo di pagina + registro `PAGES`
+  pages/               una `draw(cv, box, app, now)` per tipo di pagina + registro `PAGES`;
+                       `hits(box, widget, u)` per le pagine con bottoni (registro `HITS`);
+                       `calibrate.py` schermo della calibrazione del touch
   effects.py           animazioni sopra la base, sequenza di avvio, riquadro di allarme
   renderer.py          CyberRenderer: `render` (pagina base) e `compose` (fotogramma animato)
 dash/layout.py         Box e nomi di giorni/mesi
-dash/location.py       posizione condivisa: "ip" (IP pubblico), "city" (geocoding), "fixed"
+dash/location.py       posizione condivisa: "auto" (GPS → Wi-Fi → IP), "ip", "city", "fixed"
+dash/backlight.py      luminosità: /sys/class/backlight se regolabile, altrimenti immagine scurita
 dash/astro.py          alba/tramonto calcolati in locale (NOAA semplificato, ±1–2 min)
 dash/sysinfo.py        CPU/RAM/disco/temperatura/uptime/IP da /proc e /sys
 dash/inputs.py         Event, tastiera (stdin), pulsanti GPIO, touch evdev, cicalino
 dash/display/          base.py, sim.py (PNG + pagina web), fb.py (/dev/fbN)
-dash/widgets/          dati e stato: clock, weather, timer, alarm, system, new (nessun disegno)
+dash/widgets/          dati e stato: clock, weather, timer, alarm, system, new (nessun disegno);
+                       calibrate.py = procedura a quattro croci (`TouchWizard`, `solve`)
 docs/                  installazione.md (guida), hardware.md (pin, overlay, SPI), decisioni.md
 fonts/                 Space Grotesk, Space Mono (OFL) + licenze
 scripts/aggiorna.sh    aggiornamento sul Pi: pull, dipendenze, test, riavvio, rollback
@@ -54,9 +59,11 @@ tests/                 unittest
 - Installazione sul Raspberry: [docs/installazione.md](docs/installazione.md)
 - Aggiornare il Pi: `~/pi-dash/scripts/aggiorna.sh [--no-test]` (segue il ramo in uso, di norma `main`)
 - Servizio: `scripts/installa-servizio.sh` (mai `sed -i` sul file in Git)
-- Calibrazione tocco: `.venv/bin/python -m dash --touch-debug`
-- Comandi: N pagina seguente · A azione (avvia/ferma timer, spegne sveglia) · B indietro/preset
-- Tocco: linguetta → apre quella cartella; contenuto → azione del widget della pagina
+- Calibrazione tocco: Impostazioni → calibra touch; a mano `.venv/bin/python -m dash --touch-debug`
+- Simulatore: un clic sull'anteprima web è un tocco (`POST /tap?x=…&y=…`)
+- Comandi: N pagina seguente · A azione (avvia/ferma timer, spegne sveglia) · B indietro/+preset
+- Tocco: linguetta → apre quella cartella; bottone (`hits`) → `widget.on_hit(id)`; resto del
+  contenuto → azione del widget, se `tap_action`
 
 ## 4. Convenzioni
 - Python ≥ 3.11, type hints, docstring brevi, errori espliciti (nessun `except:` nudo).
@@ -79,6 +86,10 @@ tests/                 unittest
   numeri grandi con `cv.big`/`cv.panel` adattati al riquadro, stessa serie con lo stesso `ref`
   ("7%" e "100%" uguali). Allineamento: etichetta, numero e dettaglio a sinistra nei pannelli.
 - Ogni widget implementa `state_key()`: se non cambia, la pagina base non viene ridisegnata.
+- Bottoni toccabili: rettangoli solo da `hits()` del modulo della pagina, usati anche da `draw`:
+  disegno e tocco non devono mai calcolare la geometria due volte.
+- Niente comandi di sistema veri nei test: `App.run_cmd` si sostituisce, il driver `sim` simula
+  lo spegnimento e usa la luminosità software.
 - Animazioni: `motion.py` non disegna e non legge l'orologio (riceve `t`); durante `render` il
   Canvas registra i numeri (`cv.big`/`cv.panel` con `slot=`) e gli effetti (`cv.add_fx`),
   `compose` li anima sopra la base. Un effetto nuovo: ramo in `effects.draw_fx` + `cv.add_fx`.
@@ -115,4 +126,6 @@ Scelte prese e motivi (schedario, meteo, posizione, animazioni, configurazione, 
 - **SoC**: System on Chip del Raspberry (temperatura mostrata come "temp").
 - **Partenza**: sequenza di partenza di regata (conto alla rovescia di 5').
 - **Framebuffer**: `/dev/fb1`, memoria dello schermo scritta direttamente, senza desktop.
-- **Scheda "+"**: pagina `new`, catalogo per comporre lo schedario.
+- **Impostazioni**: pagina `new` (nome "+" nei config): schede, luminosità, touch, spegnimento.
+- **BeaconDB**: servizio libero di posizione da reti Wi-Fi (formato Mozilla Location Service).
+- **NMEA**: frasi di testo dei ricevitori GPS (`$GPRMC`, `$GNGGA`).

@@ -1,6 +1,6 @@
 # PiDash
 
-> Versione 0.5.2 · 2026-09-27
+> Versione 0.6.0 · 2026-09-27
 
 Cruscotto da tavolo per Raspberry Pi con schermo touch SPI da 3,5": ora, meteo con vento in nodi,
 timer di partenza regata, sveglia e stato del sistema, in un'interfaccia a schedario ispirata ai
@@ -16,10 +16,15 @@ computer di bordo.
 ## 1. Caratteristiche
 
 - **Schedario componibile**: ogni funzione è una cartella con la sua linguetta; timer e sveglia si
-  aggiungono e si tolgono direttamente dallo schermo, dalla scheda **+**.
+  aggiungono e si tolgono direttamente dallo schermo, dalle **Impostazioni** (linguetta con
+  l'ingranaggio), dove si regolano anche luminosità e calibrazione del tocco e si spegne il Pi.
+- **Tocco preciso**: ogni bottone risponde da solo, un tocco appena fuori vale per il più vicino,
+  il punto è la mediana dei campioni letti mentre il dito preme.
 - **Meteo per chi va in mare**: vento in nodi con direzione, raffiche e forza Beaufort, pressione,
   pioggia e previsione a 15 ore da [Open-Meteo](https://open-meteo.com), senza chiave API.
-- **Timer di partenza regata** con preset configurabili e **sveglie settimanali**.
+- **Timer di partenza regata**: il tempo si compone sommando i bottoni (+1′, +5′, +10′, +15′,
+  −1′, C per azzerare); **sveglie settimanali**.
+- **Posizione precisa**: GPS se c'è un ricevitore, altrimenti le reti Wi-Fi vicine, poi l'IP.
 - **Funziona anche senza rete**: alba e tramonto calcolati in locale, ultimo meteo in cache.
 - **Motion graphics leggere**: sequenza di accensione, transizioni, cifre che si decodificano,
   pensate per il bus SPI (si aggiornano solo le righe cambiate).
@@ -33,18 +38,18 @@ computer di bordo.
 |---|---|---|---|
 | 001 | Home | sempre | ora e data, luogo e coordinate, alba/tramonto, avanzamento del giorno, anelli di settimana, mese e anno |
 | 002 | Meteo | sempre | temperatura, vento (nodi, direzione, raffiche, Beaufort), pioggia, umidità, pressione, previsione oraria, fase lunare |
-| 003 | Timer | a scelta | conto alla rovescia con preset; 5′ = sequenza di partenza |
+| 003 | Timer | a scelta | conto alla rovescia composto con i bottoni; 5′ = sequenza di partenza |
 | 004 | Sveglia | a scelta | prossima sveglia, stato, sveglie per giorno della settimana |
 | 005 | Sistema | sempre | CPU, RAM, disco, storici di CPU e rete, host, IP, temperatura, uptime |
-| + | Nuova scheda | sempre | aggiunge o toglie le schede opzionali |
+| ⚙ | Impostazioni | sempre | schede opzionali, luminosità, calibrazione del tocco, spegnimento |
 
 | 001 · Home | 002 · Meteo |
 |:---:|:---:|
 | ![Home](docs/img/01-home.png) | ![Meteo](docs/img/02-meteo.png) |
 | **003 · Timer** | **004 · Sveglia** |
 | ![Timer](docs/img/03-timer.png) | ![Sveglia](docs/img/04-sveglia.png) |
-| **005 · Sistema** | **+ · Nuova scheda** |
-| ![Sistema](docs/img/05-sistema.png) | ![Nuova scheda](docs/img/06-new.png) |
+| **005 · Sistema** | **⚙ · Impostazioni** |
+| ![Sistema](docs/img/05-sistema.png) | ![Impostazioni](docs/img/06-new.png) |
 
 Immagini a 480×320, risoluzione nativa dello schermo, generate dal codice con dati dimostrativi.
 
@@ -55,7 +60,7 @@ Immagini a 480×320, risoluzione nativa dello schermo, generate dal codice con d
 | Scheda | Raspberry Pi 3 Model B, Raspberry Pi OS Lite 64 bit |
 | Schermo | "3.5inch RPi Display" 480×320, controller ILI9486, touch XPT2046 (overlay `piscreen,drm`) |
 | Alimentatore | 5,1 V · 2,5 A |
-| Opzionali | pulsanti fisici su GPIO 5/13/19, cicalino su GPIO 26 |
+| Opzionali | pulsanti fisici su GPIO 5/13/19, cicalino su GPIO 26, ricevitore GPS USB |
 | Software | Python ≥ 3.11, Pillow ≥ 10.1 |
 | Rete | facoltativa: serve per meteo e posizione, non per ora, alba e tramonto |
 
@@ -96,32 +101,35 @@ La configurazione è su due livelli:
 
 | Voce | Significato | Predefinito |
 |---|---|---|
-| `location.mode` | posizione: `ip` (dall'indirizzo pubblico), `city` (per nome), `fixed` (coordinate) | `ip` |
-| `location.name`, `lat`, `lon` | luogo e coordinate di riserva | Ventotene, 40,796 N 13,436 E |
-| `timer.presets_s`, `timer.labels` | durate in secondi ed etichette dei preset | 300, 60, 600, 900 · 300 = "partenza" |
+| `location.mode` | posizione: `auto` (GPS, poi Wi-Fi, poi IP), `ip`, `city` (per nome), `fixed` (coordinate) | `auto` |
+| `location.name`, `lat`, `lon` | luogo e coordinate di riserva | Gaeta, 41,214 N 13,571 E |
+| `location.wifi`, `gps_device` | posizione dalle reti Wi-Fi (BeaconDB); seriale del GPS | `true`; automatica |
+| `timer.presets_s`, `timer.labels` | bottoni che sommano il tempo (secondi) ed etichette | 60, 300, 600, 900 · 300 = "partenza" |
+| `backlight.level`, `backlight.mode` | luminosità 10–100; `auto`, `hw` (LED), `sw` (immagine) | 100, `auto` |
 | `alarm.alarms` | sveglie: ora, giorni (0 = lunedì), attiva | 07:00, lunedì–venerdì |
 | `motion.livello`, `motion.fps` | animazioni: `pieno`, `eventi`, `off`; fotogrammi al secondo | `pieno`, 8 |
 | `theme.palette` | colori dell'interfaccia, per nome (`orange`, `amber`…) | tema originale |
-| `input.touch` | calibrazione del tocco | automatica |
+| `input.touch` | calibrazione del tocco (Impostazioni → calibra touch) | automatica |
 | `display.rotate` | rotazione dell'immagine: 0, 90, 180, 270 | 0 |
 
 Esempio di `config.local.json`:
 
 ```json
 {
-  "location": {"mode": "fixed", "name": "Gaeta", "lat": 41.213, "lon": 13.571},
+  "location": {"mode": "fixed", "name": "Ventotene", "lat": 40.796, "lon": 13.436},
   "motion": {"livello": "eventi"}
 }
 ```
 
-Timer e sveglia si aggiungono dalla scheda **+**: B (o il tocco su una voce) sceglie, A (o il
-tocco sul simbolo) conferma. Voci complete e calibrazione del tocco: guida, § 5 e § 9.
+Timer e sveglia si aggiungono dalle **Impostazioni** con un tocco sulla voce (coi pulsanti: B
+sceglie, A conferma). Luminosità, calibrazione del tocco e spegnimento stanno nella stessa scheda.
+Voci complete: guida, § 5 e § 9.
 
 ### 5.1 Animazioni
 
 | Effetto | Quando | Livello |
 |---|---|---|
-| Accensione: sigla, righe di controllo, barra di carico (2,4 s; un tocco la salta) | all'avvio | eventi |
+| Accensione: sigla "Pi-Dash", righe di controllo, barra di carico (5 s; un tocco la salta) | all'avvio | eventi |
 | Scansione dall'alto con riga arancio | al cambio pagina | eventi |
 | Cifre che scorrono e si fermano | numeri che cambiano, apertura della pagina | eventi |
 | Due punti che lampeggiano | ora, timer in corsa | pieno |
@@ -148,6 +156,8 @@ dash/
   app.py          ciclo dell'applicazione, pagine, eventi
   main.py         riga di comando
   config.py       configurazione a due livelli e validazione
+  location.py     posizione: GPS, Wi-Fi, IP, città, fissa
+  backlight.py    luminosità: retroilluminazione o immagine scurita
   motion.py       tempi delle animazioni
   widgets/        dati e stato di ogni pagina (nessun disegno)
   render/         disegno: tema e griglia, primitive, schedario, una pagina per modulo, effetti
