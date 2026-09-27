@@ -6,6 +6,7 @@ Cruscotto da tavolo per Raspberry Pi con schermo touch SPI da 3,5": ora, meteo c
 timer di partenza regata, sveglia e stato del sistema, in un'interfaccia a schedario ispirata ai
 computer di bordo.
 
+[![test](https://github.com/Hapoyo/PiDash/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/Hapoyo/PiDash/actions/workflows/test.yml)
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)
 ![Raspberry Pi 3](https://img.shields.io/badge/Raspberry%20Pi-3%20Model%20B-C51A4A?logo=raspberrypi&logoColor=white)
 ![Schermo 480×320](https://img.shields.io/badge/schermo-480%C3%97320%20SPI-5b514a)
