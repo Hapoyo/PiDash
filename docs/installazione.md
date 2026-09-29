@@ -1,6 +1,6 @@
 # pi-dash — Installazione
 
-Versione 0.9.0 · 2026-09-29
+Versione 0.9.1 · 2026-09-29
 
 Guida passo passo per chi è nuovo del Raspberry Pi. Si lavora dal PC Windows: il Raspberry non
 ha bisogno di monitor né di tastiera ("headless"). Le parti in `grassetto monospazio` si scrivono
@@ -381,6 +381,12 @@ su queste due cose:
 - **accendere o spegnere lo decide il verbo della frase** (accendi, attiva · spegni, disattiva):
   se manca, se ce ne sono di opposti o se c'è una negazione ("non accendere") non si esegue;
 - **la luminosità deve essere scritta nella frase**: "al 50 per cento" va, "abbassa" no.
+
+**Accendere a un livello.** Una frase che accende e dice anche il livello, come "accendi il
+soggiorno al 100%", "…al 100 per cento" o "…al massimo", accende la stanza a quella
+luminosità. Il livello lo legge il dashboard dal testo (il modello, con quella frase, risponde
+`lights_off` e lo perderebbe). Da 1 a 100: fuori scala non si esegue. Spegnendo il livello è
+ignorato; senza livello "accendi il soggiorno" mantiene la luminosità di prima.
 
 Con "accendi tutte le luci" si accende davvero tutta la casa: la frase è proprio quella che dici.
 Il bridge è raggiunto in HTTPS senza verificare il certificato (è autofirmato) e solo sulla rete

@@ -1140,6 +1140,37 @@ class TestHue(unittest.TestCase):
         self.assertEqual(len(b.put()), 4)                        # i rifiuti non toccano il bridge
         app.close()
 
+    def test_turning_on_with_a_level_in_the_sentence_sets_the_brightness(self) -> None:
+        """"accendi il soggiorno al 100%" → il modello dà lights_off e perde il livello: lo legge il testo."""
+        hue, b = self._hue()
+        app = self._app(hue)
+        soggiorno = {"room": "soggiorno"}
+        for nome, frase, atteso, corpo in (
+                ("lights_off", "accendi il soggiorno al 100%", "luci Soggiorno accese al 100% (non raggiungibili)",
+                 {"on": True, "bri": 254}),
+                ("lights_on", "accendi il soggiorno al 100 per cento", "luci Soggiorno accese al 100% (non raggiungibili)",
+                 {"on": True, "bri": 254}),
+                ("lights_on", "Accendi il soggiorno al massimo", "luci Soggiorno accese al 100% (non raggiungibili)",
+                 {"on": True, "bri": 254}),
+                ("lights_on", "accendi il soggiorno al 50%", "luci Soggiorno accese al 50% (non raggiungibili)",
+                 {"on": True, "bri": 127}),
+                ("lights_on", "accendi il soggiorno", "luci Soggiorno accese (non raggiungibili)", {"on": True})):
+            self.assertEqual(azioni.esegui(app, nome, soggiorno, frase=frase), atteso, frase)
+            self.assertEqual(b.put()[-1][2], corpo, frase)
+        # spegnere non ha livello; un livello fuori scala o una negazione non si eseguono
+        self.assertEqual(azioni.esegui(app, "lights_off", soggiorno, frase="spegni il soggiorno al 100%"),
+                         "luci Soggiorno spente (non raggiungibili)")
+        self.assertEqual(b.put()[-1][2], {"on": False})
+        n = len(b.put())
+        self.assertEqual(azioni.esegui(app, "lights_on", soggiorno, frase="accendi il soggiorno al 150%"),
+                         "errore: luminosità da 1 a 100")
+        self.assertEqual(azioni.esegui(app, "lights_on", soggiorno, frase="accendi il soggiorno al 0%"),
+                         "errore: luminosità da 1 a 100")
+        self.assertTrue(azioni.esegui(app, "lights_on", soggiorno,
+                                      frase="non accendere il soggiorno al massimo").startswith("errore"))
+        self.assertEqual(len(b.put()), n)                        # nessun rifiuto tocca il bridge
+        app.close()
+
     def test_brightness_must_be_written_in_the_sentence(self) -> None:
         hue, b = self._hue()
         app = self._app(hue)
