@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.1 — 2026-09-29
+- **Accendere le luci a un livello**: "accendi il soggiorno al 100%", "…al 100 per cento" e "…al
+  massimo" accendono la stanza a quella luminosità. Il modello, con queste frasi, risponde
+  `lights_off` e perdeva il livello: lo legge il dashboard dal testo, come già faceva per il
+  verso. Livello da 1 a 100, fuori scala non si esegue; spegnendo è ignorato.
+
 ## 0.9.0 — 2026-09-29
 - **Luci Philips Hue con Needle**: "accendi il soggiorno", "spegni tutte le luci", "soppalco al
   30 per cento". Funzioni `lights_on`, `lights_off`, `set_brightness` (stanza e percentuale); le

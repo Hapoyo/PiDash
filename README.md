@@ -1,6 +1,6 @@
 # PiDash
 
-> Versione 0.9.0 · 2026-09-29
+> Versione 0.9.1 · 2026-09-29
 
 Cruscotto da tavolo per Raspberry Pi con schermo touch SPI da 3,5": ora, meteo con vento in nodi,
 timer di partenza regata, sveglia e stato del sistema, in un'interfaccia a schedario ispirata ai

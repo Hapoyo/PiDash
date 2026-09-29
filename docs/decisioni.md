@@ -1,6 +1,6 @@
 # pi-dash — Decisioni di progetto
 
-Versione 0.9.0 · 2026-09-29
+Versione 0.9.1 · 2026-09-29
 
 Scelte prese e motivi. Da leggere prima di cambiare il comportamento di una parte;
 le regole operative stanno in [CLAUDE.md](../CLAUDE.md).
@@ -23,6 +23,9 @@ le regole operative stanno in [CLAUDE.md](../CLAUDE.md).
   ("accendi tutte le luci" → `lights_off`) e la confidenza sta fra 0,4 e 0,6 anche per risposte
   corrette. Perciò il verbo della frase decide accendere o spegnere, la negazione blocca, la
   luminosità deve essere nel testo, e le luci hanno una soglia propria (0,4) invece di 0,6.
+  Per lo stesso motivo "accendi il soggiorno al 100%" (per il modello `lights_off`, 0,52) prende
+  il livello dal testo (`azioni._livello`: "N%", "N per cento", "al massimo"), altrimenti
+  accenderebbe alla luminosità di prima.
   Chiamate sincrone con timeout di 2 s: un bridge spento rallenta il dashboard, non lo blocca; un
   thread avrebbe complicato l'esito mostrato in scheda per un caso raro.
 - Azioni di Needle (`dash/azioni.py`): il modello propone, il dashboard decide. Il thread della

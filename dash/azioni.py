@@ -33,6 +33,8 @@ PAGINE = {"home": ("clock", "home"), "weather": ("weather", "meteo"), "timer": (
 ACCENDI = re.compile(r"\b(accend|attiv|illumin)\w*")
 SPEGNI = re.compile(r"\b(spegn|disattiv|oscur)\w*")
 NEGAZIONE = re.compile(r"\b(non|senza|mai)\b")
+PERCENTO = re.compile(r"\b(\d{1,3})\s*(?:%|per\s*cento)")
+MASSIMO = re.compile(r"\b(?:al\s+massimo|massim[oa])\b")
 
 Esito = tuple[str, str]  # (frase per lo schermo, tipo di pagina da aprire, "" se nessuna)
 Azione = Callable[["App", dict[str, Any], str], Esito]  # (app, argomenti, frase detta)
@@ -142,15 +144,36 @@ def _frase(stanza: Stanza | None, cosa: str) -> str:
     return f"luci {stanza.nome} {cosa}{avviso}"
 
 
+def _livello(frase: str) -> int | None:
+    """La luminosità chiesta nella frase ("al 50%", "al 100 per cento", "al massimo"), se c'è.
+
+    Come il verso, la legge il dashboard dal testo: il modello, per "accendi il soggiorno al
+    100%", risponde `lights_off` e perderebbe il livello.
+    """
+    testo = frase.lower()
+    trovato = PERCENTO.search(testo)
+    if trovato:
+        livello = int(trovato.group(1))
+        if not 1 <= livello <= 100:
+            raise AzioneError("luminosità da 1 a 100")
+        return livello
+    return 100 if MASSIMO.search(testo) else None
+
+
 def _luci(app: App, args: dict[str, Any], frase: str) -> Esito:
-    """Accende o spegne le luci di una stanza (o tutte): il modello dà la stanza, il verso è del testo."""
+    """Accende o spegne le luci di una stanza (o tutte): il modello dà la stanza, il verso è del testo.
+
+    Accendendo, un livello nella frase ("accendi il soggiorno al 100%") regola anche la luminosità.
+    """
     acceso = _verso(frase)
+    livello = _livello(frase) if acceso else None
     stanza = _stanza(app, args)
     try:
-        app.hue.imposta(stanza, acceso)
+        app.hue.imposta(stanza, acceso, livello)
     except HueError as exc:
         raise AzioneError(str(exc)) from exc
-    return _frase(stanza, "accese" if acceso else "spente"), ""
+    cosa = ("accese" if acceso else "spente") + (f" al {livello}%" if livello else "")
+    return _frase(stanza, cosa), ""
 
 
 def _luminosita(app: App, args: dict[str, Any], frase: str) -> Esito:
