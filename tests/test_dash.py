@@ -16,6 +16,7 @@ from PIL import Image, ImageChops
 from dash import azioni
 from dash.config import DEFAULTS, ConfigError, _merge, validate
 from dash.display.base import Display
+from dash.hue import Hue, HueError, registra
 from dash.inputs import Event, Tap
 from dash.app import App
 from dash.widgets import WIDGET_NAMES
@@ -808,7 +809,7 @@ class TestNeedle(unittest.TestCase):
 
     def test_config_rejects_a_bad_url_or_empty_phrases(self) -> None:
         for bad in ({"url": "https://x"}, {"queries": []}, {"queries": ["a"] * 7},
-                    {"soglia": 1.5}, {"soglia_pagine": "bassa"}):
+                    {"soglia": 1.5}, {"soglia_pagine": "bassa"}, {"soglia_luci": -1}):
             with self.assertRaises(ConfigError):
                 validate(make_cfg(needle=bad), WIDGET_NAMES)
 
@@ -986,6 +987,270 @@ class TestNeedleActions(unittest.TestCase):
             self.assertIsNone(app.find_page("timer"))
             self.assertEqual(w.snapshot()[2].esito, "")
             app.close()
+
+
+LUCI_HUE: dict[str, Any] = {i: {"state": {"reachable": r}} for i, r in
+                            (("1", False), ("5", True), ("7", True), ("11", True), ("14", False),
+                             ("15", False), ("16", False))}
+GRUPPI_HUE: dict[str, Any] = {
+    "1": {"name": "Corridoio Gaeta", "type": "Room", "lights": ["1"]},
+    "2": {"name": "Soggiorno", "type": "Room", "lights": ["15", "16"]},
+    "6": {"name": "Corridoio", "type": "Room", "lights": ["11"]},
+    "7": {"name": "Tenda", "type": "Room", "lights": ["7", "5"]},
+    "10": {"name": "Terrazza", "type": "Room", "lights": ["14"]},
+    "20": {"name": "Zona notte", "type": "Zone", "lights": ["5"]},   # le zone non sono stanze
+}
+
+
+class BridgeFinto:
+    """Bridge Hue di prova: registra le chiamate e risponde come l'API v1."""
+
+    def __init__(self, gruppi: dict[str, Any] | None = None, risposta_put: Any = None) -> None:
+        self.gruppi = GRUPPI_HUE if gruppi is None else gruppi
+        self.risposta_put = risposta_put
+        self.chiamate: list[tuple[str, str, Any]] = []
+
+    def __call__(self, metodo: str, percorso: str, corpo: dict[str, Any] | None) -> Any:
+        self.chiamate.append((metodo, percorso, corpo))
+        if percorso == "lights":
+            return LUCI_HUE
+        if percorso == "groups":
+            return self.gruppi
+        if self.risposta_put is not None:
+            return self.risposta_put
+        return [{"success": {f"/{percorso}/on": (corpo or {}).get("on")}}]
+
+    def put(self) -> list[tuple[str, str, Any]]:
+        return [c for c in self.chiamate if c[0] == "PUT"]
+
+
+class TestHue(unittest.TestCase):
+    """Luci Philips Hue: stanze del bridge, comandi, registrazione, chiave al sicuro."""
+
+    def _hue(self, bridge: BridgeFinto | None = None, **cfg: Any) -> tuple[Hue, BridgeFinto]:
+        b = bridge or BridgeFinto()
+        return Hue({"bridge": "192.168.1.73", "key": "SEGRETO", **cfg}, send=b, clock=FakeClock()), b
+
+    def test_rooms_are_read_with_reachable_lights(self) -> None:
+        hue, _ = self._hue()
+        stanze = {s.nome: (s.luci, s.raggiungibili) for s in hue.stanze()}
+        self.assertEqual(stanze, {"Corridoio Gaeta": (1, 0), "Soggiorno": (2, 0), "Corridoio": (1, 1),
+                                  "Tenda": (2, 2), "Terrazza": (1, 0)})   # solo le stanze, non le zone
+
+    def test_room_names_are_matched_without_guessing(self) -> None:
+        hue, _ = self._hue()
+        for detto, atteso in (("soggiorno", "Soggiorno"), ("la luce del Soggiorno", "Soggiorno"),
+                              ("TERRAZZA", "Terrazza"), ("corridoio", "Corridoio"),   # esatta, non ambigua
+                              ("corridoio gaeta", "Corridoio Gaeta"), ("gaeta", "Corridoio Gaeta")):
+            stanza = hue.trova(detto)
+            assert stanza is not None
+            self.assertEqual(stanza.nome, atteso, detto)
+        for tutte in ("tutte", "tutte le luci", "", "  ", "casa"):
+            self.assertIsNone(hue.trova(tutte), tutte)
+        with self.assertRaises(HueError) as sconosciuta:
+            hue.trova("cucina")
+        self.assertEqual(str(sconosciuta.exception), "stanza sconosciuta: cucina")
+        doppia = dict(GRUPPI_HUE, **{"30": {"name": "Camera Gaeta", "type": "Room", "lights": []}})
+        hue2, _ = self._hue(BridgeFinto(doppia))
+        with self.assertRaises(HueError) as ambigua:
+            hue2.trova("gaeta")                                      # due stanze: non si indovina
+        self.assertIn("ambigua", str(ambigua.exception))
+
+    def test_rooms_are_cached_for_five_minutes(self) -> None:
+        b = BridgeFinto()
+        clock = FakeClock()
+        hue = Hue({"bridge": "x", "key": "y"}, send=b, clock=clock)
+        hue.stanze()
+        hue.stanze()
+        self.assertEqual([c[1] for c in b.chiamate], ["lights", "groups"])   # una sola lettura
+        clock.t += 301
+        hue.stanze()
+        self.assertEqual(len(b.chiamate), 4)
+
+    def test_commands_go_to_the_room_or_to_all_lights(self) -> None:
+        hue, b = self._hue()
+        soggiorno = hue.trova("soggiorno")
+        hue.imposta(soggiorno, False)
+        hue.imposta(None, True)
+        hue.imposta(soggiorno, True, 50)
+        hue.imposta(soggiorno, True, 100)
+        hue.imposta(soggiorno, True, 1)
+        self.assertEqual(b.put(), [("PUT", "groups/2/action", {"on": False}),
+                                   ("PUT", "groups/0/action", {"on": True}),
+                                   ("PUT", "groups/2/action", {"on": True, "bri": 127}),
+                                   ("PUT", "groups/2/action", {"on": True, "bri": 254}),
+                                   ("PUT", "groups/2/action", {"on": True, "bri": 3})])
+
+    def test_bridge_errors_become_readable_messages(self) -> None:
+        hue, _ = self._hue(BridgeFinto(risposta_put=[{"error": {"description": "unauthorized user"}}]))
+        with self.assertRaises(HueError) as put:
+            hue.imposta(None, True)
+        self.assertEqual(str(put.exception), "bridge: unauthorized user")
+        rifiutata = Hue({"bridge": "x", "key": "y"}, send=lambda m, p, c: [{"error": {}}])
+        with self.assertRaises(HueError) as chiave:
+            rifiutata.stanze()
+        self.assertEqual(str(chiave.exception), "chiave rifiutata dal bridge")
+
+    def test_the_key_never_appears_in_errors(self) -> None:
+        from dash.hue import http_send
+        with self.assertRaises(HueError) as err:
+            http_send("127.0.0.1:1", "SEGRETO", 0.5)("GET", "lights", None)   # porta chiusa
+        self.assertNotIn("SEGRETO", str(err.exception))
+        self.assertIsNone(err.exception.__cause__)      # la catena degli errori conterrebbe l'URL
+        self.assertTrue(err.exception.__suppress_context__)
+
+    # --- azioni di Needle -------------------------------------------------
+    def _app(self, hue: Hue) -> App:
+        app = App(make_cfg(), MemDisplay(480, 320), queue.Queue())
+        app.hue = hue
+        return app
+
+    def test_needle_lights_functions(self) -> None:
+        hue, b = self._hue()
+        app = self._app(hue)
+        start = app.page
+        esegui = lambda nome, args, frase: azioni.esegui(app, nome, args, frase=frase)  # noqa: E731
+        self.assertEqual(esegui("lights_off", {"room": "soggiorno"}, "spegni il soggiorno"),
+                         "luci Soggiorno spente (non raggiungibili)")   # 15 e 16 non rispondono
+        self.assertEqual(esegui("lights_on", {"room": "tenda"}, "accendi la tenda"), "luci Tenda accese")
+        self.assertEqual(esegui("lights_on", {"room": "tutte"}, "accendi tutte le luci"),
+                         "tutte le luci accese")
+        self.assertEqual(esegui("set_brightness", {"room": "tenda", "percent": 40}, "tenda al 40%"),
+                         "luci Tenda al 40%")
+        self.assertEqual([p[1:] for p in b.put()],
+                         [("groups/2/action", {"on": False}), ("groups/7/action", {"on": True}),
+                          ("groups/0/action", {"on": True}),
+                          ("groups/7/action", {"on": True, "bri": 102})])
+        self.assertIs(app.page, start)                            # le luci non cambiano pagina
+        app.close()
+
+    def test_the_verb_of_the_sentence_decides_on_or_off(self) -> None:
+        """Il modello sceglie lights_off per "accendi tutte le luci": il verbo detto ha l'ultima parola."""
+        hue, b = self._hue()
+        app = self._app(hue)
+        esegui = lambda nome, frase: azioni.esegui(app, nome, {"room": "tutte"}, frase=frase)  # noqa: E731
+        self.assertEqual(esegui("lights_off", "accendi tutte le luci"), "tutte le luci accese")
+        self.assertEqual(esegui("lights_on", "Spegni tutte le luci"), "tutte le luci spente")
+        self.assertEqual(esegui("lights_on", "attiva la luce"), "tutte le luci accese")
+        self.assertEqual(esegui("lights_on", "disattiva la luce"), "tutte le luci spente")
+        self.assertEqual([p[2] for p in b.put()], [{"on": True}, {"on": False}, {"on": True}, {"on": False}])
+        for frase in ("non accendere la luce", "spegni ma non il soggiorno", "luce del soggiorno", "",
+                      "accendi e spegni il soggiorno", "senza luce"):
+            self.assertTrue(esegui("lights_on", frase).startswith("errore"), frase)
+        self.assertEqual(len(b.put()), 4)                        # i rifiuti non toccano il bridge
+        app.close()
+
+    def test_brightness_must_be_written_in_the_sentence(self) -> None:
+        hue, b = self._hue()
+        app = self._app(hue)
+        args = {"room": "tenda", "percent": 50}
+        self.assertEqual(azioni.esegui(app, "set_brightness", args, frase="tenda al 50 per cento"),
+                         "luci Tenda al 50%")
+        self.assertEqual(azioni.esegui(app, "set_brightness", args, frase="abbassa la tenda"),
+                         "errore: 50% non è nella frase: non eseguo")           # numero inventato
+        self.assertEqual(azioni.esegui(app, "set_brightness", args, frase="tenda al 500"),
+                         "errore: 50% non è nella frase: non eseguo")           # 500 non è 50
+        self.assertEqual(len(b.put()), 1)
+        app.close()
+
+    def test_needle_lights_refuse_bad_input_without_touching_the_bridge(self) -> None:
+        hue, b = self._hue()
+        app = self._app(hue)
+        for nome, args, frase, msg in (
+                ("set_brightness", {"room": "tenda", "percent": 0}, "tenda a 0", "luminosità da 1 a 100"),
+                ("set_brightness", {"room": "tenda", "percent": 101}, "tenda a 101", "luminosità da 1 a 100"),
+                ("set_brightness", {"room": "tenda", "percent": "tanto"}, "tenda tanto", "luminosità non valida"),
+                ("set_brightness", {"room": "tenda"}, "tenda", "luminosità non valida"),
+                ("set_brightness", {"room": "tenda", "percent": float("inf")}, "tenda", "luminosità non valida"),
+                ("lights_on", {"room": "cucina"}, "accendi la cucina", "stanza sconosciuta: cucina")):
+            self.assertEqual(azioni.esegui(app, nome, args, frase=frase), f"errore: {msg}", (nome, args))
+        self.assertEqual(b.put(), [])
+        app.close()
+
+    def test_needle_lights_need_a_configured_bridge_and_report_a_dead_one(self) -> None:
+        app = self._app(Hue({}))
+        self.assertEqual(azioni.esegui(app, "lights_on", {"room": "tenda"}, frase="accendi la tenda"),
+                         "errore: hue non configurato (--hue-registra)")
+        app.close()
+
+        def morto(metodo: str, percorso: str, corpo: Any) -> Any:
+            raise HueError("bridge non risponde")
+
+        app = self._app(Hue({"bridge": "x", "key": "y"}, send=morto))
+        self.assertEqual(azioni.esegui(app, "lights_off", {"room": "tenda"}, frase="spegni la tenda"),
+                         "errore: bridge non risponde")
+        app.close()
+
+    def test_each_kind_of_function_has_its_own_confidence_threshold(self) -> None:
+        from dash.azioni import categoria
+        self.assertEqual({categoria(n) for n in ("lights_on", "lights_off", "set_brightness")}, {"luci"})
+        self.assertEqual({categoria(n) for n in ("open_home", "get_weather")}, {"pagina"})
+        self.assertEqual({categoria(n) for n in ("start_timer_minutes", "set_alarm", "boh")}, {"stato"})
+
+    # --- registrazione e permessi ------------------------------------------
+    def test_registration_waits_for_the_link_button(self) -> None:
+        risposte = iter([[{"error": {"description": "link button not pressed"}}]] * 2
+                        + [[{"success": {"username": "CHIAVE"}}]])
+        clock = FakeClock()
+        chiamate: list[Any] = []
+
+        def send(metodo: str, percorso: str, corpo: Any) -> Any:
+            chiamate.append((metodo, percorso, corpo))
+            return next(risposte)
+
+        chiave = registra("x", send, attesa_s=30, clock=clock, pausa=lambda s: setattr(clock, "t", clock.t + s))
+        self.assertEqual((chiave, len(chiamate)), ("CHIAVE", 3))
+        self.assertEqual(chiamate[0], ("POST", "", {"devicetype": "pidash#raspberry"}))
+
+    def test_registration_gives_up_and_reports_other_errors(self) -> None:
+        clock = FakeClock()
+        premi = lambda m, p, c: [{"error": {"description": "link button not pressed"}}]
+        with self.assertRaises(HueError):
+            registra("x", premi, attesa_s=5, clock=clock,
+                     pausa=lambda s: setattr(clock, "t", clock.t + s))         # tasto mai premuto
+        with self.assertRaises(HueError) as altro:
+            registra("x", lambda m, p, c: [{"error": {"description": "rate limit"}}], attesa_s=5, clock=clock)
+        self.assertEqual(str(altro.exception), "rate limit")
+
+    def test_registration_command_saves_the_key_privately(self) -> None:
+        import contextlib
+        import io
+        import os
+        from dash.main import registra_hue
+        with tempfile.TemporaryDirectory() as tmp:
+            main = Path(tmp) / "config.json"
+            main.write_text("{}", encoding="utf-8")
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                codice = registra_hue("192.168.1.73", main,
+                                      lambda m, p, c: [{"success": {"username": "CHIAVE-SEGRETA"}}])
+            self.assertEqual(codice, 0)
+            self.assertNotIn("CHIAVE-SEGRETA", out.getvalue())               # mai a video
+            local = Path(tmp) / "config.local.json"
+            self.assertEqual(json.loads(local.read_text(encoding="utf-8"))["hue"],
+                             {"bridge": "192.168.1.73", "key": "CHIAVE-SEGRETA"})
+            if os.name != "nt":
+                self.assertEqual(local.stat().st_mode & 0o777, 0o600)
+
+    def test_saving_settings_keeps_the_permissions_of_the_local_file(self) -> None:
+        import os
+        from dash.config import save_local
+        if os.name == "nt":
+            self.skipTest("permessi POSIX")
+        with tempfile.TemporaryDirectory() as tmp:
+            main = Path(tmp) / "config.json"
+            main.write_text("{}", encoding="utf-8")
+            local = Path(tmp) / "config.local.json"
+            local.write_text('{"hue": {"key": "k"}}', encoding="utf-8")
+            local.chmod(0o600)
+            save_local(main, {"backlight": {"level": 40}})                   # come fa il dashboard
+            self.assertEqual(local.stat().st_mode & 0o777, 0o600)
+            self.assertEqual(json.loads(local.read_text(encoding="utf-8"))["hue"], {"key": "k"})
+
+    def test_hue_config_is_validated(self) -> None:
+        for bad in ({"bridge": 1}, {"key": None}, {"timeout_s": 0}, {"timeout_s": 99}):
+            with self.assertRaises(ConfigError):
+                validate(make_cfg(hue=bad), WIDGET_NAMES)
 
 
 class TestSettings(unittest.TestCase):

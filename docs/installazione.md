@@ -1,6 +1,6 @@
 # pi-dash — Installazione
 
-Versione 0.8.0 · 2026-09-29
+Versione 0.9.0 · 2026-09-29
 
 Guida passo passo per chi è nuovo del Raspberry Pi. Si lavora dal PC Windows: il Raspberry non
 ha bisogno di monitor né di tastiera ("headless"). Le parti in `grassetto monospazio` si scrivono
@@ -322,7 +322,8 @@ dalla rete locale.
 viene eseguita, e in alto nella scheda compare cosa è successo (`→ timer 5' avviato`). La soglia
 dipende dal danno di un errore: 0,6 (`needle.soglia`) per timer e sveglia, che cambiano qualcosa;
 0,35 (`needle.soglia_pagine`) per le funzioni che aprono soltanto una pagina, dove sbagliare costa
-un tocco sulla linguetta giusta. Sotto soglia la scheda scrive "confidenza bassa: non eseguo".
+un tocco sulla linguetta giusta; 0,4 (`needle.soglia_luci`) per le luci, che hanno in più i
+controlli del § 5.10. Sotto soglia la scheda scrive "confidenza bassa: non eseguo".
 
 | Funzione | Effetto |
 |---|---|
@@ -330,6 +331,7 @@ un tocco sulla linguetta giusta. Sotto soglia la scheda scrive "confidenza bassa
 | `set_alarm(time)` | sveglia `HH:MM` **ogni giorno**, salvata in `config.local.json`; la stessa ora non si duplica, al massimo 10; se la pagina Sveglia non c'è la crea |
 | `open_home`, `open_weather`, `open_timer`, `open_alarm`, `open_system`, `open_settings` | apre quella pagina, se c'è |
 | `get_weather(city)` | apre il meteo del luogo del dashboard (altre città non ancora) |
+| `lights_on(room)`, `lights_off(room)`, `set_brightness(room, percent)` | luci Philips Hue di una stanza o di tutta la casa: § 5.10 |
 
 Il modello è piccolo (35 MB): copia i numeri della frase senza convertire le unità e capisce
 l'italiano solo in parte. Per questo ci sono due funzioni per il timer (minuti e secondi) e una
@@ -348,6 +350,41 @@ Per cambiare frasi o indirizzo: sezione `needle` di `config.local.json` (§ 5.7)
 funzioni: `needle/tools.json` (e `dash/azioni.py` per eseguirle), poi
 `sudo systemctl restart needle`. Adattare il modello alle proprie frasi (`needle finetune`) si
 fa su un PC, non sul Pi.
+
+### 5.10 Luci Philips Hue con Needle
+Dopo `+ needle` (§ 5.9) il dashboard può accendere, spegnere e regolare le luci del bridge Hue
+nella rete di casa: "accendi il soggiorno", "spegni tutte le luci", "soppalco al 30 per cento".
+Il modello dice quale stanza; il bridge risponde in meno di un secondo.
+
+1. **Registra PiDash sul bridge**, una volta sola. Sul Raspberry:
+   ```
+   cd ~/pi-dash && .venv/bin/python -m dash --hue-registra
+   ```
+   Premi il grande tasto rotondo del bridge entro 30 secondi. Senza indirizzo cerca il bridge
+   tramite `discovery.meethue.com` (il servizio di Signify vede il tuo IP pubblico); per evitarlo:
+   `--hue-registra 192.168.1.73`. La chiave va in `config.local.json`, che resta a permessi 600,
+   e non viene mai stampata: non è in `config.json`, quindi non finisce su GitHub.
+2. Aggiorna il dashboard e il modello: `~/pi-dash/scripts/aggiorna.sh` (le funzioni delle luci
+   sono in `needle/tools.json`).
+3. Aggiungi le frasi alla scheda, in `config.local.json`, per esempio
+   `"needle": {"queries": ["accendi il soggiorno", "spegni tutte le luci", ...]}` (da 1 a 6).
+
+**Come si riconoscono le stanze.** Il nome detto viene confrontato con le stanze del bridge senza
+accenti né articoli ("la luce del Soppalco" → Soppalco). Se due stanze potrebbero andare bene
+("gaeta" per "Corridoio Gaeta" e "Camera Gaeta") non si indovina: la scheda scrive "stanza
+ambigua". "tutte", "casa" o nessuna stanza vogliono dire tutte le luci. Se le luci della stanza
+non rispondono (spente dall'interruttore) l'esito dice "(non raggiungibili)".
+
+**Controlli di sicurezza.** Il modello piccolo scambia "accendi" con "spegni" (con "accendi tutte
+le luci" ha risposto `lights_off`) e inventa i numeri. Per questo il dashboard non si fida di lui
+su queste due cose:
+- **accendere o spegnere lo decide il verbo della frase** (accendi, attiva · spegni, disattiva):
+  se manca, se ce ne sono di opposti o se c'è una negazione ("non accendere") non si esegue;
+- **la luminosità deve essere scritta nella frase**: "al 50 per cento" va, "abbassa" no.
+
+Con "accendi tutte le luci" si accende davvero tutta la casa: la frase è proprio quella che dici.
+Il bridge è raggiunto in HTTPS senza verificare il certificato (è autofirmato) e solo sulla rete
+locale; se il bridge è spento il dashboard rallenta di `hue.timeout_s` (2 s) e lo dice.
 
 ## 6. Comandi di tutti i giorni
 Nome del servizio: `pi-dash`.

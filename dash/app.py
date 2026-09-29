@@ -18,6 +18,7 @@ from .backlight import Backlight
 from .power import PowerMonitor
 from .config import save_local
 from .display import Display
+from .hue import Hue
 from .inputs import Buzzer, Event, Tap, panel_to_frame
 from .motion import Motion
 from .widgets import ETICHETTE, WIDGET_NAMES, Widget, WidgetFactory
@@ -51,6 +52,7 @@ class App:
         self.events = events
         self.config_path = config_path  # dove salvare le pagine create dalla scheda "+"
         self.factory = WidgetFactory(cfg)
+        self.hue = Hue(cfg.get("hue") or {})   # luci di casa, comandate da Needle
         # la retroilluminazione vera solo sul Pi: nel simulatore si scurisce l'immagine
         bl = dict(cfg.get("backlight") or {})
         if cfg["display"]["driver"] != "fb":
@@ -352,8 +354,8 @@ class App:
                 self.handle(ev, now)
         for widget in list(self.widgets.values()):   # le funzioni di Needle cambiano le pagine
             if isinstance(widget, NeedleWidget):
-                for nome, args in widget.take_calls():
-                    widget.set_esito(azioni.esegui(self, nome, args, widget.naviga))
+                for nome, args, frase in widget.take_calls():
+                    widget.set_esito(azioni.esegui(self, nome, args, widget.naviga, frase))
         for widget in self.widgets.values():
             widget.update(now)
         self.power.sample(now, t)

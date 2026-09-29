@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.9.0 — 2026-09-29
+- **Luci Philips Hue con Needle**: "accendi il soggiorno", "spegni tutte le luci", "soppalco al
+  30 per cento". Funzioni `lights_on`, `lights_off`, `set_brightness` (stanza e percentuale); le
+  stanze sono quelle del bridge, riconosciute senza accenti né articoli, e un nome ambiguo o
+  sconosciuto non si esegue. L'esito dice anche se le luci non sono raggiungibili.
+- Sicurezza: il modello scambiava "accendi" e "spegni", quindi **il verbo della frase decide il
+  verso** e una negazione blocca; **la luminosità deve comparire nel testo**. Soglia propria per le
+  luci (`needle.soglia_luci`, 0,4).
+- `python -m dash --hue-registra [IP]`: registra PiDash sul bridge (tasto premuto entro 30 s) e
+  salva la chiave in `config.local.json`, mai a video. `save_local` conserva i permessi del file
+  (un file nuovo nasce a 600) perché ora contiene la chiave.
+- Config: sezione `hue` (`bridge`, `key`, `timeout_s`), vuota in `config.json`.
+- `needle/tools.json`: 13 funzioni; descrizioni delle luci scritte per il modello (senza, la
+  luminosità veniva scambiata per accendi/spegni).
+
 ## 0.8.0 — 2026-09-29
 - **Needle esegue le funzioni**: la scheda non si limita più a mostrarle. `start_timer_minutes` e
   `start_timer_seconds` impostano e avviano il timer, `set_alarm` aggiunge una sveglia (ogni
