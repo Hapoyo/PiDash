@@ -1,6 +1,6 @@
 # pi-dash — CLAUDE.md
 
-Versione 0.6.1 · 2026-09-27
+Versione 0.7.0 · 2026-09-29
 
 ## 1. Scopo
 Dashboard da tavolo per Raspberry Pi 3 Model B con schermo SPI 3,5" 480×320 (ILI9486 + touch
@@ -37,13 +37,16 @@ dash/astro.py          alba/tramonto calcolati in locale (NOAA semplificato, ±1
 dash/sysinfo.py        CPU/RAM/disco/temperatura/uptime/IP da /proc e /sys
 dash/inputs.py         Event, tastiera (stdin), pulsanti GPIO, touch evdev, cicalino
 dash/display/          base.py, sim.py (PNG + pagina web), fb.py (/dev/fbN)
-dash/widgets/          dati e stato: clock, weather, timer, alarm, system, new (nessun disegno);
+dash/widgets/          dati e stato: clock, weather, timer, alarm, system, needle, new (nessun disegno);
                        calibrate.py = procedura a quattro croci (`TouchWizard`, `solve`)
 docs/                  installazione.md (guida), hardware.md (pin, overlay, SPI), decisioni.md
 fonts/                 Space Grotesk, Space Mono (OFL) + licenze
 scripts/aggiorna.sh    aggiornamento sul Pi: pull, dipendenze, test, riavvio, rollback
 scripts/installa-servizio.sh  installa systemd/pi-dash.service con utente e cartella reali
+scripts/installa-needle.sh    installa systemd/needle.service (servizio del modello Needle)
 systemd/pi-dash.service  avvio automatico (modello: User=pi, /home/pi/pi-dash)
+systemd/needle.service   API locale di Needle sulla porta 8090 (modello: /home/pi/needle)
+needle/tools.json      funzioni che il modello può riconoscere (meteo, timer, sveglia, pagina)
 tests/                 unittest
 ```
 
@@ -61,6 +64,9 @@ tests/                 unittest
 - Installazione sul Raspberry: [docs/installazione.md](docs/installazione.md)
 - Aggiornare il Pi: `~/pi-dash/scripts/aggiorna.sh [--no-test]` (segue il ramo in uso, di norma `main`)
 - Servizio: `scripts/installa-servizio.sh` (mai `sed -i` sul file in Git)
+- Needle (modello per function calling): `scripts/installa-needle.sh [~/needle]`, guida in
+  [docs/installazione.md](docs/installazione.md) § 5.9; provare a mano:
+  `curl -s -X POST localhost:8090/complete -d '{"input":"timer 5 minuti"}'`
 - Calibrazione tocco: Impostazioni → calibra touch; a mano `.venv/bin/python -m dash --touch-debug`
 - Simulatore: un clic sull'anteprima web è un tocco (`POST /tap?x=…&y=…`)
 - Comandi: N pagina seguente · A azione (avvia/ferma timer, spegne sveglia) · B indietro/+preset

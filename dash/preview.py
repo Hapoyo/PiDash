@@ -11,6 +11,7 @@ from PIL import Image
 from .app import App, Page
 from .display import Display
 from .motion import BOOT_S
+from .widgets.needle import NeedleWidget
 from .widgets.new import NewWidget
 from .widgets.system import SystemWidget
 
@@ -37,7 +38,8 @@ SHOT_TIME = datetime(2026, 9, 24, 7, 42)  # istante fisso: anteprime riproducibi
 # Schedario delle anteprime: mostra ogni tipo di pagina, comprese quelle da aggiungere col "+".
 SHOT_PAGES = [{"name": "Home", "widget": "clock"}, {"name": "Meteo", "widget": "weather"},
               {"name": "Timer", "widget": "timer"}, {"name": "Sveglia", "widget": "alarm"},
-              {"name": "Sistema", "widget": "system"}, {"name": "+", "widget": "new"}]
+              {"name": "Sistema", "widget": "system"}, {"name": "Needle", "widget": "needle"},
+              {"name": "+", "widget": "new"}]
 
 
 def _slug(page: Page) -> str:
@@ -98,6 +100,8 @@ def save_system_screens(cfg: dict[str, Any], out_dir: Path, now: datetime = SHOT
 
     try:
         for widget in app.widgets.values():
+            if isinstance(widget, NeedleWidget):
+                widget.load_demo()  # niente controllo di rete nelle anteprime
             widget.update(now)
         save("avvio.png", effects.boot(w, h, unit(w, h), app.renderer.c, app, 0.8))
         app.page_idx = next(i for i, p in enumerate(app.pages) if p.kind == "new")
@@ -131,6 +135,8 @@ def save_screenshots(cfg: dict[str, Any], out_dir: Path, now: datetime = SHOT_TI
     try:
         for widget in app.widgets.values():
             if isinstance(widget, SystemWidget):
+                widget.load_demo()
+            if isinstance(widget, NeedleWidget):
                 widget.load_demo()
             if isinstance(widget, NewWidget):
                 widget.pagine = dict  # anteprima: catalogo nello stato iniziale (tutto da aggiungere)

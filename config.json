@@ -109,10 +109,22 @@
       "debug": false
     }
   },
+  "needle": {
+    "url": "http://127.0.0.1:8090",
+    "timeout_s": 15,
+    "reset": true,
+    "queries": [
+      "meteo a ventotene",
+      "timer 5 minuti",
+      "sveglia alle 7:30",
+      "apri sistema"
+    ]
+  },
   "new": {
     "tipi": [
       "timer",
-      "alarm"
+      "alarm",
+      "needle"
     ]
   },
   "motion": {

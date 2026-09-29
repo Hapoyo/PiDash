@@ -1,6 +1,6 @@
 # pi-dash — Installazione
 
-Versione 0.6.1 · 2026-09-27
+Versione 0.7.0 · 2026-09-29
 
 Guida passo passo per chi è nuovo del Raspberry Pi. Si lavora dal PC Windows: il Raspberry non
 ha bisogno di monitor né di tastiera ("headless"). Le parti in `grassetto monospazio` si scrivono
@@ -293,6 +293,36 @@ cgps     # deve comparire un fix con latitudine e longitudine (serve il cielo ap
 ```
 Se non vuoi nessuna ricerca automatica: `"location": {"mode": "fixed"}` in `config.local.json`.
 
+### 5.9 Needle: modello locale per function calling
+[Needle](https://github.com/cactus-compute/needle) è un modello da 35 MB che trasforma una frase
+("timer 5 minuti") nella chiamata a una funzione (`start_timer(minutes=5)`). Non è un chatbot: gira
+sul Raspberry Pi 3 in circa 2 s a frase, con 75 MB di RAM e senza rete. Le funzioni che conosce
+sono in `needle/tools.json`. Il servizio ascolta solo su `127.0.0.1:8090`: non è raggiungibile
+dalla rete locale.
+
+1. Scarica il runtime e il modello per Raspberry (ARM 64 bit), una volta sola:
+   ```
+   python3 -m venv ~/needle-env && ~/needle-env/bin/pip install cactus-needle
+   ~/needle-env/bin/needle download linux-arm64 --out ~/needle
+   ```
+2. Installa e avvia il servizio, come per il dashboard:
+   ```
+   ~/pi-dash/scripts/installa-needle.sh ~/needle
+   ```
+   Lo script scrive `/etc/systemd/system/needle.service` con il tuo utente e le cartelle vere,
+   abilita l'avvio automatico e riavvia il servizio. Limite di memoria: 300 MB.
+3. Prova: `curl -s -X POST localhost:8090/complete -d '{"input":"timer 5 minuti"}'` risponde con
+   `function_calls`, `confidence` e i tempi. Controllo: `systemctl status needle`.
+4. Nelle Impostazioni tocca `+ needle`: compare la scheda **Needle**, con lo stato del servizio
+   (pronto, penso…, offline) e quattro bottoni, uno per frase di `needle.queries`. Il tocco invia
+   la frase e mostra la funzione riconosciuta con la confidenza. Con i pulsanti GPIO: B sceglie la
+   frase, A la invia.
+
+Per cambiare frasi o indirizzo: sezione `needle` di `config.local.json` (§ 5.7). Per cambiare le
+funzioni: `needle/tools.json`, poi `sudo systemctl restart needle`. La scheda oggi **mostra** cosa
+il modello ha capito; eseguire davvero la funzione (avviare il timer, cambiare pagina) è il passo
+successivo. Adattare il modello alle proprie frasi (`needle finetune`) si fa su un PC, non sul Pi.
+
 ## 6. Comandi di tutti i giorni
 Nome del servizio: `pi-dash`.
 
@@ -380,6 +410,7 @@ Se continui a installare dallo zip:
 | `aggiorna.sh`: "test falliti" o "configurazione non valida" | la versione precedente è già ripristinata; manda l'output a chi sviluppa |
 | Schermo acceso ma dashboard assente | `sudo journalctl -u pi-dash -n 50` e leggi l'ultimo errore |
 | Tocco nel punto sbagliato | Impostazioni → calibra touch (§ 5.4) |
+| Scheda Needle "offline" | `systemctl status needle`; se manca, `scripts/installa-needle.sh` (§ 5.9); log: `sudo journalctl -u needle -n 50` |
 | "spegni non consentito" | lancia `scripts/installa-servizio.sh` (installa la regola per lo spegnimento) |
 | Località sbagliata (es. Lavinio invece di Gaeta) | posizione da IP: § 5.8 (Wi-Fi, GPS o coordinate fisse) |
 | Orario sbagliato | serve la rete all'avvio; controlla il fuso con `timedatectl` (deve dire Europe/Rome) |

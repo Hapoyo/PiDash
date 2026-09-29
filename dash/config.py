@@ -22,7 +22,10 @@ DEFAULTS: dict[str, Any] = {
     "timer": {"presets_s": [60, 300, 600], "step_s": 10, "labels": {}},
     "alarm": {"ring_max_min": 10, "alarms": []},
     "pages": [{"name": "Home", "widget": "clock"}],
-    "new": {"tipi": ["timer", "alarm"]},
+    "needle": {"url": "http://127.0.0.1:8090", "timeout_s": 15, "reset": True,
+               "queries": ["meteo a ventotene", "timer 5 minuti", "sveglia alle 7:30",
+                           "apri sistema"]},
+    "new": {"tipi": ["timer", "alarm", "needle"]},
     "motion": {"livello": "pieno", "fps": 8, "avvio": True},
     "backlight": {"level": 100, "mode": "auto"},
     "power": {"cmd": ["sudo", "-n", "/usr/bin/systemctl", "poweroff"], "monitor": True,
@@ -80,6 +83,12 @@ def validate(cfg: dict[str, Any], known_widgets: set[str]) -> None:
         raise ConfigError("motion.livello deve essere 'off', 'eventi' o 'pieno'")
     if not isinstance(mo.get("fps"), (int, float)) or not 1 <= mo["fps"] <= 30:
         raise ConfigError("motion.fps deve essere un numero fra 1 e 30")
+    nd = cfg["needle"]
+    if not str(nd.get("url", "")).startswith("http://"):
+        raise ConfigError("needle.url deve essere un indirizzo http:// (il servizio è locale)")
+    qs = nd.get("queries")
+    if not isinstance(qs, list) or not 1 <= len(qs) <= 6 or not all(isinstance(q, str) for q in qs):
+        raise ConfigError("needle.queries deve essere una lista da 1 a 6 frasi")
     if cfg["clock"]["progress"] not in ("day", "daylight", "hour"):
         raise ConfigError("clock.progress deve essere 'day', 'daylight' o 'hour'")
     if not cfg["pages"]:
