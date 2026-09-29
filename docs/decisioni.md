@@ -1,6 +1,6 @@
 # pi-dash — Decisioni di progetto
 
-Versione 0.7.0 · 2026-09-29
+Versione 0.8.0 · 2026-09-29
 
 Scelte prese e motivi. Da leggere prima di cambiare il comportamento di una parte;
 le regole operative stanno in [CLAUDE.md](../CLAUDE.md).
@@ -12,9 +12,23 @@ le regole operative stanno in [CLAUDE.md](../CLAUDE.md).
   `127.0.0.1:8090` (il binario non ha autenticazione), quindi pi-dash lo raggiunge in locale e la
   LAN no. Il widget non blocca mai il disegno: controllo TCP ogni 5 s e richieste a `/complete` in
   thread; `POST /reset` prima di ogni frase (`needle.reset`), altrimenti il server accumula i
-  turni in un'unica conversazione. La scheda è opzionale (catalogo del "+", `new.tipi`) e mostra
-  la funzione riconosciuta senza eseguirla: le funzioni di `needle/tools.json` non sono ancora
-  collegate a timer, sveglia e pagine.
+  turni in un'unica conversazione. La scheda è opzionale (catalogo del "+", `new.tipi`).
+- Azioni di Needle (`dash/azioni.py`): il modello propone, il dashboard decide. Il thread della
+  richiesta non tocca mai il dashboard: mette le chiamate in coda (`NeedleWidget.take_calls`) e le
+  esegue `App.step` nel ciclo principale, dove si cambiano pagine e widget. Solo le funzioni di
+  `AZIONI` (timer, sveglia, apri pagina, meteo), argomenti controllati prima di creare o cambiare
+  qualcosa, e nessuna funzione irreversibile (niente spegnimento). Sotto `needle.soglia` (0,6) non
+  si esegue. Le funzioni sono disegnate sul modello, misurato sul Pi con 17 frasi italiane: con
+  `start_timer(minutes)` e `show_page(page)` "timer di 90 secondi" avviava 90 minuti (confidenza
+  0,71) e "apri sistema" non veniva riconosciuto; con una funzione per unità di tempo e una senza
+  argomenti per pagina le frasi giuste passano da 10 a 12 su 17 e l'unità è sempre corretta. La
+  confidenza non è tarata sull'italiano e per le funzioni senza argomenti è bassa anche quando
+  la scelta è giusta (0,38–0,59), mentre timer e sveglia stanno fra 0,8 e 0,95. Due soglie, in base
+  al danno di un errore: 0,6 per ciò che cambia lo stato (timer, sveglia), 0,35 per ciò che apre
+  solo una pagina (`azioni.solo_pagina`). Con 0,6 per tutto i comandi di navigazione non
+  funzionerebbero quasi mai; con 0,35 per tutto un timer sbagliato partirebbe. La sveglia è ogni giorno (le sveglie non hanno ancora un "una volta sola") e non si
+  toglie dallo schermo, quindi al massimo 10 e mai duplicate. Frasi di prova senza sveglie: un
+  tocco di curiosità non deve programmare la sveglia di domani.
 - Schedario: una linguetta numerata per pagina. Le pagine precedenti restano in pila in alto, le
   successive in pila in basso; la cartella aperta parte dalla propria linguetta. Geometria unica in
   `render/folders.layout(w, h, n, current)`, usata sia dal disegno sia dal tocco.

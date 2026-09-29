@@ -13,7 +13,7 @@ from typing import Any
 
 from PIL import Image
 
-from . import __version__
+from . import __version__, azioni
 from .backlight import Backlight
 from .power import PowerMonitor
 from .config import save_local
@@ -21,7 +21,9 @@ from .display import Display
 from .inputs import Buzzer, Event, Tap, panel_to_frame
 from .motion import Motion
 from .widgets import ETICHETTE, WIDGET_NAMES, Widget, WidgetFactory
+from .widgets.alarm import AlarmWidget
 from .widgets.calibrate import TouchWizard
+from .widgets.needle import NeedleWidget
 from .widgets.new import NewWidget
 
 log = logging.getLogger("dash")
@@ -128,6 +130,28 @@ class App:
         self._new_page(kind, name, at)
         self.page_idx = at
         self._save_pages()
+
+    def find_page(self, kind: str) -> Page | None:
+        """La prima pagina del tipo dato, se c'è."""
+        return next((p for p in self.pages if p.kind == kind), None)
+
+    def open_kind(self, kind: str) -> bool:
+        """Apre la prima pagina del tipo dato; False se non c'è."""
+        idx = next((i for i, p in enumerate(self.pages) if p.kind == kind), None)
+        if idx is not None:
+            self._goto(idx)
+        return idx is not None
+
+    def restore_page(self, page: Page) -> None:
+        """Torna a una pagina già aperta (dopo che un'azione ne ha creata un'altra)."""
+        idx = next((i for i, p in enumerate(self.pages) if p is page), None)
+        if idx is not None:
+            self._goto(idx)
+
+    def save_alarms(self, widget: AlarmWidget) -> None:
+        """Salva le sveglie in config.local.json, così sopravvivono al riavvio."""
+        self.cfg["alarm"]["alarms"] = [a.to_cfg() for a in widget.alarms]
+        self._save_local({"alarm": {"alarms": self.cfg["alarm"]["alarms"]}}, "sveglie")
 
     def remove_page(self, key: str) -> None:
         """Toglie una pagina creata in precedenza; l'ultima rimasta non si può togliere."""
@@ -326,6 +350,10 @@ class App:
                 self.handle_tap(ev, now)
             else:
                 self.handle(ev, now)
+        for widget in list(self.widgets.values()):   # le funzioni di Needle cambiano le pagine
+            if isinstance(widget, NeedleWidget):
+                for nome, args in widget.take_calls():
+                    widget.set_esito(azioni.esegui(self, nome, args, widget.naviga))
         for widget in self.widgets.values():
             widget.update(now)
         self.power.sample(now, t)

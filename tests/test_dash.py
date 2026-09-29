@@ -13,6 +13,7 @@ from pathlib import Path
 
 from PIL import Image, ImageChops
 
+from dash import azioni
 from dash.config import DEFAULTS, ConfigError, _merge, validate
 from dash.display.base import Display
 from dash.inputs import Event, Tap
@@ -806,7 +807,8 @@ class TestNeedle(unittest.TestCase):
         app.close()
 
     def test_config_rejects_a_bad_url_or_empty_phrases(self) -> None:
-        for bad in ({"url": "https://x"}, {"queries": []}, {"queries": ["a"] * 7}):
+        for bad in ({"url": "https://x"}, {"queries": []}, {"queries": ["a"] * 7},
+                    {"soglia": 1.5}, {"soglia_pagine": "bassa"}):
             with self.assertRaises(ConfigError):
                 validate(make_cfg(needle=bad), WIDGET_NAMES)
 
@@ -815,10 +817,175 @@ class TestNeedle(unittest.TestCase):
         radice = Path(__file__).parent.parent
         tools = json.loads((radice / "needle" / "tools.json").read_text(encoding="utf-8"))
         self.assertTrue(all({"name", "description", "parameters"} <= set(t) for t in tools))
+        # il modello può proporre solo ciò che il dashboard sa eseguire, e viceversa
+        self.assertEqual({t["name"] for t in tools}, set(azioni.AZIONI))
         unit = (radice / "systemd" / "needle.service").read_text(encoding="utf-8")
         porta = DEFAULTS["needle"]["url"].rsplit(":", 1)[1]
         self.assertIn(f"--serve --port {porta}", unit)
         self.assertIn("/home/pi/pi-dash/needle/tools.json", unit)  # lo script sostituisce il percorso
+
+
+class TestNeedleActions(unittest.TestCase):
+    """Le funzioni riconosciute da Needle diventano azioni del dashboard, con argomenti controllati."""
+
+    NOW = datetime(2026, 9, 24, 7, 42)
+
+    def _app(self, tmp: str, pages: list[dict[str, str]] | None = None, **needle: Any) -> App:
+        main = Path(tmp) / "config.json"
+        main.write_text("{}", encoding="utf-8")
+        cfg = make_cfg(pages=pages or [{"name": "Home", "widget": "clock"},
+                                       {"name": "+", "widget": "new"}], needle=needle)
+        return App(cfg, MemDisplay(480, 320), queue.Queue(), config_path=main)
+
+    def _saved(self, tmp: str) -> dict[str, Any]:
+        return json.loads((Path(tmp) / "config.local.json").read_text(encoding="utf-8"))
+
+    def test_start_timer_creates_the_page_and_runs_it(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            app = self._app(tmp)
+            self.assertEqual(azioni.esegui(app, "start_timer_minutes", {"minutes": 5}),
+                             "timer 5' avviato")
+            timer = app.find_page("timer")
+            assert timer is not None
+            self.assertIs(timer.widget.state, TimerState.RUNNING)
+            self.assertEqual(timer.widget.shown_remaining(), 300)
+            self.assertIs(app.page, timer)                                  # si apre la pagina
+            self.assertEqual([p["widget"] for p in self._saved(tmp)["pages"]],
+                             ["clock", "timer", "new"])                     # e resta al riavvio
+            app.close()
+
+    def test_without_navigation_the_current_page_stays_open(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            app = self._app(tmp)
+            start = app.page
+            azioni.esegui(app, "start_timer_minutes", {"minutes": 2.5}, naviga=False)
+            self.assertIs(app.page, start)
+            timer = app.find_page("timer")
+            assert timer is not None
+            self.assertEqual(timer.widget.shown_remaining(), 150)
+            app.close()
+
+    def test_seconds_and_minutes_are_separate_functions(self) -> None:
+        """Il modello copia il numero senza convertire: l'unità la decide la funzione scelta."""
+        with tempfile.TemporaryDirectory() as tmp:
+            app = self._app(tmp)
+            self.assertEqual(azioni.esegui(app, "start_timer_seconds", {"seconds": 90}),
+                             "timer 1'30\" avviato")
+            timer = app.find_page("timer")
+            assert timer is not None
+            self.assertEqual(timer.widget.shown_remaining(), 90)
+            self.assertEqual(azioni.esegui(app, "start_timer_seconds", {"seconds": 30}),
+                             "timer 30\" avviato")
+            self.assertEqual(timer.widget.shown_remaining(), 30)                # sostituisce
+            self.assertEqual(azioni.esegui(app, "start_timer_minutes", {"minutes": 1.5}),
+                             "timer 1'30\" avviato")
+            app.close()
+
+    def test_set_alarm_adds_saves_and_does_not_duplicate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            app = self._app(tmp)
+            self.assertEqual(azioni.esegui(app, "set_alarm", {"time": "7:30"}),
+                             "sveglia 07:30 ogni giorno")
+            azioni.esegui(app, "set_alarm", {"time": "07:30"})
+            alarm = app.find_page("alarm")
+            assert alarm is not None
+            self.assertEqual(len(alarm.widget.alarms), 1)
+            self.assertEqual(self._saved(tmp)["alarm"]["alarms"],
+                             [{"time": "07:30", "days": [0, 1, 2, 3, 4, 5, 6], "enabled": True}])
+            app.close()
+
+    def test_bad_arguments_change_nothing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            app = self._app(tmp)
+            for nome, args in (("start_timer_minutes", {"minutes": 0}),
+                               ("start_timer_minutes", {"minutes": -3}),
+                               ("start_timer_minutes", {"minutes": "boh"}),
+                               ("start_timer_minutes", {}),
+                               ("start_timer_minutes", {"minutes": float("nan")}),
+                               ("start_timer_minutes", {"minutes": 1000}),
+                               ("start_timer_seconds", {"seconds": 0}),
+                               ("start_timer_seconds", {"seconds": 0.2}),
+                               ("set_alarm", {"time": "25:00"}), ("set_alarm", {"time": "mattina"}),
+                               ("set_alarm", {}), ("open_timer", {})):
+                self.assertTrue(azioni.esegui(app, nome, args).startswith("errore"), (nome, args))
+            self.assertEqual([p.kind for p in app.pages], ["clock", "new"])  # nessuna pagina creata
+            self.assertFalse((Path(tmp) / "config.local.json").exists())
+            app.close()
+
+    def test_open_functions_open_only_existing_pages(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            app = self._app(tmp)
+            self.assertEqual(azioni.esegui(app, "open_settings", {}), "apro impostazioni")
+            self.assertEqual(app.page.kind, "new")
+            self.assertEqual(azioni.esegui(app, "open_home", {}), "apro home")
+            self.assertEqual(app.page.kind, "clock")
+            self.assertEqual(azioni.esegui(app, "open_timer", {}),
+                             "errore: pagina timer non presente")
+            self.assertEqual(azioni.esegui(app, "spegni", {}), "funzione non prevista: spegni")
+            self.assertEqual(azioni.esegui(app, "poweroff", {}), "funzione non prevista: poweroff")
+            app.close()
+
+    def _needle_app(self, tmp: str, confidenza: float, calls: list[dict[str, Any]] | None = None,
+                    **needle: Any) -> tuple[App, NeedleWidget]:
+        app = self._app(tmp, [{"name": "Home", "widget": "clock"},
+                              {"name": "Needle", "widget": "needle"},
+                              {"name": "+", "widget": "new"}], **needle)
+        app.page_idx = 1
+        w = app.page.widget
+        assert isinstance(w, NeedleWidget)
+        w.load_demo()  # servizio "acceso" e nessun controllo di rete durante il test
+        chiamate = calls or [{"name": "start_timer_minutes", "arguments": {"minutes": 5}}]
+        w._post = lambda url, payload, timeout: (
+            {} if url.endswith("/reset") else
+            {"success": True, "confidence": confidenza, "function_calls": chiamate})
+        return app, w
+
+    def test_recognised_call_runs_in_the_main_loop_and_reports_the_outcome(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            app, w = self._needle_app(tmp, 0.95)
+            w.ask(1)
+            TestNeedle._wait(w)
+            self.assertIsNone(app.find_page("timer"))         # il thread non tocca il dashboard
+            app.step(self.NOW, 0.0, animate=False)
+            self.assertIsNotNone(app.find_page("timer"))
+            self.assertEqual(app.page.kind, "timer")
+            self.assertEqual(w.snapshot()[2].esito, "timer 5' avviato")
+            app.step(self.NOW, 0.5, animate=False)           # niente esecuzioni doppie
+            self.assertEqual(len([p for p in app.pages if p.kind == "timer"]), 1)
+            app.close()
+
+    def test_low_confidence_is_not_executed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            app, w = self._needle_app(tmp, 0.3)
+            w.ask(1)
+            TestNeedle._wait(w)
+            app.step(self.NOW, 0.0, animate=False)
+            self.assertIsNone(app.find_page("timer"))
+            self.assertEqual(w.snapshot()[2].esito, "confidenza bassa: non eseguo")
+            app.close()
+
+    def test_opening_a_page_needs_less_confidence_than_changing_state(self) -> None:
+        """Sbagliare pagina costa un tocco, sbagliare un timer o una sveglia no."""
+        with tempfile.TemporaryDirectory() as tmp:
+            app, w = self._needle_app(tmp, 0.4, calls=[
+                {"name": "start_timer_minutes", "arguments": {"minutes": 5}},
+                {"name": "open_home", "arguments": {}}])
+            w.ask(0)
+            TestNeedle._wait(w)
+            app.step(self.NOW, 0.0, animate=False)
+            self.assertIsNone(app.find_page("timer"))                  # 0,4 < 0,6: non si esegue
+            self.assertEqual((app.page.kind, w.snapshot()[2].esito), ("clock", "apro home"))
+            app.close()
+
+    def test_execution_can_be_turned_off(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            app, w = self._needle_app(tmp, 0.95, esegui=False)
+            w.ask(1)
+            TestNeedle._wait(w)
+            app.step(self.NOW, 0.0, animate=False)
+            self.assertIsNone(app.find_page("timer"))
+            self.assertEqual(w.snapshot()[2].esito, "")
+            app.close()
 
 
 class TestSettings(unittest.TestCase):

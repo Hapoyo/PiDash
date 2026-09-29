@@ -1,6 +1,6 @@
 # pi-dash — CLAUDE.md
 
-Versione 0.7.0 · 2026-09-29
+Versione 0.8.0 · 2026-09-29
 
 ## 1. Scopo
 Dashboard da tavolo per Raspberry Pi 3 Model B con schermo SPI 3,5" 480×320 (ILI9486 + touch
@@ -29,6 +29,7 @@ dash/render/           tutto il disegno
                        `calibrate.py` schermo della calibrazione del touch
   effects.py           animazioni sopra la base, sequenza di avvio, riquadro di allarme
   renderer.py          CyberRenderer: `render` (pagina base) e `compose` (fotogramma animato)
+dash/azioni.py         funzioni di Needle eseguibili (`AZIONI`): timer, sveglia, pagina, meteo
 dash/layout.py         Box e nomi di giorni/mesi
 dash/location.py       posizione condivisa: "auto" (GPS → Wi-Fi → IP), "ip", "city", "fixed"
 dash/backlight.py      luminosità: /sys/class/backlight se regolabile, altrimenti immagine scurita
