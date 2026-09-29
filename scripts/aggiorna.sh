@@ -83,4 +83,14 @@ if systemctl cat pi-dash >/dev/null 2>&1; then
 else
     info "servizio non installato: avvio automatico con scripts/installa-servizio.sh"
 fi
+# 5. Needle, se installato: il file del servizio si reinstalla a mano (serve la cartella del modello),
+# le funzioni nuove basta ricaricarle
+if systemctl cat needle >/dev/null 2>&1; then
+    if ! git diff --quiet "$OLD" HEAD -- systemd/needle.service; then
+        info "il file del servizio needle è cambiato: rilancia scripts/installa-needle.sh"
+    elif ! git diff --quiet "$OLD" HEAD -- needle/tools.json; then
+        info "le funzioni di needle sono cambiate: riavvio needle"
+        sudo systemctl restart needle
+    fi
+fi
 info "aggiornato a $(git log -1 --format='%h %s') · versione $("$PY" -m dash --version | cut -d' ' -f2)"

@@ -1,0 +1,19 @@
+# Non copiarlo a mano: scripts/installa-needle.sh mette utente e cartelle giuste.
+[Unit]
+Description=needle: modello per function calling (API locale per pi-dash)
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/needle
+# scarica il runtime con `needle download linux-arm64` (vedi docs/installazione.md, § 5.9)
+ExecStart=/home/pi/needle/needle --model /home/pi/needle/needle3.cact --tools /home/pi/pi-dash/needle/tools.json --serve --port 8090
+Environment=NEEDLE_TELEMETRY=0
+# il Pi 3 ha 1 GB: il modello usa circa 75 MB, il limite protegge pi-dash da un'impennata
+MemoryMax=300M
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

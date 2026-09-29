@@ -1,0 +1,50 @@
+[
+  {
+    "name": "get_weather",
+    "description": "Get the current weather and wind for a place.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "city": {"type": "string", "description": "Place name, e.g. Ventotene"}
+      },
+      "required": ["city"]
+    }
+  },
+  {
+    "name": "start_timer",
+    "description": "Start a countdown timer, for example the 5 minute regatta start sequence.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "minutes": {"type": "number", "description": "Length of the countdown in minutes"}
+      },
+      "required": ["minutes"]
+    }
+  },
+  {
+    "name": "set_alarm",
+    "description": "Set an alarm clock at a given time of day.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "time": {"type": "string", "description": "Time of day in 24 hour HH:MM format"}
+      },
+      "required": ["time"]
+    }
+  },
+  {
+    "name": "show_page",
+    "description": "Open a page of the dashboard.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "page": {
+          "type": "string",
+          "enum": ["home", "weather", "timer", "alarm", "system", "settings"],
+          "description": "Which page to show"
+        }
+      },
+      "required": ["page"]
+    }
+  }
+]
