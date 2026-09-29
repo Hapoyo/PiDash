@@ -22,8 +22,10 @@ DEFAULTS: dict[str, Any] = {
     "timer": {"presets_s": [60, 300, 600], "step_s": 10, "labels": {}},
     "alarm": {"ring_max_min": 10, "alarms": []},
     "pages": [{"name": "Home", "widget": "clock"}],
+    "hue": {"bridge": "", "key": "", "timeout_s": 2},
     "needle": {"url": "http://127.0.0.1:8090", "timeout_s": 15, "reset": True,
-               "esegui": True, "soglia": 0.6, "soglia_pagine": 0.35, "naviga": True,
+               "esegui": True, "soglia": 0.6, "soglia_pagine": 0.35, "soglia_luci": 0.4,
+               "naviga": True,
                "queries": ["meteo a ventotene", "timer 5 minuti", "apri la pagina sistema",
                            "vai alla home"]},
     "new": {"tipi": ["timer", "alarm", "needle"]},
@@ -84,10 +86,15 @@ def validate(cfg: dict[str, Any], known_widgets: set[str]) -> None:
         raise ConfigError("motion.livello deve essere 'off', 'eventi' o 'pieno'")
     if not isinstance(mo.get("fps"), (int, float)) or not 1 <= mo["fps"] <= 30:
         raise ConfigError("motion.fps deve essere un numero fra 1 e 30")
+    hue = cfg["hue"]
+    if not isinstance(hue.get("bridge"), str) or not isinstance(hue.get("key"), str):
+        raise ConfigError("hue.bridge e hue.key devono essere stringhe (vuote se Hue non si usa)")
+    if not isinstance(hue.get("timeout_s"), (int, float)) or not 0.5 <= hue["timeout_s"] <= 30:
+        raise ConfigError("hue.timeout_s deve essere un numero fra 0,5 e 30")
     nd = cfg["needle"]
     if not str(nd.get("url", "")).startswith("http://"):
         raise ConfigError("needle.url deve essere un indirizzo http:// (il servizio è locale)")
-    for chiave in ("soglia", "soglia_pagine"):
+    for chiave in ("soglia", "soglia_pagine", "soglia_luci"):
         if not isinstance(nd.get(chiave), (int, float)) or not 0 <= nd[chiave] <= 1:
             raise ConfigError(f"needle.{chiave} deve essere un numero fra 0 e 1")
     qs = nd.get("queries")
@@ -143,6 +150,8 @@ def save_local(path: str | Path, changes: dict[str, Any]) -> Path:
     data = _merge(_read_json(local) if local.exists() else {}, changes)
     tmp = local.with_suffix(f"{local.suffix}.tmp")
     tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    # può contenere la chiave del bridge Hue: un file nuovo nasce 600, uno esistente conserva i permessi
+    tmp.chmod(local.stat().st_mode & 0o777 if local.exists() else 0o600)
     tmp.replace(local)  # sostituzione atomica: niente file mezzo scritto se manca corrente
     return local
 

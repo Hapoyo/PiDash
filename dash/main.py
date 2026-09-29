@@ -12,7 +12,8 @@ from typing import Any
 
 from . import __version__
 from .app import App
-from .config import ConfigError, load_config
+from .config import ConfigError, load_config, save_local
+from .hue import LINK_TIMEOUT_S, HueError, registra, scopri
 from .display import make_display
 from .inputs import Event, Tap, start_gpio, start_keyboard, start_touch
 from .preview import save_animation, save_screenshots, save_system_screens
@@ -32,12 +33,30 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--demo", action="store_true", help="meteo con dati finti (offline)")
     p.add_argument("--screenshots", type=Path, metavar="DIR",
                    help="salva l'anteprima di ogni pagina e la GIF animata in DIR ed esci")
+    p.add_argument("--hue-registra", nargs="?", const="", metavar="IP",
+                   help="registra PiDash sul bridge Hue (premi il suo tasto) e salva la chiave "
+                        "in config.local.json; senza IP lo cerca in rete")
     p.add_argument("--motion", choices=("off", "eventi", "pieno"),
                    help="sovrascrive motion.livello (animazioni)")
     p.add_argument("--web", type=int, help="porta del simulatore web (0 = off)")
     p.add_argument("-v", "--verbose", action="store_true")
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     return p.parse_args(argv)
+
+
+def registra_hue(bridge: str, config: Path, send: Any = None) -> int:
+    """Chiede al bridge una chiave e la scrive in config.local.json (mai a video né nei log)."""
+    try:
+        bridge = bridge or scopri()
+        print(f"premi il tasto rotondo del bridge Hue {bridge}: hai {int(LINK_TIMEOUT_S)} secondi…",
+              flush=True)
+        key = registra(bridge, send)
+        save_local(config, {"hue": {"bridge": bridge, "key": key}})
+    except (HueError, OSError) as exc:
+        log.error("hue: %s", exc)
+        return 4
+    print("PiDash registrato: chiave salvata in config.local.json")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -56,6 +75,8 @@ def main(argv: list[str] | None = None) -> int:
     except ConfigError as exc:
         log.error("configurazione: %s", exc)
         return 2
+    if args.hue_registra is not None:
+        return registra_hue(args.hue_registra or cfg["hue"].get("bridge") or "", args.config)
     if args.screenshots:
         try:
             for path in save_screenshots(copy.deepcopy(cfg), args.screenshots):

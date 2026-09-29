@@ -1,6 +1,6 @@
 # pi-dash — Decisioni di progetto
 
-Versione 0.8.0 · 2026-09-29
+Versione 0.9.0 · 2026-09-29
 
 Scelte prese e motivi. Da leggere prima di cambiare il comportamento di una parte;
 le regole operative stanno in [CLAUDE.md](../CLAUDE.md).
@@ -13,6 +13,18 @@ le regole operative stanno in [CLAUDE.md](../CLAUDE.md).
   LAN no. Il widget non blocca mai il disegno: controllo TCP ogni 5 s e richieste a `/complete` in
   thread; `POST /reset` prima di ogni frase (`needle.reset`), altrimenti il server accumula i
   turni in un'unica conversazione. La scheda è opzionale (catalogo del "+", `new.tipi`).
+- Luci Hue (`dash/hue.py`, funzioni `lights_on/off` e `set_brightness` in `azioni.py`): API v1 del
+  bridge su HTTPS, che basta per stanze e luminosità; certificato autofirmato non verificato (rete
+  locale, indirizzo scritto in configurazione), chiave solo in `config.local.json` a 600
+  (`save_local` ne conserva i permessi) e mai in URL di errore, log o schermo. Una funzione per
+  stanza sarebbe troppe funzioni per il modello: il nome della stanza è un argomento testuale,
+  confrontato dal dashboard con le stanze vere senza indovinare (esatta, poi parziale se unica,
+  altrimenti "ambigua"). Provato sul modello con 16 frasi: la stanza è sempre giusta, il verso no
+  ("accendi tutte le luci" → `lights_off`) e la confidenza sta fra 0,4 e 0,6 anche per risposte
+  corrette. Perciò il verbo della frase decide accendere o spegnere, la negazione blocca, la
+  luminosità deve essere nel testo, e le luci hanno una soglia propria (0,4) invece di 0,6.
+  Chiamate sincrone con timeout di 2 s: un bridge spento rallenta il dashboard, non lo blocca; un
+  thread avrebbe complicato l'esito mostrato in scheda per un caso raro.
 - Azioni di Needle (`dash/azioni.py`): il modello propone, il dashboard decide. Il thread della
   richiesta non tocca mai il dashboard: mette le chiamate in coda (`NeedleWidget.take_calls`) e le
   esegue `App.step` nel ciclo principale, dove si cambiano pagine e widget. Solo le funzioni di

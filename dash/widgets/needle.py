@@ -93,8 +93,9 @@ class NeedleWidget(Widget):
         self.esegui = bool(cfg.get("esegui", True))   # False: la scheda mostra e basta
         self.soglia = float(cfg.get("soglia", 0.6))   # sotto questa confidenza non si esegue
         self.soglia_pagine = float(cfg.get("soglia_pagine", 0.35))  # come sopra, se apre solo una pagina
+        self.soglia_luci = float(cfg.get("soglia_luci", 0.4))       # e per le luci (con controlli sul testo)
         self.naviga = bool(cfg.get("naviga", True))   # dopo l'azione si apre la pagina interessata
-        self._pending: list[tuple[str, dict[str, Any]]] = []
+        self._pending: list[tuple[str, dict[str, Any], str]] = []
         self.idx = 0
         self._clock = clock
         self._post = post
@@ -184,22 +185,23 @@ class NeedleWidget(Widget):
             risposta, calls = Risposta(domanda, errore="servizio non risponde"), []
         if calls and self.esegui:
             conf = risposta.confidenza if risposta.confidenza is not None else 0.0
-            sicure = [c for c in calls
-                      if conf >= (self.soglia_pagine if azioni.solo_pagina(c[0]) else self.soglia)]
+            soglie = {"pagina": self.soglia_pagine, "luci": self.soglia_luci, "stato": self.soglia}
+            sicure = [c for c in calls if conf >= soglie[azioni.categoria(c[0])]]
             if not sicure:
                 risposta = replace(risposta, esito="confidenza bassa: non eseguo")
             calls = sicure
         else:
             calls = []
         with self._lock:
-            self._pending.extend(calls)   # le esegue App nel ciclo principale, non questo thread
+            # le esegue App nel ciclo principale, non questo thread; serve anche la frase detta
+            self._pending.extend((nome, args, domanda) for nome, args in calls)
             self._last = risposta
             self._busy = False
             if risposta.errore == "servizio non risponde":
                 self._online = False
 
-    def take_calls(self) -> list[tuple[str, dict[str, Any]]]:
-        """Funzioni riconosciute e non ancora eseguite; le svuota (le chiama App a ogni giro)."""
+    def take_calls(self) -> list[tuple[str, dict[str, Any], str]]:
+        """(funzione, argomenti, frase) riconosciuti e non ancora eseguiti; li svuota (App, a ogni giro)."""
         with self._lock:
             out, self._pending = self._pending, []
         return out

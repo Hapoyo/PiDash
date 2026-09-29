@@ -1,6 +1,6 @@
 # pi-dash — CLAUDE.md
 
-Versione 0.8.0 · 2026-09-29
+Versione 0.9.0 · 2026-09-29
 
 ## 1. Scopo
 Dashboard da tavolo per Raspberry Pi 3 Model B con schermo SPI 3,5" 480×320 (ILI9486 + touch
@@ -29,7 +29,8 @@ dash/render/           tutto il disegno
                        `calibrate.py` schermo della calibrazione del touch
   effects.py           animazioni sopra la base, sequenza di avvio, riquadro di allarme
   renderer.py          CyberRenderer: `render` (pagina base) e `compose` (fotogramma animato)
-dash/azioni.py         funzioni di Needle eseguibili (`AZIONI`): timer, sveglia, pagina, meteo
+dash/azioni.py         funzioni di Needle eseguibili (`AZIONI`): timer, sveglia, pagina, meteo, luci
+dash/hue.py            bridge Philips Hue: stanze, comandi, registrazione (`--hue-registra`)
 dash/layout.py         Box e nomi di giorni/mesi
 dash/location.py       posizione condivisa: "auto" (GPS → Wi-Fi → IP), "ip", "city", "fixed"
 dash/backlight.py      luminosità: /sys/class/backlight se regolabile, altrimenti immagine scurita
@@ -65,6 +66,8 @@ tests/                 unittest
 - Installazione sul Raspberry: [docs/installazione.md](docs/installazione.md)
 - Aggiornare il Pi: `~/pi-dash/scripts/aggiorna.sh [--no-test]` (segue il ramo in uso, di norma `main`)
 - Servizio: `scripts/installa-servizio.sh` (mai `sed -i` sul file in Git)
+- Luci Hue: `python -m dash --hue-registra [IP]` (premi il tasto del bridge), guida § 5.10; la chiave sta
+  solo in `config.local.json` (600), mai in `config.json` né in Git
 - Needle (modello per function calling): `scripts/installa-needle.sh [~/needle]`, guida in
   [docs/installazione.md](docs/installazione.md) § 5.9; provare a mano:
   `curl -s -X POST localhost:8090/complete -d '{"input":"timer 5 minuti"}'`

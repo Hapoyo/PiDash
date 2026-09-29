@@ -109,6 +109,11 @@
       "debug": false
     }
   },
+  "hue": {
+    "bridge": "",
+    "key": "",
+    "timeout_s": 2
+  },
   "needle": {
     "url": "http://127.0.0.1:8090",
     "timeout_s": 15,
@@ -116,6 +121,7 @@
     "esegui": true,
     "soglia": 0.6,
     "soglia_pagine": 0.35,
+    "soglia_luci": 0.4,
     "naviga": true,
     "queries": [
       "meteo a ventotene",
