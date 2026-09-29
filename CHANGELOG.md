@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.8.0 — 2026-09-29
+- **Needle esegue le funzioni**: la scheda non si limita più a mostrarle. `start_timer_minutes` e
+  `start_timer_seconds` impostano e avviano il timer, `set_alarm` aggiunge una sveglia (ogni
+  giorno, salvata in `config.local.json`), `open_*` apre una pagina, `get_weather` apre il meteo.
+  In alto nella scheda compare l'esito (`→ timer 5' avviato`). Se la pagina Timer o Sveglia manca
+  viene creata.
+- `needle/tools.json` rifatto sulla misura del modello: timer separato per minuti e secondi (con
+  un'unica funzione "timer di 90 secondi" avviava 90 minuti) e una funzione per pagina al posto
+  di `show_page(page)`. Dopo l'aggiornamento: `sudo systemctl restart needle` (lo fa `aggiorna.sh`).
+- Sicurezza: elenco fisso di funzioni (`dash/azioni.py`), argomenti controllati prima di cambiare
+  qualcosa, nessuna funzione per spegnere il Pi. Nessuna esecuzione sotto `needle.soglia` (0,6)
+  per timer e sveglia e sotto `needle.soglia_pagine` (0,35) per le funzioni che aprono solo una
+  pagina. Le azioni girano nel ciclo principale, non nel thread della richiesta.
+- Config: `needle.esegui`, `needle.soglia`, `needle.soglia_pagine`, `needle.naviga`. Frasi di
+  prova senza la sveglia ("meteo a ventotene", "timer 5 minuti", "apri la pagina sistema",
+  "vai alla home").
+
 ## 0.7.0 — 2026-09-29
 - **Scheda Needle**: nuova pagina opzionale (`+ needle` nelle Impostazioni) per il modello locale
   [Needle](https://github.com/cactus-compute/needle) (function calling). Mostra lo stato del

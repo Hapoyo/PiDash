@@ -1,6 +1,6 @@
 # pi-dash — Installazione
 
-Versione 0.7.0 · 2026-09-29
+Versione 0.8.0 · 2026-09-29
 
 Guida passo passo per chi è nuovo del Raspberry Pi. Si lavora dal PC Windows: il Raspberry non
 ha bisogno di monitor né di tastiera ("headless"). Le parti in `grassetto monospazio` si scrivono
@@ -295,7 +295,7 @@ Se non vuoi nessuna ricerca automatica: `"location": {"mode": "fixed"}` in `conf
 
 ### 5.9 Needle: modello locale per function calling
 [Needle](https://github.com/cactus-compute/needle) è un modello da 35 MB che trasforma una frase
-("timer 5 minuti") nella chiamata a una funzione (`start_timer(minutes=5)`). Non è un chatbot: gira
+("timer 5 minuti") nella chiamata a una funzione (`start_timer_minutes(minutes=5)`). Non è un chatbot: gira
 sul Raspberry Pi 3 in circa 2 s a frase, con 75 MB di RAM e senza rete. Le funzioni che conosce
 sono in `needle/tools.json`. Il servizio ascolta solo su `127.0.0.1:8090`: non è raggiungibile
 dalla rete locale.
@@ -315,13 +315,39 @@ dalla rete locale.
    `function_calls`, `confidence` e i tempi. Controllo: `systemctl status needle`.
 4. Nelle Impostazioni tocca `+ needle`: compare la scheda **Needle**, con lo stato del servizio
    (pronto, penso…, offline) e quattro bottoni, uno per frase di `needle.queries`. Il tocco invia
-   la frase e mostra la funzione riconosciuta con la confidenza. Con i pulsanti GPIO: B sceglie la
-   frase, A la invia.
+   la frase, mostra la funzione riconosciuta con la confidenza e la esegue (vedi sotto). Con i
+   pulsanti GPIO: B sceglie la frase, A la invia.
+
+**Cosa fa il dashboard con la risposta.** Se la confidenza è sufficiente la funzione riconosciuta
+viene eseguita, e in alto nella scheda compare cosa è successo (`→ timer 5' avviato`). La soglia
+dipende dal danno di un errore: 0,6 (`needle.soglia`) per timer e sveglia, che cambiano qualcosa;
+0,35 (`needle.soglia_pagine`) per le funzioni che aprono soltanto una pagina, dove sbagliare costa
+un tocco sulla linguetta giusta. Sotto soglia la scheda scrive "confidenza bassa: non eseguo".
+
+| Funzione | Effetto |
+|---|---|
+| `start_timer_minutes(minutes)`, `start_timer_seconds(seconds)` | imposta il timer e lo avvia (da 1 s a 180′), sostituendo il tempo in corso; se la pagina Timer non c'è la crea |
+| `set_alarm(time)` | sveglia `HH:MM` **ogni giorno**, salvata in `config.local.json`; la stessa ora non si duplica, al massimo 10; se la pagina Sveglia non c'è la crea |
+| `open_home`, `open_weather`, `open_timer`, `open_alarm`, `open_system`, `open_settings` | apre quella pagina, se c'è |
+| `get_weather(city)` | apre il meteo del luogo del dashboard (altre città non ancora) |
+
+Il modello è piccolo (35 MB): copia i numeri della frase senza convertire le unità e capisce
+l'italiano solo in parte. Per questo ci sono due funzioni per il timer (minuti e secondi) e una
+per pagina, e per questo esiste la soglia: con "timer di 90 secondi" una sola `start_timer(minutes)`
+avviava 90 minuti. Le frasi che funzionano meglio sono quelle semplici ("timer 5 minuti", "timer
+di 90 secondi", "svegliami alle 6:45", "vai alla home", "apri la pagina sistema"); una frase
+incerta non viene eseguita e la scheda lo dice. Dopo un riavvio del servizio (o di `aggiorna.sh`
+quando cambiano le funzioni) la scheda resta "offline" per circa 30 secondi: il modello sta partendo.
+
+Non esiste nessuna funzione per spegnere il Raspberry: il modello propone, ma il dashboard esegue
+solo questo elenco, controllando gli argomenti. Con `needle.naviga: false` le azioni si eseguono
+senza cambiare pagina; con `needle.esegui: false` la scheda torna a mostrare e basta. Le sveglie
+create così non si tolgono dallo schermo: si modificano in `config.local.json`.
 
 Per cambiare frasi o indirizzo: sezione `needle` di `config.local.json` (§ 5.7). Per cambiare le
-funzioni: `needle/tools.json`, poi `sudo systemctl restart needle`. La scheda oggi **mostra** cosa
-il modello ha capito; eseguire davvero la funzione (avviare il timer, cambiare pagina) è il passo
-successivo. Adattare il modello alle proprie frasi (`needle finetune`) si fa su un PC, non sul Pi.
+funzioni: `needle/tools.json` (e `dash/azioni.py` per eseguirle), poi
+`sudo systemctl restart needle`. Adattare il modello alle proprie frasi (`needle finetune`) si
+fa su un PC, non sul Pi.
 
 ## 6. Comandi di tutti i giorni
 Nome del servizio: `pi-dash`.

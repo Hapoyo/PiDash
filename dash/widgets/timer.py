@@ -134,6 +134,13 @@ class TimerWidget(Widget):
         else:  # DONE: conferma, si torna al tempo impostato
             self._reset()
 
+    def start_for(self, seconds: int) -> None:
+        """Imposta la durata e parte subito (comando di Needle); sostituisce il tempo corrente."""
+        self._set_s = max(1, int(seconds))
+        self._remaining = float(self._set_s)
+        self._deadline = self._clock() + self._remaining
+        self.state = TimerState.RUNNING
+
     def on_back(self, now: datetime) -> None:
         self.on_hit(f"add:{self.presets[0]}", now)
 

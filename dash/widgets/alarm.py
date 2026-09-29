@@ -12,6 +12,8 @@ from typing import Any
 from ..layout import GIORNI
 from .base import Widget
 
+MAX_ALARMS = 10  # le sveglie create da Needle non si tolgono dallo schermo: il numero è limitato
+
 
 @dataclass(frozen=True)
 class Alarm:
@@ -25,6 +27,11 @@ class Alarm:
         hh, mm = (int(p) for p in d["time"].split(":"))
         days = frozenset(d.get("days", range(7)))
         return cls(hh, mm, days, bool(d.get("enabled", True)))
+
+    def to_cfg(self) -> dict[str, Any]:
+        """Voce di `alarm.alarms` in config.local.json."""
+        return {"time": f"{self.hour:02d}:{self.minute:02d}", "days": sorted(self.days),
+                "enabled": self.enabled}
 
     def label_days(self) -> str:
         if self.days == frozenset(range(7)):
@@ -48,6 +55,21 @@ class AlarmWidget(Widget):
         self.ringing: Alarm | None = None
         self._ring_start: datetime | None = None
         self._handled: set[str] = set()
+
+    def add_alarm(self, hour: int, minute: int) -> Alarm:
+        """Sveglia ogni giorno a quell'ora (comando di Needle): se c'è già la riattiva, e arma tutto."""
+        if not (0 <= hour < 24 and 0 <= minute < 60):
+            raise ValueError(f"orario fuori range: {hour:02d}:{minute:02d}")
+        alarm = Alarm(hour, minute, frozenset(range(7)))
+        same = [i for i, a in enumerate(self.alarms) if (a.hour, a.minute) == (hour, minute)]
+        if same:
+            self.alarms[same[0]] = alarm
+        elif len(self.alarms) >= MAX_ALARMS:
+            raise ValueError(f"al massimo {MAX_ALARMS} sveglie")
+        else:
+            self.alarms.append(alarm)
+        self.armed = True
+        return alarm
 
     @staticmethod
     def _key(a: Alarm, now: datetime) -> str:

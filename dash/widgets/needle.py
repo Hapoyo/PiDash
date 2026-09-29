@@ -12,18 +12,20 @@ import socket
 import threading
 import time
 from collections.abc import Hashable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any, Callable
 from urllib import error, request
 from urllib.parse import urlsplit
 
+from .. import azioni
 from .base import Widget
 
 log = logging.getLogger(__name__)
 
 CHECK_S = 5.0   # ogni quanto si controlla che il servizio sia raggiungibile
 FLASH_S = 0.3   # evidenza dell'ultima frase toccata
+ESITO_MAX = 40  # caratteri dell'esito che stanno nell'intestazione a 480 px
 
 PostJson = Callable[[str, dict[str, Any], float], dict[str, Any]]
 
@@ -36,6 +38,7 @@ class Risposta:
     confidenza: float | None = None
     ms: int = 0
     errore: str = ""
+    esito: str = ""   # cosa ha fatto il dashboard ("timer 5' avviato"), scritto da App
 
 
 def post_json(url: str, payload: dict[str, Any], timeout: float) -> dict[str, Any]:
@@ -54,6 +57,16 @@ def chiamata_str(call: dict[str, Any]) -> str:
     args = call.get("arguments")
     inner = ", ".join(f"{k}={v}" for k, v in args.items()) if isinstance(args, dict) else ""
     return f"{call.get('name', '?')}({inner})"
+
+
+def raw_calls(data: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
+    """Le funzioni riconosciute come (nome, argomenti), da eseguire nel dashboard."""
+    out: list[tuple[str, dict[str, Any]]] = []
+    for c in data.get("function_calls") or []:
+        if isinstance(c, dict) and isinstance(c.get("name"), str):
+            args = c.get("arguments")
+            out.append((c["name"], args if isinstance(args, dict) else {}))
+    return out
 
 
 def parse(domanda: str, data: dict[str, Any], ms: int) -> Risposta:
@@ -77,6 +90,11 @@ class NeedleWidget(Widget):
         self.timeout_s = max(1.0, float(cfg.get("timeout_s", 15)))
         self.reset = bool(cfg.get("reset", True))  # ogni frase è indipendente dalle precedenti
         self.queries: list[str] = [str(q) for q in cfg.get("queries") or [] if str(q).strip()]
+        self.esegui = bool(cfg.get("esegui", True))   # False: la scheda mostra e basta
+        self.soglia = float(cfg.get("soglia", 0.6))   # sotto questa confidenza non si esegue
+        self.soglia_pagine = float(cfg.get("soglia_pagine", 0.35))  # come sopra, se apre solo una pagina
+        self.naviga = bool(cfg.get("naviga", True))   # dopo l'azione si apre la pagina interessata
+        self._pending: list[tuple[str, dict[str, Any]]] = []
         self.idx = 0
         self._clock = clock
         self._post = post
@@ -96,7 +114,7 @@ class NeedleWidget(Widget):
         with self._lock:
             self._online = True
             self._last = Risposta(self.queries[0] if self.queries else "", ("get_weather(city=Ventotene)",),
-                                  0.95, 2210)
+                                  0.95, 2210, esito="apro il meteo")
 
     # --- stato -----------------------------------------------------------
     def snapshot(self) -> tuple[bool | None, bool, Risposta | None]:
@@ -160,14 +178,38 @@ class NeedleWidget(Widget):
                     log.debug("needle: reset non riuscito: %s", exc)
             data = self._post(f"{self.url}/complete", {"input": domanda}, self.timeout_s)
             risposta = parse(domanda, data, round((self._clock() - t0) * 1000))
+            calls = raw_calls(data)
         except (OSError, ValueError, error.URLError) as exc:  # timeout, rifiuto, JSON rotto
             log.warning("needle: %s", exc)
-            risposta = Risposta(domanda, errore="servizio non risponde")
+            risposta, calls = Risposta(domanda, errore="servizio non risponde"), []
+        if calls and self.esegui:
+            conf = risposta.confidenza if risposta.confidenza is not None else 0.0
+            sicure = [c for c in calls
+                      if conf >= (self.soglia_pagine if azioni.solo_pagina(c[0]) else self.soglia)]
+            if not sicure:
+                risposta = replace(risposta, esito="confidenza bassa: non eseguo")
+            calls = sicure
+        else:
+            calls = []
         with self._lock:
+            self._pending.extend(calls)   # le esegue App nel ciclo principale, non questo thread
             self._last = risposta
             self._busy = False
             if risposta.errore == "servizio non risponde":
                 self._online = False
+
+    def take_calls(self) -> list[tuple[str, dict[str, Any]]]:
+        """Funzioni riconosciute e non ancora eseguite; le svuota (le chiama App a ogni giro)."""
+        with self._lock:
+            out, self._pending = self._pending, []
+        return out
+
+    def set_esito(self, text: str) -> None:
+        """Scrive nell'ultima risposta cosa ha fatto il dashboard (più azioni: separate da " · ")."""
+        with self._lock:
+            if self._last is not None:
+                unite = f"{self._last.esito} · {text}" if self._last.esito else text
+                self._last = replace(self._last, esito=unite[:ESITO_MAX])
 
     # --- ingressi --------------------------------------------------------
     def on_hit(self, hit: str, now: datetime) -> None:

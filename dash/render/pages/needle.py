@@ -40,7 +40,10 @@ def draw(cv: Canvas, b: Box, app: App, now: datetime) -> None:
     bg = "orange" if busy else ("cream" if online else "tan")
     cv.rect(top, bg)
     # intestazione: nome a sinistra, stato a destra
-    cv.label((top.x + pad, top.y + pad), "needle · function calling", "ink")
+    # a sinistra cosa ha fatto il dashboard con l'ultima frase, se ha fatto qualcosa
+    esito = last.esito if last else ""
+    cv.label((top.x + pad, top.y + pad), "→ " + esito if esito else "needle · function calling",
+             "ink", bold=bool(esito))
     cv.label((top.right - pad, top.y + pad), w.stato(), "ink", "ra", bold=True)
     head = cv.height(cv.f_label) + cv.gap
     # barra della confidenza in fondo al pannello

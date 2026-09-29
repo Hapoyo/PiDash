@@ -23,8 +23,9 @@ DEFAULTS: dict[str, Any] = {
     "alarm": {"ring_max_min": 10, "alarms": []},
     "pages": [{"name": "Home", "widget": "clock"}],
     "needle": {"url": "http://127.0.0.1:8090", "timeout_s": 15, "reset": True,
-               "queries": ["meteo a ventotene", "timer 5 minuti", "sveglia alle 7:30",
-                           "apri sistema"]},
+               "esegui": True, "soglia": 0.6, "soglia_pagine": 0.35, "naviga": True,
+               "queries": ["meteo a ventotene", "timer 5 minuti", "apri la pagina sistema",
+                           "vai alla home"]},
     "new": {"tipi": ["timer", "alarm", "needle"]},
     "motion": {"livello": "pieno", "fps": 8, "avvio": True},
     "backlight": {"level": 100, "mode": "auto"},
@@ -86,6 +87,9 @@ def validate(cfg: dict[str, Any], known_widgets: set[str]) -> None:
     nd = cfg["needle"]
     if not str(nd.get("url", "")).startswith("http://"):
         raise ConfigError("needle.url deve essere un indirizzo http:// (il servizio è locale)")
+    for chiave in ("soglia", "soglia_pagine"):
+        if not isinstance(nd.get(chiave), (int, float)) or not 0 <= nd[chiave] <= 1:
+            raise ConfigError(f"needle.{chiave} deve essere un numero fra 0 e 1")
     qs = nd.get("queries")
     if not isinstance(qs, list) or not 1 <= len(qs) <= 6 or not all(isinstance(q, str) for q in qs):
         raise ConfigError("needle.queries deve essere una lista da 1 a 6 frasi")

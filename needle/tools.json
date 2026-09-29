@@ -1,50 +1,22 @@
 [
-  {
-    "name": "get_weather",
-    "description": "Get the current weather and wind for a place.",
-    "parameters": {
-      "type": "object",
-      "properties": {
-        "city": {"type": "string", "description": "Place name, e.g. Ventotene"}
-      },
-      "required": ["city"]
-    }
-  },
-  {
-    "name": "start_timer",
-    "description": "Start a countdown timer, for example the 5 minute regatta start sequence.",
-    "parameters": {
-      "type": "object",
-      "properties": {
-        "minutes": {"type": "number", "description": "Length of the countdown in minutes"}
-      },
-      "required": ["minutes"]
-    }
-  },
-  {
-    "name": "set_alarm",
-    "description": "Set an alarm clock at a given time of day.",
-    "parameters": {
-      "type": "object",
-      "properties": {
-        "time": {"type": "string", "description": "Time of day in 24 hour HH:MM format"}
-      },
-      "required": ["time"]
-    }
-  },
-  {
-    "name": "show_page",
-    "description": "Open a page of the dashboard.",
-    "parameters": {
-      "type": "object",
-      "properties": {
-        "page": {
-          "type": "string",
-          "enum": ["home", "weather", "timer", "alarm", "system", "settings"],
-          "description": "Which page to show"
-        }
-      },
-      "required": ["page"]
-    }
-  }
+  {"name": "get_weather", "description": "Get the current weather and wind for a place (meteo, vento, che tempo fa).",
+   "parameters": {"type": "object", "properties": {"city": {"type": "string", "description": "Place name, e.g. Ventotene"}}, "required": ["city"]}},
+  {"name": "start_timer_minutes", "description": "Start a countdown timer of a number of minutes (timer di N minuti, mezz'ora, un'ora, partenza regata).",
+   "parameters": {"type": "object", "properties": {"minutes": {"type": "number", "description": "Number of minutes, e.g. 5, 10, 30, 60"}}, "required": ["minutes"]}},
+  {"name": "start_timer_seconds", "description": "Start a countdown timer of a number of seconds (timer di N secondi).",
+   "parameters": {"type": "object", "properties": {"seconds": {"type": "number", "description": "Number of seconds, e.g. 30, 45, 90"}}, "required": ["seconds"]}},
+  {"name": "set_alarm", "description": "Set an alarm clock (sveglia, svegliami) at a given time of day.",
+   "parameters": {"type": "object", "properties": {"time": {"type": "string", "description": "Time of day in 24 hour HH:MM format, e.g. 07:30"}}, "required": ["time"]}},
+  {"name": "open_home", "description": "Open the home page with the clock (apri la home, orologio, che ore sono).",
+   "parameters": {"type": "object", "properties": {}}},
+  {"name": "open_weather", "description": "Open the weather page (apri il meteo, mostra il meteo, previsioni).",
+   "parameters": {"type": "object", "properties": {}}},
+  {"name": "open_timer", "description": "Open the timer page (apri il timer, mostra il timer).",
+   "parameters": {"type": "object", "properties": {}}},
+  {"name": "open_alarm", "description": "Open the alarm page (apri la sveglia, mostra le sveglie).",
+   "parameters": {"type": "object", "properties": {}}},
+  {"name": "open_system", "description": "Open the system page with cpu, memory and disk (apri sistema, stato del sistema, mostra la cpu).",
+   "parameters": {"type": "object", "properties": {}}},
+  {"name": "open_settings", "description": "Open the settings page (apri le impostazioni, luminosità, calibra).",
+   "parameters": {"type": "object", "properties": {}}}
 ]
