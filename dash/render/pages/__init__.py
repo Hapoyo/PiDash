@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Callable
 
-from . import alarm, home, new, system, timer, weather
+from . import alarm, home, needle, new, system, timer, weather
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -26,11 +26,13 @@ PAGES: dict[str, PageDraw] = {
     "timer": timer.draw,
     "alarm": alarm.draw,
     "system": system.draw,
+    "needle": needle.draw,
     "new": new.draw,
 }
 
 HITS: dict[str, PageHits] = {
     "new": new.hits,
+    "needle": needle.hits,
     "timer": timer.hits,
 }
 

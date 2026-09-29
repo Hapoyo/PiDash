@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.7.0 — 2026-09-29
+- **Scheda Needle**: nuova pagina opzionale (`+ needle` nelle Impostazioni) per il modello locale
+  [Needle](https://github.com/cactus-compute/needle) (function calling). Mostra lo stato del
+  servizio (pronto, penso…, offline), invia a scelta una delle frasi di `needle.queries` e mostra
+  la funzione riconosciuta con confidenza e tempo (`get_weather(city=Ventotene)` · 95 % · 2,2 s).
+  Richieste in thread: il disegno non aspetta mai il modello.
+- **Servizio `needle`**: `systemd/needle.service` e `scripts/installa-needle.sh`, sul modello di
+  pi-dash. API locale su `127.0.0.1:8090` (non esposta alla rete), memoria limitata a 300 MB.
+- `needle/tools.json`: funzioni note al modello (`get_weather`, `start_timer`, `set_alarm`,
+  `show_page`). Per ora la scheda le mostra soltanto, non le esegue.
+- Config: sezione `needle` (`url`, `timeout_s`, `reset`, `queries`) e `needle` in `new.tipi`.
+- README: anteprima della scheda; le anteprime hanno ora sette linguette (`06-needle.png`,
+  `07-new.png`).
+
 ## 0.6.1 — 2026-09-27
 - Impostazioni: nuova riga **tensione** in fondo, con il grafico degli ultimi 48 minuti (una
   colonna al minuto, rosa dove l'alimentazione è scesa sotto 4,63 V), il numero di cali e l'ora

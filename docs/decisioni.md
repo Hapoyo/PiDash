@@ -1,11 +1,20 @@
 # pi-dash — Decisioni di progetto
 
-Versione 0.6.0 · 2026-09-27
+Versione 0.7.0 · 2026-09-29
 
 Scelte prese e motivi. Da leggere prima di cambiare il comportamento di una parte;
 le regole operative stanno in [CLAUDE.md](../CLAUDE.md).
 
 ## 1. Decisioni
+- Needle (`widgets/needle.py`, `render/pages/needle.py`): il modello gira in un **servizio
+  systemd separato** (`systemd/needle.service`), non dentro pi-dash, perché è un binario nativo
+  con la sua RAM (75 MB, limite 300 MB) e un crash non deve fermare lo schermo. Ascolta solo su
+  `127.0.0.1:8090` (il binario non ha autenticazione), quindi pi-dash lo raggiunge in locale e la
+  LAN no. Il widget non blocca mai il disegno: controllo TCP ogni 5 s e richieste a `/complete` in
+  thread; `POST /reset` prima di ogni frase (`needle.reset`), altrimenti il server accumula i
+  turni in un'unica conversazione. La scheda è opzionale (catalogo del "+", `new.tipi`) e mostra
+  la funzione riconosciuta senza eseguirla: le funzioni di `needle/tools.json` non sono ancora
+  collegate a timer, sveglia e pagine.
 - Schedario: una linguetta numerata per pagina. Le pagine precedenti restano in pila in alto, le
   successive in pila in basso; la cartella aperta parte dalla propria linguetta. Geometria unica in
   `render/folders.layout(w, h, n, current)`, usata sia dal disegno sia dal tocco.

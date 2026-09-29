@@ -21,8 +21,9 @@ ETICHETTE: dict[str, str] = {
     "clock": "Orologio",
     "weather": "Meteo",
     "system": "Sistema",
+    "needle": "Needle",
 }
-ORDINE = ("timer", "alarm")  # schede opzionali: le altre pagine stanno in config.json
+ORDINE = ("timer", "alarm", "needle")  # schede opzionali: le altre pagine stanno in config.json
 CONFERMA_S = 4.0             # tempo per il secondo tocco su "spegni"
 
 

@@ -7,12 +7,13 @@ from ..location import Location
 from .alarm import AlarmWidget
 from .base import Widget
 from .clock import ClockWidget
+from .needle import NeedleWidget
 from .new import ETICHETTE, NewWidget
 from .system import SystemWidget
 from .timer import TimerWidget
 from .weather import WeatherWidget
 
-WIDGET_NAMES: set[str] = {"clock", "timer", "alarm", "weather", "system", "new"}
+WIDGET_NAMES: set[str] = {"clock", "timer", "alarm", "weather", "system", "needle", "new"}
 
 
 class WidgetFactory:
@@ -35,6 +36,8 @@ class WidgetFactory:
             return TimerWidget(cfg["timer"])
         if kind == "system":
             return SystemWidget(cfg["system"])
+        if kind == "needle":
+            return NeedleWidget(cfg["needle"])
         if kind == "new":
             return NewWidget(cfg.get("new") or {})
         raise ValueError(f"widget sconosciuto: {kind!r}")

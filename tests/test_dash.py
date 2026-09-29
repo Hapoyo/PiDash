@@ -5,6 +5,7 @@ import copy
 import json
 import queue
 import tempfile
+import time
 import unittest
 from typing import Any
 from datetime import datetime
@@ -18,6 +19,8 @@ from dash.inputs import Event, Tap
 from dash.app import App
 from dash.widgets import WIDGET_NAMES
 from dash.widgets.alarm import AlarmWidget
+from dash.widgets.needle import NeedleWidget
+from dash.widgets.needle import parse as parse_needle
 from dash.widgets.timer import TimerState, TimerWidget
 from dash.widgets.weather import (beaufort, describe, moon_illumination, moon_phase,
                                   rosa, vento_nome)
@@ -81,6 +84,7 @@ class TestConfig(unittest.TestCase):
         self.assertEqual(cfg["display"]["driver"], "fb")
         # timer e sveglia non ci sono: si aggiungono dalla scheda "+"
         self.assertEqual([p["name"] for p in cfg["pages"]], ["Home", "Meteo", "Sistema", "+"])
+        self.assertEqual(cfg["new"]["tipi"], ["timer", "alarm", "needle"])  # catalogo del "+"
 
     def test_local_pages_do_not_break_the_shipped_config(self) -> None:
         """Uno schedario personale (senza "+") resta valido: solo un avviso nel log."""
@@ -669,7 +673,7 @@ class TestPageEditing(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             app = self._app(tmp)
             plus = app.pages[-1].widget
-            self.assertEqual([v.label for v in plus.voci()], ["timer", "sveglia"])
+            self.assertEqual([v.label for v in plus.voci()], ["timer", "sveglia", "needle"])
             self.assertEqual({v.azione for v in plus.voci()}, {"add"})
             app.close()
 
@@ -712,6 +716,109 @@ class TestPageEditing(unittest.TestCase):
                        datetime(2026, 9, 24, 7, 42))
         self.assertEqual([p.widget.name for p in app.pages], ["clock", "alarm", "new"])
         app.close()
+
+
+class TestNeedle(unittest.TestCase):
+    """Scheda needle: stato del servizio, frasi inviate a /complete, risposta mostrata."""
+
+    RISPOSTA = {"type": "call", "success": True, "error": None,
+                "function_calls": [{"name": "get_weather", "arguments": {"city": "Ventotene"}}],
+                "reasoning": "get_weather tool.", "confidence": 0.95}
+
+    def _widget(self, post: Any, **cfg: Any) -> NeedleWidget:
+        base = copy.deepcopy(DEFAULTS["needle"])
+        base.update(cfg)
+        return NeedleWidget(base, clock=FakeClock(), post=post)
+
+    @staticmethod
+    def _wait(w: NeedleWidget) -> None:
+        for _ in range(200):  # il thread della richiesta finisce in pochi millisecondi
+            if not w.snapshot()[1]:
+                return
+            time.sleep(0.01)
+        raise AssertionError("richiesta needle mai terminata")
+
+    def test_parse_formats_the_recognised_call(self) -> None:
+        r = parse_needle("meteo", self.RISPOSTA, 2210)
+        self.assertEqual((r.chiamate, r.confidenza, r.ms, r.errore),
+                         (("get_weather(city=Ventotene)",), 0.95, 2210, ""))
+        vuota = parse_needle("boh", {"success": False, "error": "nessuna funzione",
+                                     "function_calls": []}, 5)
+        self.assertEqual((vuota.chiamate, vuota.errore), ((), "nessuna funzione"))
+
+    def test_sends_reset_then_the_phrase_and_keeps_the_answer(self) -> None:
+        chiamate: list[tuple[str, dict[str, Any]]] = []
+
+        def post(url: str, payload: dict[str, Any], timeout: float) -> dict[str, Any]:
+            chiamate.append((url, payload))
+            return self.RISPOSTA
+
+        w = self._widget(post)
+        w._online = True
+        w.on_hit("q:0", datetime(2026, 9, 24, 7, 42))
+        self._wait(w)
+        self.assertEqual(chiamate, [("http://127.0.0.1:8090/reset", {}),
+                                    ("http://127.0.0.1:8090/complete", {"input": "meteo a ventotene"})])
+        online, busy, last = w.snapshot()
+        self.assertEqual((online, busy, last.chiamate), (True, False, ("get_weather(city=Ventotene)",)))
+        self.assertEqual(w.stato(), "pronto")
+        self.assertEqual(w.flashing(), 0)                                     # bottone in rosa un attimo
+
+    def test_offline_service_is_reported_and_not_called(self) -> None:
+        def post(url: str, payload: dict[str, Any], timeout: float) -> dict[str, Any]:
+            raise AssertionError("il servizio è spento: non si deve chiamare")
+
+        w = self._widget(post)
+        w._online = False
+        w.on_action(datetime(2026, 9, 24, 7, 42))
+        self.assertEqual((w.stato(), w.snapshot()[1]), ("offline", False))
+
+    def test_network_error_marks_the_service_offline(self) -> None:
+        def post(url: str, payload: dict[str, Any], timeout: float) -> dict[str, Any]:
+            raise OSError("connessione rifiutata")
+
+        w = self._widget(post)
+        w._online = True
+        w.on_action(datetime(2026, 9, 24, 7, 42))
+        self._wait(w)
+        online, _, last = w.snapshot()
+        self.assertFalse(online)
+        self.assertEqual(last.errore, "servizio non risponde")
+
+    def test_back_cycles_through_the_phrases(self) -> None:
+        w = self._widget(lambda *a: {})
+        for atteso in (1, 2, 3, 0):
+            w.on_back(datetime(2026, 9, 24, 7, 42))
+            self.assertEqual(w.idx, atteso)
+
+    def test_page_draws_and_exposes_one_button_per_phrase(self) -> None:
+        cfg = make_cfg(pages=[{"name": "Home", "widget": "clock"},
+                              {"name": "Needle", "widget": "needle"}])
+        app = App(cfg, MemDisplay(480, 320), queue.Queue())
+        app.page_idx = 1
+        w = app.page.widget
+        w.load_demo()
+        img = app.render(datetime(2026, 9, 24, 7, 42))
+        self.assertEqual(img.size, (480, 320))
+        boxes = [b for b, hit in app.renderer.hit_boxes(app) if hit.startswith("q:")]
+        self.assertEqual(len(boxes), len(w.queries))
+        self.assertTrue(all(b.h >= 24 for b in boxes), "bottoni troppo bassi per il dito")
+        app.close()
+
+    def test_config_rejects_a_bad_url_or_empty_phrases(self) -> None:
+        for bad in ({"url": "https://x"}, {"queries": []}, {"queries": ["a"] * 7}):
+            with self.assertRaises(ConfigError):
+                validate(make_cfg(needle=bad), WIDGET_NAMES)
+
+    def test_service_files_are_consistent(self) -> None:
+        """tools.json valido e il file del servizio punta alla stessa porta della config."""
+        radice = Path(__file__).parent.parent
+        tools = json.loads((radice / "needle" / "tools.json").read_text(encoding="utf-8"))
+        self.assertTrue(all({"name", "description", "parameters"} <= set(t) for t in tools))
+        unit = (radice / "systemd" / "needle.service").read_text(encoding="utf-8")
+        porta = DEFAULTS["needle"]["url"].rsplit(":", 1)[1]
+        self.assertIn(f"--serve --port {porta}", unit)
+        self.assertIn("/home/pi/pi-dash/needle/tools.json", unit)  # lo script sostituisce il percorso
 
 
 class TestSettings(unittest.TestCase):
@@ -1107,7 +1214,8 @@ class TestScreenshots(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             paths = save_screenshots(cfg, Path(tmp))
             self.assertEqual([p.name for p in paths], ["01-home.png", "02-meteo.png",
-                             "03-timer.png", "04-sveglia.png", "05-sistema.png", "06-new.png"])
+                             "03-timer.png", "04-sveglia.png", "05-sistema.png",
+                             "06-needle.png", "07-new.png"])
             for p in paths:
                 with Image.open(p) as img:
                     self.assertEqual(img.size, (480, 320))

@@ -1,6 +1,6 @@
 # PiDash
 
-> Versione 0.6.1 · 2026-09-27
+> Versione 0.7.0 · 2026-09-29
 
 Cruscotto da tavolo per Raspberry Pi con schermo touch SPI da 3,5": ora, meteo con vento in nodi,
 timer di partenza regata, sveglia e stato del sistema, in un'interfaccia a schedario ispirata ai
@@ -53,6 +53,7 @@ computer di bordo.
 | 003 | Timer | a scelta | conto alla rovescia composto con i bottoni; 5′ = sequenza di partenza |
 | 004 | Sveglia | a scelta | prossima sveglia, stato, sveglie per giorno della settimana |
 | 005 | Sistema | sempre | CPU, RAM, disco, storici di CPU e rete, host, IP, temperatura, uptime |
+| 006 | Needle | a scelta | stato del modello locale [Needle](https://github.com/cactus-compute/needle) (function calling), frasi da provare e funzione riconosciuta con la confidenza |
 | ⚙ | Impostazioni | sempre | schede opzionali, luminosità, calibrazione del tocco, spegnimento, grafico della tensione di alimentazione |
 
 | 001 · Home | 002 · Meteo |
@@ -60,8 +61,10 @@ computer di bordo.
 | ![Home](docs/img/01-home.png) | ![Meteo](docs/img/02-meteo.png) |
 | **003 · Timer** | **004 · Sveglia** |
 | ![Timer](docs/img/03-timer.png) | ![Sveglia](docs/img/04-sveglia.png) |
-| **005 · Sistema** | **⚙ · Impostazioni** |
-| ![Sistema](docs/img/05-sistema.png) | ![Impostazioni](docs/img/06-new.png) |
+| **005 · Sistema** | **006 · Needle** |
+| ![Sistema](docs/img/05-sistema.png) | ![Needle](docs/img/06-needle.png) |
+| **⚙ · Impostazioni** | |
+| ![Impostazioni](docs/img/07-new.png) | |
 
 Schermate fuori dallo schedario:
 
@@ -129,6 +132,7 @@ La configurazione è su due livelli:
 | `timer.presets_s`, `timer.labels` | bottoni che sommano il tempo (secondi) ed etichette | 60, 300, 600, 900 · 300 = "partenza" |
 | `backlight.level`, `backlight.mode` | luminosità 10–100; `auto`, `hw` (LED), `sw` (immagine) | 100, `auto` |
 | `alarm.alarms` | sveglie: ora, giorni (0 = lunedì), attiva | 07:00, lunedì–venerdì |
+| `needle.url`, `needle.queries` | servizio Needle locale e frasi dei bottoni (1–6); `needle.reset`: ogni frase è indipendente | `http://127.0.0.1:8090`, 4 frasi, `true` |
 | `motion.livello`, `motion.fps` | animazioni: `pieno`, `eventi`, `off`; fotogrammi al secondo | `pieno`, 8 |
 | `theme.palette` | colori dell'interfaccia, per nome (`orange`, `amber`…) | tema originale |
 | `input.touch` | calibrazione del tocco (Impostazioni → calibra touch) | automatica |
