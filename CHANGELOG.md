@@ -1,6 +1,6 @@
 # Changelog
 
-## Da rilasciare
+## 0.10.0 — 2026-10-03
 - **Parlare a Needle dal telefono**: con `voce.porta` (es. 8443) pi-dash serve in HTTPS una pagina
   con un bottone "premi e parla". Il browser del telefono riconosce la voce in italiano e manda al
   Pi solo il testo, eseguito come una frase della scheda Needle; l'esito torna sul telefono.
@@ -9,9 +9,31 @@
   (`voce.cert`, `voce.key`); codice d'accesso facoltativo `voce.token`. Guida § 5.13.
 - **QR sulla scheda Needle**: con la pagina "premi e parla" accesa, un tocco sul bot mostra il QR
   dell'indirizzo (con il codice d'accesso); un altro tocco riporta il bot. QR generato senza
-  dipendenze (`dash/qr.py`).
+  dipendenze (`dash/qr.py`). L'indirizzo si ricalcola ogni minuto, così segue l'IP del Pi se il
+  Wi-Fi arriva tardi o il router ne assegna un altro.
 - La pagina è **accesa di serie** (`voce.porta` 8443 in `config.json`): al primo avvio pi-dash
   crea un codice d'accesso casuale e lo salva in `config.local.json`; il QR lo contiene già.
+- **Interprete di frasi** (`dash/frasi.py`): timer, sveglie e luci chiesti in italiano li capisce
+  il codice, senza il modello e anche con il servizio Needle spento. Durate in ogni forma ("un'ora
+  e mezza", "un quarto d'ora"), orari ("alle 8 meno un quarto"), giorni della settimana, stanze,
+  colori, temperatura del bianco, luminosità relativa ("abbassa il soggiorno"). Nuove azioni:
+  ferma, pausa e riprendi il timer, sveglie solo in certi giorni e cancellazione, luci colorate.
+  Si spegne con `needle.regole: false`. Guida § 5.11.
+- **Azioni personalizzate** (`needle.azioni`, fino a 30): una frase chiave ("pasta", "buonanotte")
+  avvia insieme timer, sveglia, luci e pagina. Tre esempi in `config.json`.
+- **Bot di Needle**: una testa di robot mostra lo stato del modello (spento, controllo, pronto,
+  penso, fatto, dubbio, errore) e si muove con `motion.livello` `pieno`. Guida § 5.12.
+- **Scheda Needle più semplice**: niente più pannello con frase, funzione e confidenza; restano
+  una riga con l'esito e lo stato, il bot a sinistra e i bottoni delle frasi a destra, più grandi.
+- **Cambiare rete Wi-Fi**: `python -m dash --wifi [SSID]` chiede la password nascosta, aggiorna o
+  crea il profilo con `nmcli`, si collega e avvisa se la rete è solo a 5 GHz. La password resta a
+  NetworkManager. Guida § 3.1.
+- **Bridge Hue che cambia indirizzo**: se non risponde, pi-dash lo ritrova in rete, controlla che
+  la chiave funzioni, ripete il comando e salva il nuovo indirizzo in `config.local.json`.
+- Anteprime: nuova schermata `needle-qr.png`; le anteprime mostrano la pagina "premi e parla"
+  accesa, come nel `config.json` del progetto, con un indirizzo e un codice d'esempio.
+- Documentazione allineata alla versione: README (funzioni, requisiti, architettura, crediti),
+  guida, decisioni, note hardware.
 
 ## 0.9.1 — 2026-09-29
 - **Accendere le luci a un livello**: "accendi il soggiorno al 100%", "…al 100 per cento" e "…al

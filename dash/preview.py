@@ -40,6 +40,8 @@ SHOT_PAGES = [{"name": "Home", "widget": "clock"}, {"name": "Meteo", "widget": "
               {"name": "Timer", "widget": "timer"}, {"name": "Sveglia", "widget": "alarm"},
               {"name": "Sistema", "widget": "system"}, {"name": "Needle", "widget": "needle"},
               {"name": "+", "widget": "new"}]
+# Pagina "premi e parla" accesa come in config.json: indirizzo d'esempio, codice finto (non un segreto).
+DEMO_VOCE_URL = "https://192.168.1.23:8443/?t=esempio"
 
 
 def _slug(page: Page) -> str:
@@ -83,8 +85,8 @@ def save_animation(cfg: dict[str, Any], path: Path, now: datetime = SHOT_TIME,
 
 
 def save_system_screens(cfg: dict[str, Any], out_dir: Path, now: datetime = SHOT_TIME) -> list[Path]:
-    """Schermate fuori dallo schedario e stati: avvio, conferma di spegni, tensione bassa,
-    calibrazione, spegnimento."""
+    """Schermate fuori dallo schedario e stati: avvio, QR della pagina voce, conferma di spegni,
+    tensione bassa, calibrazione, spegnimento."""
     from .inputs import Tap
     from .render import effects
     from .render.theme import unit
@@ -103,7 +105,11 @@ def save_system_screens(cfg: dict[str, Any], out_dir: Path, now: datetime = SHOT
             if isinstance(widget, NeedleWidget):
                 widget.load_demo()  # niente controllo di rete nelle anteprime
             widget.update(now)
+        app.imposta_voce_url(DEMO_VOCE_URL)
         save("avvio.png", effects.boot(w, h, unit(w, h), app.renderer.c, app, 0.8))
+        app.page_idx = next(i for i, p in enumerate(app.pages) if p.kind == "needle")
+        app.page.widget.on_hit("qr", now)               # tocco sul bot: compare il QR
+        save("needle-qr.png", app.renderer.render(app, now))
         app.page_idx = next(i for i, p in enumerate(app.pages) if p.kind == "new")
         app.page.widget.on_hit("spegni", now)          # primo tocco: chiede conferma
         save("spegni-conferma.png", app.renderer.render(app, now))
@@ -141,6 +147,7 @@ def save_screenshots(cfg: dict[str, Any], out_dir: Path, now: datetime = SHOT_TI
             if isinstance(widget, NewWidget):
                 widget.pagine = dict  # anteprima: catalogo nello stato iniziale (tutto da aggiungere)
         app.power.load_demo(now)
+        app.imposta_voce_url(DEMO_VOCE_URL)
         for widget in app.widgets.values():
             widget.update(now)
         for i, page in enumerate(app.pages):

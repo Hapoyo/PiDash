@@ -1,6 +1,6 @@
 # pi-dash — Note hardware
 
-Versione 0.6.1 · 2026-09-27
+Versione 0.10.0 · 2026-10-03
 
 ## 1. Schermo 3,5" SPI
 | Voce | Dato |
@@ -15,8 +15,9 @@ Versione 0.6.1 · 2026-09-27
 - Non usare gli script "LCD-show" del produttore: sostituiscono `config.txt` e i driver del kernel.
   L'overlay `piscreen` è già incluso in Raspberry Pi OS.
 - Immagine capovolta: aggiungere `,rotate=90` alla riga `dtoverlay` (il valore predefinito è 270).
-- Il touch va calibrato una volta: `--touch-debug`, poi `swap_xy`, `invert_x`, `invert_y` e gli
-  estremi `x_min`/`x_max`/`y_min`/`y_max` in `config.json` (guida, § 5.4).
+- Il touch va calibrato una volta: Impostazioni → calibra touch (quattro croci), che salva
+  `swap_xy`, `invert_x`, `invert_y` e gli estremi `x_min`/`x_max`/`y_min`/`y_max` in
+  `config.local.json`; a mano con `--touch-debug` (guida, § 5.4).
 
 ### 1.1 Banda del bus SPI e animazioni
 | Voce | Valore |
@@ -57,7 +58,9 @@ Versione 0.6.1 · 2026-09-27
   adesso), oppure `vcgencmd get_throttled` (bit 0 adesso, bit 16 dall'accensione). Prova:
   `cat /sys/class/hwmon/hwmon*/name` deve elencare `rpi_volt`.
 - Per i volt veri servirebbe un sensore esterno su I²C (per esempio INA219 fra alimentatore e Pi).
-- Wi-Fi solo a 2,4 GHz.
+- Wi-Fi solo a 2,4 GHz. Per cambiare rete o password: `python -m dash --wifi` (guida, § 3.1).
+- Nessun microfono: i comandi a voce arrivano dal telefono come testo (pagina "premi e parla",
+  guida § 5.13).
 - Nessun orologio interno: dopo un'accensione senza rete l'ora è sbagliata finché NTP non sincronizza.
 - Il programma scrive direttamente nel framebuffer: non serve il desktop (Raspberry Pi OS Lite).
   L'utente del servizio deve stare nei gruppi `video`, `input` e `tty`.

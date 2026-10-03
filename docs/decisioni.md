@@ -1,6 +1,6 @@
 # pi-dash — Decisioni di progetto
 
-Versione 0.9.1 · 2026-09-29
+Versione 0.10.0 · 2026-10-03
 
 Scelte prese e motivi. Da leggere prima di cambiare il comportamento di una parte;
 le regole operative stanno in [CLAUDE.md](../CLAUDE.md).
@@ -31,6 +31,9 @@ le regole operative stanno in [CLAUDE.md](../CLAUDE.md).
   codice è leggibile da chi vede lo schermo, che è già in casa. QR generato in `dash/qr.py`
   (modo byte, versioni 1–10, correzione L) per non aggiungere dipendenze oltre Pillow; a 480×320
   un indirizzo da 50 caratteri è una versione 3, 4 px per modulo nel pannello del bot.
+  `App` ricalcola l'indirizzo ogni minuto (`VOCE_IP_S`): all'avvio il Wi-Fi può non essere ancora
+  collegato (il QR direbbe `<nome>.local` per sempre) e il DHCP può cambiare l'IP. Le anteprime
+  usano un indirizzo e un codice d'esempio (`preview.DEMO_VOCE_URL`), mai quelli veri.
 - Luci Hue (`dash/hue.py`, funzioni `lights_on/off` e `set_brightness` in `azioni.py`): API v1 del
   bridge su HTTPS, che basta per stanze e luminosità; certificato autofirmato non verificato (rete
   locale, indirizzo scritto in configurazione), chiave solo in `config.local.json` a 600
@@ -74,7 +77,7 @@ le regole operative stanno in [CLAUDE.md](../CLAUDE.md).
 - Azioni di Needle (`dash/azioni.py`): il modello propone, il dashboard decide. Il thread della
   richiesta non tocca mai il dashboard: mette le chiamate in coda (`NeedleWidget.take_calls`) e le
   esegue `App.step` nel ciclo principale, dove si cambiano pagine e widget. Solo le funzioni di
-  `AZIONI` (timer, sveglia, apri pagina, meteo), argomenti controllati prima di creare o cambiare
+  `AZIONI` (timer, sveglia, apri pagina, meteo, luci), argomenti controllati prima di creare o cambiare
   qualcosa, e nessuna funzione irreversibile (niente spegnimento). Sotto `needle.soglia` (0,6) non
   si esegue. Le funzioni sono disegnate sul modello, misurato sul Pi con 17 frasi italiane: con
   `start_timer(minutes)` e `show_page(page)` "timer di 90 secondi" avviava 90 minuti (confidenza
@@ -95,7 +98,7 @@ le regole operative stanno in [CLAUDE.md](../CLAUDE.md).
   settimana crema) con una sfera in testa all'arco: `ClockWidget.cycles`.
 - Schedario componibile: le Impostazioni (pagina `new`, `widgets/new.py`; linguetta con
   ingranaggio e "impostazioni", disegnati da `folders.draw_tabs` al posto del nome, che resta "+"
-  nei config) elencano solo i tipi opzionali (`new.tipi`, di norma timer e sveglia); ogni voce fa
+  nei config) elencano solo i tipi opzionali (`new.tipi`, di norma timer, sveglia e Needle); ogni voce fa
   da interruttore, quindi una sola pagina per tipo. `App.add_page`/`remove_page` creano il widget e salvano `pages` in
   `config.local.json`; `App.page_kinds()` dice al widget cosa è già presente. Chiave della pagina
   `tipo` o `tipo#N`, sempre libera anche dopo una rimozione (più copie restano possibili da
