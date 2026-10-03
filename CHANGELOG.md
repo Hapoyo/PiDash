@@ -5,6 +5,9 @@
   framebuffer SPI restava acceso se `KDSETMODE` non andava a buon fine. Ora pi-dash lo nasconde
   anche con la sequenza `ESC[?25l`, segnala (warning) quando non riesce a fermare la console, e il
   servizio spegne `fbcon/cursor_blink` prima di partire. Dopo l'aggiornamento: `scripts/installa-servizio.sh`.
+- Cursore: `dash/display/fb.py` ora lo nasconde (`ESC[?25l` su tty0 e tty1, ripetuto ogni 20 s)
+  anche quando `KDSETMODE` non è permesso; nuovo `scripts/console-silenziosa.sh` (da lanciare una
+  volta sul Pi) per togliere login, messaggi e cursore dalla console dello schermo. Guida § 5.5.
 - **Grafica con più rilievo**: pannelli con ombra, sfumatura e filo di luce (`Canvas.solid`),
   bottoni in rilievo (`Canvas.key`), riflesso sulle barre, icona del tempo sulla pagina meteo
   (`Canvas.icon`). Le funzioni non cambiano; anteprime rigenerate.
