@@ -11,6 +11,7 @@ from PIL import Image
 
 from ..layout import Box
 from ..motion import Fx, Slot, ease_in_out, scramble, wave
+from . import bot
 from .canvas import Canvas
 from .theme import fit
 
@@ -35,6 +36,9 @@ def draw_fx(cv: Canvas, e: Fx, t: float) -> None:
         rr = r * (1.4 + 2.2 * k)
         cv.d.ellipse((cx - rr, cy - rr, cx + rr, cy + rr), outline=cv.mix(e.color, e.bg, k),
                      width=cv.line)
+    elif e.kind == "bot":        # faccia del bot di Needle: si ridisegna tutta, sul fondo pulito
+        cv.d.rectangle(e.box, fill=cv.c[e.bg])
+        bot.draw(cv, e.box, bot.MOODS[int(e.extra[0])], t, e.bg)
     elif e.kind == "outline":    # voce scelta della scheda "+"
         r, lw = (e.extra + (8, 2))[:2]
         cv.d.rounded_rectangle(e.box, radius=round(r), outline=cv.mix(e.color, e.bg, wave(t, 1.4)),

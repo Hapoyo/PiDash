@@ -123,6 +123,14 @@
     "soglia_pagine": 0.35,
     "soglia_luci": 0.4,
     "naviga": true,
+    "regole": true,
+    "azioni": [
+      {"nome": "pasta", "frasi": ["pasta", "spaghetti"], "timer": {"minuti": 9}},
+      {"nome": "buonanotte", "frasi": ["buonanotte", "vado a dormire"],
+       "luci": [{"stanza": "tutte", "acceso": false}]},
+      {"nome": "cinema", "frasi": ["cinema", "film"],
+       "luci": [{"stanza": "soggiorno", "percentuale": 15, "temperatura": "calda"}]}
+    ],
     "queries": [
       "meteo a ventotene",
       "timer 5 minuti",

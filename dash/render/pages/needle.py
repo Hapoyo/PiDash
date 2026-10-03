@@ -1,7 +1,8 @@
 """Needle: stato del servizio, ultima frase con la funzione riconosciuta e frasi da provare.
 
-Pannello in alto (stato, frase, funzione, barra della confidenza) e in basso i bottoni con le
-frasi di `needle.queries`. `hits` restituisce gli stessi rettangoli del disegno.
+Pannello in alto (bot, stato, frase, funzione, barra della confidenza) e in basso i bottoni con
+le frasi di `needle.queries`. Il bot (`render/bot.py`) mostra l'umore del widget: pronto, penso,
+fatto, dubbio, errore, offline. `hits` restituisce gli stessi rettangoli del disegno.
 """
 from __future__ import annotations
 
@@ -9,6 +10,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from ...layout import Box
+from .. import bot
 from ..canvas import Canvas
 from ..theme import GRID, fit, px
 from .new import chips
@@ -22,7 +24,7 @@ BAR_H = 10  # barra della confidenza (pixel a 480×320)
 def _geometry(b: Box, u: float) -> tuple[Box, Box]:
     """Pannello dell'esito e area dei bottoni: stessa geometria per disegno e tocco."""
     g = px(GRID.gap, u)
-    top = Box(b.x, b.y, b.w, round(b.h * 0.58))
+    top = Box(b.x, b.y, b.w, round(b.h * 0.63))
     return top, Box(b.x, top.bottom + g, b.w, b.bottom - top.bottom - g)
 
 
@@ -39,19 +41,25 @@ def draw(cv: Canvas, b: Box, app: App, now: datetime) -> None:
     pad = cv.pad
     bg = "orange" if busy else ("cream" if online else "tan")
     cv.rect(top, bg)
-    # intestazione: nome a sinistra, stato a destra
-    # a sinistra cosa ha fatto il dashboard con l'ultima frase, se ha fatto qualcosa
-    esito = last.esito if last else ""
-    cv.label((top.x + pad, top.y + pad), "→ " + esito if esito else "needle · function calling",
-             "ink", bold=bool(esito))
-    cv.label((top.right - pad, top.y + pad), w.stato(), "ink", "ra", bold=True)
-    head = cv.height(cv.f_label) + cv.gap
     # barra della confidenza in fondo al pannello
     bar = Box(top.x + pad, top.bottom - pad - cv.px(BAR_H), top.w - 2 * pad, cv.px(BAR_H))
     conf = last.confidenza if last and last.confidenza is not None else 0.0
     cv.progress(bar, conf, "amber", track="panel", outline="line", show_empty=False)
-    body = Box(top.x + pad, top.y + pad + head, top.w - 2 * pad,
-               bar.y - cv.gap - (top.y + pad + head))
+    # il bot a sinistra (quadrato, alto quanto il pannello sopra la barra), il testo a destra
+    lato = bar.y - cv.gap - (top.y + pad)
+    mascotte = Box(top.x + pad, top.y + pad, lato, lato)
+    umore = w.umore()
+    bot.draw(cv, mascotte, umore, 0.0, bg)
+    cv.add_fx("bot", mascotte.rect, bg=bg, extra=(float(bot.MOODS.index(umore)),))
+    sx = mascotte.right + 2 * cv.gap
+    # intestazione: a sinistra cosa ha fatto il dashboard con l'ultima frase, se ha fatto qualcosa;
+    # a destra lo stato
+    esito = last.esito if last else ""
+    cv.label((sx, top.y + pad), "→ " + esito if esito else "needle · function calling",
+             "ink", bold=bool(esito))
+    cv.label((top.right - pad, top.y + pad), w.stato(), "ink", "ra", bold=True)
+    head = cv.height(cv.f_label) + cv.gap
+    body = Box(sx, top.y + pad + head, top.right - pad - sx, bar.y - cv.gap - (top.y + pad + head))
     if last is None:
         msg = "servizio spento: systemctl start needle" if online is False else \
               "tocca una frase per provare"
