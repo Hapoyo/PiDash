@@ -3,8 +3,7 @@
 > Versione 0.10.0 · 2026-10-03
 
 Cruscotto da tavolo per Raspberry Pi con schermo touch SPI da 3,5": ora, meteo con vento in nodi,
-timer di partenza regata, sveglia e stato del sistema, in un'interfaccia a schedario ispirata ai
-computer di bordo. Si comanda anche a voce dal telefono, con un modello locale che avvia timer e
+timer, sveglia e stato del sistema, in un'interfaccia a schedario. Si comanda anche a voce dal telefono, con un modello locale che avvia timer e
 sveglie e accende le luci Philips Hue.
 
 [![test](https://github.com/Hapoyo/PiDash/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/Hapoyo/PiDash/actions/workflows/test.yml)
@@ -16,7 +15,7 @@ sveglie e accende le luci Philips Hue.
 ![Accensione, cambio pagina e numeri che si decodificano](docs/img/animazione.gif)
 
 > **In English** — PiDash is a desk dashboard for a Raspberry Pi 3 with a 3.5" SPI touch display
-> (480×320, ILI9486). It shows the time, weather with wind in knots, a regatta start timer,
+> (480×320, ILI9486). It shows the time, weather with wind in knots, a timer,
 > alarms and system stats, laid out as a filing cabinet of tabs. It draws straight to the
 > framebuffer, so no desktop is needed, and Pillow is its only dependency. A Settings tab adds
 > or removes tabs, sets the brightness, calibrates the touch screen, shuts the Pi down and warns
@@ -33,9 +32,9 @@ sveglie e accende le luci Philips Hue.
   l'ingranaggio), dove si regolano anche luminosità e calibrazione del tocco e si spegne il Pi.
 - **Tocco preciso**: ogni bottone risponde da solo, un tocco appena fuori vale per il più vicino,
   il punto è la mediana dei campioni letti mentre il dito preme.
-- **Meteo per chi va in mare**: vento in nodi con direzione, raffiche e forza Beaufort, pressione,
+- **Meteo**: vento in nodi con direzione, raffiche e forza Beaufort, pressione,
   pioggia e previsione a 15 ore da [Open-Meteo](https://open-meteo.com), senza chiave API.
-- **Timer di partenza regata**: il tempo si compone sommando i bottoni (+1′, +5′, +10′, +15′,
+- **Timer**: il tempo si compone sommando i bottoni (+1′, +5′, +10′, +15′,
   −1′, C per azzerare); **sveglie settimanali**.
 - **Needle, comandi in italiano**: scheda opzionale con il modello locale
   [Needle](https://github.com/cactus-compute/needle) (function calling, 35 MB, senza rete) e un
@@ -64,7 +63,7 @@ sveglie e accende le luci Philips Hue.
 |---|---|---|---|
 | 001 | Home | sempre | ora e data, luogo e coordinate, alba/tramonto, avanzamento del giorno, anelli di settimana, mese e anno |
 | 002 | Meteo | sempre | temperatura, vento (nodi, direzione, raffiche, Beaufort), pioggia, umidità, pressione, previsione oraria, fase lunare |
-| 003 | Timer | a scelta | conto alla rovescia composto con i bottoni; 5′ = sequenza di partenza |
+| 003 | Timer | a scelta | conto alla rovescia composto con i bottoni |
 | 004 | Sveglia | a scelta | prossima sveglia, stato, sveglie per giorno della settimana |
 | 005 | Sistema | sempre | CPU, RAM, disco, storici di CPU e rete, host, IP, temperatura, uptime |
 | 006 | Needle | a scelta | modello locale [Needle](https://github.com/cactus-compute/needle) (function calling): esito dell'ultima frase, bot che mostra lo stato del modello, bottoni con le frasi da provare; esegue timer, sveglie, pagine e luci Philips Hue; un tocco sul bot mostra il QR della pagina "premi e parla" |
@@ -148,7 +147,7 @@ La configurazione è su due livelli:
 | `location.mode` | posizione: `auto` (GPS, poi Wi-Fi, poi IP), `ip`, `city` (per nome), `fixed` (coordinate) | `auto` |
 | `location.name`, `lat`, `lon` | luogo e coordinate di riserva | Gaeta, 41,214 N 13,571 E |
 | `location.wifi`, `gps_device` | posizione dalle reti Wi-Fi (BeaconDB); seriale del GPS | `true`; automatica |
-| `timer.presets_s`, `timer.labels` | bottoni che sommano il tempo (secondi) ed etichette | 60, 300, 600, 900 · 300 = "partenza" |
+| `timer.presets_s`, `timer.labels` | bottoni che sommano il tempo (secondi) ed etichette per durata | 60, 300, 600, 900 · nessuna |
 | `backlight.level`, `backlight.mode` | luminosità 10–100; `auto`, `hw` (LED), `sw` (immagine) | 100, `auto` |
 | `alarm.alarms` | sveglie: ora, giorni (0 = lunedì), attiva | 07:00, lunedì–venerdì |
 | `needle.url`, `needle.queries` | servizio Needle locale e frasi dei bottoni (1–6); `needle.reset`: ogni frase è indipendente; `needle.timeout_s`: attesa massima della risposta | `http://127.0.0.1:8090`, 4 frasi, `true`, 15 s |

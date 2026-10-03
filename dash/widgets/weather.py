@@ -12,7 +12,7 @@ import threading
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from collections.abc import Hashable
 from typing import Any
@@ -44,41 +44,6 @@ ROSA_16 = ("N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
            "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW")
 VENTI_8 = ("TRAMONTANA", "GRECALE", "LEVANTE", "SCIROCCO",
            "OSTRO", "LIBECCIO", "PONENTE", "MAESTRALE")
-
-def _demo_data() -> dict[str, Any]:
-    """Dati finti coerenti per lavorare offline."""
-    start = datetime(2026, 9, 23)
-    times, temps, codes, rain, soil0, soil6 = [], [], [], [], [], []
-    wind: list[float] = []
-    gust: list[float] = []
-    for h in range(48):
-        t = start + timedelta(hours=h)
-        times.append(t.strftime("%Y-%m-%dT%H:00"))
-        temps.append(round(21 + 4 * math.sin((t.hour - 9) / 24 * 2 * math.pi), 1))
-        codes.append((0, 1, 2, 2, 3, 61, 2, 0)[(h // 3) % 8])
-        rain.append((5, 10, 16, 30, 55, 40, 20, 8)[(h // 3) % 8])
-        soil0.append(round(temps[-1] - 1, 1))
-        soil6.append(round(temps[-1] - 6, 1))
-        wind.append(round(9 + 6 * math.sin((t.hour - 6) / 24 * 2 * math.pi) + (h % 3), 1))
-        gust.append(round(wind[-1] * 1.4, 1))
-    return {
-        "current": {"time": "2026-09-23T14:30", "temperature_2m": 24.7,
-                    "apparent_temperature": 26.1, "relative_humidity_2m": 73,
-                    "weather_code": 2, "is_day": 1, "cloud_cover": 22,
-                    "pressure_msl": 1013.4, "wind_speed_10m": 14.2,
-                    "wind_direction_10m": 315, "wind_gusts_10m": 21.0},
-        "hourly": {"time": times, "temperature_2m": temps, "weather_code": codes,
-                   "precipitation_probability": rain,
-                   "soil_temperature_0cm": soil0, "soil_temperature_6cm": soil6,
-                   "wind_speed_10m": wind, "wind_gusts_10m": gust,
-                   "wind_direction_10m": [300] * 48},
-        "daily": {"temperature_2m_max": [25.1], "temperature_2m_min": [19.2],
-                  "sunrise": ["2026-09-23T06:52"], "sunset": ["2026-09-23T18:59"],
-                  "daylight_duration": [43620.0], "sunshine_duration": [36900.0]},
-    }
-
-
-DEMO_DATA: dict[str, Any] = _demo_data()
 
 
 def beaufort(kn: float) -> int:
@@ -152,7 +117,10 @@ class WeatherWidget(Widget):
         self.demo = bool(cfg.get("demo", False))
         self.cache_file = Path(cfg.get("cache_dir", "out")) / "weather_cache.json"
         self._lock = threading.Lock()
-        self._data: dict[str, Any] | None = DEMO_DATA if self.demo else self._load_cache()
+        self._data: dict[str, Any] | None = self._load_cache()
+        if self.demo:
+            from ..demo import weather_data  # solo con `weather.demo` o --demo
+            self._data = weather_data()
         self._version = 0  # cambia a ogni nuovo scaricamento: usato da state_key
         self.error: str | None = None
         self._stop = threading.Event()

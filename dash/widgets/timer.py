@@ -39,9 +39,9 @@ class TimerWidget(Widget):
         self._clock = clock
         self.state = TimerState.IDLE
         self._deadline = 0.0
-        # Etichetta per durata, es. {"300": "PARTENZA"} (sequenza di partenza di regata).
+        # Etichetta per durata, es. {"300": "PASTA"}.
         self.labels = {int(k): str(v).upper() for k, v in (cfg.get("labels") or {}).items()}
-        # all'accensione: la prima durata con un nome (la partenza), altrimenti il primo preset
+        # all'accensione: la prima durata con un nome, altrimenti il primo preset
         self._set_s = next((p for p in given if p in self.labels), given[0])
         self._remaining = float(self._set_s)
         self._hit = ""
