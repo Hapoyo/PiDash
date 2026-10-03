@@ -1,6 +1,6 @@
 # pi-dash — CLAUDE.md
 
-Versione 0.9.1 · 2026-09-29
+Versione 0.10.0 · 2026-10-03
 
 ## 1. Scopo
 Dashboard da tavolo per Raspberry Pi 3 Model B con schermo SPI 3,5" 480×320 (ILI9486 + touch
@@ -62,8 +62,10 @@ tests/                 unittest
 - Simulatore: `python -m dash --demo --web 8080 --driver sim` → `http://localhost:8080`
 - Un fotogramma: `python -m dash --once --demo --driver sim --page 2` → `out/frame.png`
 - Anteprime README: `TZ=Europe/Rome python -m dash --screenshots docs/img` → `docs/img/NN-pagina.png`,
-  le schermate di sistema (`avvio`, `spegni-conferma`, `tensione-bassa`, `calibrazione`, `spegnimento`)
-  e `docs/img/animazione.gif` (dati demo, posizione fissa, istante 24/09/2026 07:42, nessuna rete).
+  le schermate di sistema (`avvio`, `needle-qr`, `spegni-conferma`, `tensione-bassa`, `calibrazione`,
+  `spegnimento`)
+  e `docs/img/animazione.gif` (dati demo, posizione fissa, istante 24/09/2026 07:42, nessuna rete,
+  indirizzo voce d'esempio `preview.DEMO_VOCE_URL`).
   Rigenerarle quando cambia il disegno.
 - Animazioni: `--motion off|eventi|pieno` sovrascrive `motion.livello`.
 - Repository: https://github.com/Hapoyo/PiDash

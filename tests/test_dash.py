@@ -1733,8 +1733,9 @@ class TestScreenshots(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             paths = save_system_screens(make_cfg(display={"width": "auto", "height": "auto"}),
                                         Path(tmp))
-            self.assertEqual([p.name for p in paths], ["avvio.png", "spegni-conferma.png",
-                             "tensione-bassa.png", "calibrazione.png", "spegnimento.png"])
+            self.assertEqual([p.name for p in paths], ["avvio.png", "needle-qr.png",
+                             "spegni-conferma.png", "tensione-bassa.png", "calibrazione.png",
+                             "spegnimento.png"])
             for p in paths:
                 with Image.open(p) as img:
                     self.assertEqual(img.size, (480, 320))

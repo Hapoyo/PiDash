@@ -1,6 +1,6 @@
 # pi-dash — Installazione
 
-Versione 0.9.1 · 2026-09-29
+Versione 0.10.0 · 2026-10-03
 
 Guida passo passo per chi è nuovo del Raspberry Pi. Si lavora dal PC Windows: il Raspberry non
 ha bisogno di monitor né di tastiera ("headless"). Le parti in `grassetto monospazio` si scrivono
@@ -224,11 +224,11 @@ Se il cursore o il login della console compaiono sopra il dashboard:
 
 ### 5.6 Le Impostazioni: schede, luminosità, spegnimento
 In partenza ci sono home, meteo, sistema e le **Impostazioni** (linguetta con l'ingranaggio,
-l'ultima). Dentro, tre righe:
+l'ultima). Dentro, quattro righe:
 
 | Riga | Cosa fa |
 |---|---|
-| schede | `+ timer`, `+ sveglia`: un tocco aggiunge la scheda; la stessa voce diventa `− timer` e la toglie |
+| schede | `+ timer`, `+ sveglia`, `+ needle`: un tocco aggiunge la scheda; la stessa voce diventa `− timer` e la toglie |
 | luminosità | `−` e `+` dal 10 al 100 %, a passi di 10 |
 | sistema | `calibra touch` (§ 5.4) e `spegni`: al primo tocco diventa "conferma", al secondo (entro 4 s) spegne il Raspberry |
 | tensione | grafico degli ultimi 48 minuti, una colonna al minuto: grigia se l'alimentazione è rimasta sopra 4,63 V, rosa se è scesa sotto |
@@ -264,7 +264,7 @@ Mentre la tensione è bassa, la linguetta delle Impostazioni diventa rosa con sc
 "tensione bassa", ed è visibile da ogni pagina. Rimedio: alimentatore da 5,1 V 2,5 A e cavo
 corto e spesso (i cavi sottili perdono tensione sotto carico).
 
-Le schede elencate sono quelle di `new.tipi` (`timer`, `alarm`). Le pagine fisse — home, meteo,
+Le schede elencate sono quelle di `new.tipi` (`timer`, `alarm`, `needle`). Le pagine fisse — home, meteo,
 sistema — stanno in `pages`: si cambiano dal file, non dal dashboard.
 
 **Se vieni da una versione precedente** e il tuo `config.local.json` contiene `pages`, le
@@ -288,7 +288,10 @@ Poi `sudo systemctl restart pi-dash`. Nel log (`journalctl -u pi-dash -n 20`) l'
 ```
 Le sezioni si fondono voce per voce; gli elenchi (`alarms`, `pages`, `presets_s`) si sostituiscono
 per intero. Dopo una modifica: `sudo systemctl restart pi-dash`. Calibrazione del touch,
-schedario e luminosità ci finiscono da soli quando li cambi dalle Impostazioni.
+schedario e luminosità ci finiscono da soli quando li cambi dalle Impostazioni; lo stesso vale per
+le sveglie create da Needle, la chiave del bridge Hue (§ 5.10) e il codice della pagina voce
+(§ 5.13). Per questo il file nasce con permessi 600 (leggibile solo dal tuo utente): non
+copiarlo su GitHub né mandarlo in giro.
 
 ### 5.8 Posizione: GPS, Wi-Fi, IP
 Con `"mode": "auto"` (quella del progetto) il dashboard prova, in ordine:
@@ -612,6 +615,9 @@ Se continui a installare dallo zip:
 | Schermo acceso ma dashboard assente | `sudo journalctl -u pi-dash -n 50` e leggi l'ultimo errore |
 | Tocco nel punto sbagliato | Impostazioni → calibra touch (§ 5.4) |
 | Scheda Needle "offline" | `systemctl status needle`; se manca, `scripts/installa-needle.sh` (§ 5.9); log: `sudo journalctl -u needle -n 50` |
+| Il telefono non apre la pagina "premi e parla" | stessa rete Wi-Fi del Pi; indirizzo dal QR (tocco sul bot); avviso sul certificato: § 5.13 punto 3; "codice mancante o sbagliato": inquadra di nuovo il QR |
+| Il bottone "premi e parla" è spento | pagina in HTTP perché manca `openssl` (`sudo apt install -y openssl`, poi riavvia), oppure Firefox per Android: usa la tastiera |
+| Luci: "bridge non risponde" | bridge spento o fuori rete; se ha cambiato indirizzo pi-dash lo ritrova da solo; "chiave rifiutata dal bridge": rifai `--hue-registra` (§ 5.10) |
 | "spegni non consentito" | lancia `scripts/installa-servizio.sh` (installa la regola per lo spegnimento) |
 | Località sbagliata (es. Lavinio invece di Gaeta) | posizione da IP: § 5.8 (Wi-Fi, GPS o coordinate fisse) |
 | Orario sbagliato | serve la rete all'avvio; controlla il fuso con `timedatectl` (deve dire Europe/Rome) |
