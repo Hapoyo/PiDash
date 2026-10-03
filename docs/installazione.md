@@ -216,11 +216,28 @@ permette al dashboard un solo comando da amministratore, `systemctl poweroff`, p
 "spegni" delle Impostazioni.
 Controllo: `systemctl status pi-dash` deve dire `active (running)`; `q` per uscire.
 
-Se il cursore o il login della console compaiono sopra il dashboard:
-1. `sudo systemctl disable --now getty@tty1`
-2. `sudo nano /boot/firmware/cmdline.txt`: il file ha **una sola riga**; vai in fondo (tasto Fine),
-   aggiungi uno spazio e `vt.global_cursor_default=0`, senza andare a capo. Salva, esci,
-   `sudo reboot`.
+**Cursore lampeggiante ("-") o testo della console sullo schermo.** È la console di testo del
+Pi, che scrive nello stesso framebuffer del dashboard (di solito una lineetta sul bordo sinistro,
+all'altezza dell'ultima riga di testo). Pi-dash la ferma da solo, ma servono i permessi del
+servizio; per sicurezza si toglie la console dallo schermo, **una volta**:
+```
+cd ~/pi-dash
+scripts/console-silenziosa.sh
+sudo reboot
+```
+Lo script mette in `cmdline.txt` (copia in `cmdline.txt.pi-dash.bak`) `console=tty3`,
+`vt.global_cursor_default=0`, `consoleblank=0`, `loglevel=3`, `logo.nologo` e disattiva il login
+sul tty1 (`getty@tty1`). A mano, gli stessi passi: `sudo systemctl disable --now getty@tty1`,
+`sudo systemctl mask getty@tty1`, poi `sudo nano /boot/firmware/cmdline.txt` (**una sola riga**:
+cambia `console=tty1` in `console=tty3` e aggiungi in fondo, dopo uno spazio,
+`vt.global_cursor_default=0 consoleblank=0`) e `sudo reboot`.
+
+Se il trattino c'è ancora: aggiorna il servizio (`scripts/installa-servizio.sh`, poi
+`sudo systemctl restart pi-dash`) e guarda il registro: `journalctl -u pi-dash -b | grep -i console`.
+"console non fermata (...)" vuol dire che manca il permesso (gruppo `tty` o `CAP_SYS_TTY_CONFIG`);
+lanciato a mano da SSH il dashboard non ha quel permesso, meglio provarlo dal servizio.
+Una striscia gialla o una banda scura sul bordo dello schermo non è software: è il bordo del
+pannello o il flat del display.
 
 ### 5.6 Le Impostazioni: schede, luminosità, spegnimento
 In partenza ci sono home, meteo, sistema e le **Impostazioni** (linguetta con l'ingranaggio,
