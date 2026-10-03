@@ -135,6 +135,7 @@ La configurazione è su due livelli:
 | `needle.url`, `needle.queries` | servizio Needle locale e frasi dei bottoni (1–6); `needle.reset`: ogni frase è indipendente | `http://127.0.0.1:8090`, 4 frasi, `true` |
 | `needle.regole`, `needle.azioni` | timer, sveglie e luci capiti dal codice (senza modello); azioni personalizzate: frasi chiave che avviano timer, sveglia, luci e pagina | `true`, 3 esempi |
 | `needle.esegui`, `soglia`, `soglia_pagine`, `soglia_luci`, `naviga` | esegue le funzioni riconosciute; confidenza minima per timer e sveglia, per le sole pagine, per le luci; apre la pagina interessata | `true`, 0,6, 0,35, 0,4, `true` |
+| `voce.porta`, `voce.token`, `voce.cert`, `voce.key` | pagina "premi e parla" per il telefono (HTTPS, guida § 5.13); codice d'accesso; certificato proprio (vuoto = autofirmato) | 0 = spenta, vuoti |
 | `hue.bridge`, `hue.key`, `hue.timeout_s` | bridge Philips Hue: indirizzo, chiave (solo in `config.local.json`, la scrive `--hue-registra`), attesa massima | vuoti, 2 s |
 | `motion.livello`, `motion.fps` | animazioni: `pieno`, `eventi`, `off`; fotogrammi al secondo | `pieno`, 8 |
 | `theme.palette` | colori dell'interfaccia, per nome (`orange`, `amber`…) | tema originale |

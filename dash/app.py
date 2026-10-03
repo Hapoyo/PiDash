@@ -21,6 +21,7 @@ from .display import Display
 from .hue import Hue
 from .inputs import Buzzer, Event, Tap, panel_to_frame
 from .motion import Motion
+from .voce import Frase
 from .widgets import ETICHETTE, WIDGET_NAMES, Widget, WidgetFactory
 from .widgets.alarm import AlarmWidget
 from .widgets.calibrate import TouchWizard
@@ -85,6 +86,10 @@ class App:
         self._frame: Image.Image | None = None   # ultimo fotogramma mostrato (prima della rotazione)
         self._shown_page = -1
         self._last_fkey: int | None = None
+        # frasi dal telefono (`dash/voce.py`): Needle che le riceve e ultima frase gestita
+        self._needle_voce: NeedleWidget | None = None    # se non c'è nessuna scheda Needle
+        self._voce: NeedleWidget | None = self.needle() if (cfg.get("voce") or {}).get("porta") else None
+        self._voce_ultima = (0, False, 0)                 # (numero, accettata, risposte prima)
 
     @property
     def page(self) -> Page:
@@ -120,6 +125,39 @@ class App:
         if not self.hue.configurato:
             return None
         return [s.nome for s in self.hue.stanze()]
+
+    def needle(self) -> NeedleWidget:
+        """Needle per le frasi dal telefono: quello della prima scheda Needle, altrimenti uno
+        senza scheda (le azioni funzionano lo stesso, il risultato si vede sul telefono)."""
+        for p in self.pages:
+            if isinstance(p.widget, NeedleWidget):
+                return p.widget
+        if self._needle_voce is None:
+            widget = self.factory.make("needle")
+            assert isinstance(widget, NeedleWidget)
+            widget.stanze = self._nomi_stanze
+            self._needle_voce = widget
+        return self._needle_voce
+
+    def handle_frase(self, frase: Frase) -> None:
+        """Frase dal telefono: a Needle, come un tocco su una frase della scheda."""
+        widget = self._voce = self.needle()
+        prima = widget.risposte
+        self._voce_ultima = (frase.id, widget.chiedi(frase.testo), prima)
+
+    def voce_stato(self) -> dict[str, Any]:
+        """Stato per la pagina del telefono; chiamato dal thread del server (solo dati con lock)."""
+        widget, (n, accettata, prima) = self._voce, self._voce_ultima
+        if widget is None:
+            return {"id": n, "accettata": accettata, "attesa": prima, "risposte": 0, "lavora": False,
+                    "stato": "controllo…", "domanda": "", "esito": "", "errore": "", "chiamate": [],
+                    "frasi": []}
+        last = widget.snapshot()[2]
+        return {"id": n, "accettata": accettata, "attesa": prima, "risposte": widget.risposte,
+                "lavora": widget.in_attesa(), "stato": widget.stato(),
+                "domanda": last.domanda if last else "", "esito": last.esito if last else "",
+                "errore": last.errore if last else "",
+                "chiamate": list(last.chiamate) if last else [], "frasi": list(widget.queries)}
 
     def page_kinds(self) -> dict[str, str]:
         """{tipo: chiave} delle pagine presenti, per l'interruttore della scheda "+"."""
@@ -363,13 +401,16 @@ class App:
                 break
             if isinstance(ev, Tap):
                 self.handle_tap(ev, now)
+            elif isinstance(ev, Frase):
+                self.handle_frase(ev)
             else:
                 self.handle(ev, now)
-        for widget in list(self.widgets.values()):   # le funzioni di Needle cambiano le pagine
+        extra = [self._needle_voce] if self._needle_voce is not None else []
+        for widget in list(self.widgets.values()) + extra:   # le funzioni di Needle cambiano le pagine
             if isinstance(widget, NeedleWidget):
                 for nome, args, frase in widget.take_calls():
                     widget.set_esito(azioni.esegui(self, nome, args, widget.naviga, frase))
-        for widget in self.widgets.values():
+        for widget in list(self.widgets.values()) + extra:
             widget.update(now)
         self.power.sample(now, t)
         if self.calib is not None and self.calib.expired():
@@ -420,7 +461,7 @@ class App:
             self._stop.wait(max(0.0, self.motion.interval(t, idle) - (clock() - t)))
 
     def close(self) -> None:
-        for widget in self.widgets.values():
+        for widget in list(self.widgets.values()) + ([self._needle_voce] if self._needle_voce else []):
             widget.close()
         self.buzzer.set(False)
         self.display.close()

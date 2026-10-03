@@ -13,6 +13,17 @@ le regole operative stanno in [CLAUDE.md](../CLAUDE.md).
   LAN no. Il widget non blocca mai il disegno: controllo TCP ogni 5 s e richieste a `/complete` in
   thread; `POST /reset` prima di ogni frase (`needle.reset`), altrimenti il server accumula i
   turni in un'unica conversazione. La scheda è opzionale (catalogo del "+", `new.tipi`).
+- Voce dal telefono (`dash/voce.py`, `voce.porta`, spenta di default): il microfono è quello del
+  telefono e il riconoscimento lo fa il suo browser (Web Speech API, `it-IT`), non il Pi: un
+  modello vocale sul Pi 3 accanto a Needle non ci sta in RAM né in tempo, e il Bluetooth dà audio
+  scadente e abbinamenti fragili. Al Pi arriva solo testo (`POST /frase`, max 200 caratteri), che
+  diventa un evento `Frase` nella coda: lo passa a Needle `App.step`, quindi il server non tocca mai
+  il dashboard e valgono regole, soglie e azioni di sempre. Senza scheda Needle risponde un widget
+  senza scheda (`App.needle`). Il browser dà il microfono solo in HTTPS: certificato indicato
+  (Tailscale) o autofirmato con `openssl` in `out/voce/`, e senza openssl HTTP con la sola
+  dettatura della tastiera. Premi e parla invece di ascolto continuo: con lo schermo bloccato il
+  browser smette di ascoltare, e servirebbe un'app nativa. `voce.token` facoltativo (header
+  `X-Token` o `?t=`), perché la pagina comanda le luci a chiunque sia in rete.
 - Luci Hue (`dash/hue.py`, funzioni `lights_on/off` e `set_brightness` in `azioni.py`): API v1 del
   bridge su HTTPS, che basta per stanze e luminosità; certificato autofirmato non verificato (rete
   locale, indirizzo scritto in configurazione), chiave solo in `config.local.json` a 600

@@ -18,7 +18,7 @@ from .hue import LINK_TIMEOUT_S, HueError, registra, scopri
 from .display import make_display
 from .inputs import Event, Tap, start_gpio, start_keyboard, start_touch
 from .preview import save_animation, save_screenshots, save_system_screens
-from . import wifi
+from . import voce, wifi
 from .widgets import WIDGET_NAMES
 
 log = logging.getLogger("dash")
@@ -173,11 +173,16 @@ def main(argv: list[str] | None = None) -> int:
 
         signal.signal(signal.SIGTERM, on_term)
 
+    # pagina "premi e parla" per il telefono (voce.porta, di norma spenta)
+    server = None if args.once else voce.avvia(cfg["voce"], events, app.voce_stato,
+                                                Path(cfg["sim"]["out_dir"]) / "voce")
     try:
         app.run(once=args.once)
     except KeyboardInterrupt:
         pass
     finally:
+        if server is not None:
+            server.close()
         app.close()
     return 0
 

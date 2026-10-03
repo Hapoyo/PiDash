@@ -3,6 +3,7 @@
 Il widget tiene solo lo stato: se il servizio risponde, la frase inviata e la funzione che il
 modello ha riconosciuto. Le richieste partono in un thread, così il disegno non aspetta mai la
 rete. Tocco su una frase (o A): la invia a `POST /complete`.  B: sceglie la frase seguente.
+Le frasi libere (dal telefono, `dash/voce.py`) passano da `chiedi`.
 """
 from __future__ import annotations
 
@@ -111,6 +112,8 @@ class NeedleWidget(Widget):
         self._checking = False
         self._checked = -CHECK_S * 2
         self._last: Risposta | None = None
+        self.risposte = 0          # risposte arrivate: il telefono capisce quando c'è la sua
+        self._in_corso = 0         # chiamate prese da App e non ancora concluse da `set_esito`
         self._hit = -1
         self._hit_at = -FLASH_S
         self.demo = False
@@ -188,18 +191,30 @@ class NeedleWidget(Widget):
 
     def ask(self, i: int) -> None:
         """Invia la frase `i` al modello (in un thread); ignorata se ce n'è una in corso."""
-        if not 0 <= i < len(self.queries):
-            return
+        if 0 <= i < len(self.queries) and self.chiedi(self.queries[i]):
+            self._hit, self._hit_at = i, self._clock()
+
+    def chiedi(self, domanda: str) -> bool:
+        """Invia una frase qualsiasi (in un thread); False se ce n'è già una in corso o se il
+        servizio è spento e la frase non la capisce l'interprete da solo."""
+        domanda = domanda.strip()
+        if not domanda:
+            return False
         # senza il servizio le frasi che l'interprete capisce da sole funzionano lo stesso
         fuori = self._online is False and not (self.regole and frasi.interpreta(
-            self.queries[i], self.azioni))
+            domanda, self.azioni))
         with self._lock:
             if self._busy or fuori:
-                return
+                return False
             self._busy = True
-        self._hit, self._hit_at = i, self._clock()
-        threading.Thread(target=self._run, args=(self.queries[i],), name="needle-ask",
+        threading.Thread(target=self._run, args=(domanda,), name="needle-ask",
                          daemon=True).start()
+        return True
+
+    def in_attesa(self) -> bool:
+        """True finché l'ultima frase non ha un esito completo (modello, poi azioni del dashboard)."""
+        with self._lock:
+            return self._busy or bool(self._pending) or self._in_corso > 0
 
     def _regole(self, domanda: str) -> list[tuple[str, dict[str, Any]]] | None:
         """Le chiamate che l'interprete di frasi ricava da solo; None se serve il modello."""
@@ -254,6 +269,7 @@ class NeedleWidget(Widget):
             # le esegue App nel ciclo principale, non questo thread; serve anche la frase detta
             self._pending.extend((nome, args, domanda) for nome, args in calls)
             self._last = replace(risposta, t=self._clock())
+            self.risposte += 1
             self._busy = False
             if risposta.errore == "servizio non risponde":
                 self._online = False
@@ -262,6 +278,7 @@ class NeedleWidget(Widget):
         """(funzione, argomenti, frase) riconosciuti e non ancora eseguiti; li svuota (App, a ogni giro)."""
         with self._lock:
             out, self._pending = self._pending, []
+            self._in_corso += len(out)
         return out
 
     def set_esito(self, text: str) -> None:
@@ -270,6 +287,7 @@ class NeedleWidget(Widget):
             if self._last is not None:
                 unite = f"{self._last.esito} · {text}" if self._last.esito else text
                 self._last = replace(self._last, esito=unite[:ESITO_MAX])
+            self._in_corso = max(0, self._in_corso - 1)
 
     # --- ingressi --------------------------------------------------------
     def on_hit(self, hit: str, now: datetime) -> None:

@@ -484,6 +484,45 @@ Sulla scheda Needle una testa di robot mostra cosa sta facendo il modello. Con `
 
 Dopo una risposta la faccia dell'esito dura 6 secondi, poi il bot torna "pronto".
 
+### 5.13 Parlare a Needle dal telefono
+Il Pi non ha un microfono: si usa quello del telefono. pi-dash serve una pagina web con un grande
+bottone **premi e parla**; il browser del telefono riconosce la voce in italiano e manda al Pi solo
+il testo, che Needle tratta come una frase toccata sullo schermo (stesse regole, soglie e azioni).
+Funziona anche senza la scheda Needle: l'esito si legge sul telefono.
+
+1. Accendi la pagina in `config.local.json` (§ 5.7) e riavvia (`sudo systemctl restart pi-dash`):
+   ```json
+   { "voce": { "porta": 8443, "token": "una-parola-a-caso" } }
+   ```
+   Il `token` è facoltativo ma consigliato: senza, chiunque sia sulla tua rete può accendere le luci.
+   Resta solo in `config.local.json`, mai in `config.json` né in Git.
+2. Al primo avvio pi-dash crea con `openssl` un certificato autofirmato in `out/voce/` (vale per
+   `<nome-del-pi>.local` e per l'IP di quel momento). Dal telefono, sulla stessa rete Wi-Fi, apri
+   `https://<nome-del-pi>.local:8443/?t=una-parola-a-caso` (oppure l'IP del Pi al posto del nome) e
+   aggiungi la pagina alla schermata Home.
+3. Il browser avvisa che il certificato non è fidato: è normale per un certificato fatto in casa.
+   Su Android/Chrome tocca **Avanzate → Procedi**. Su iPhone/Safari tocca **Mostra dettagli →
+   visita questo sito web**; se poi il microfono non parte, installa il certificato
+   (`out/voce/cert.pem`, mandalo a te stesso via AirDrop o mail) e attivalo in **Impostazioni →
+   Generali → Info → Impostazioni certificati attendibili**.
+4. **Tieni premuto** il bottone, parla, lascia: la frase compare sul telefono e, poco dopo, cosa ha
+   fatto il dashboard ("→ timer 5' avviato"). Un **tocco breve** ascolta fino alla prima pausa.
+   Sotto ci sono una casella per scrivere (o dettare con il microfono della tastiera) e le frasi
+   di `needle.queries`.
+
+**Limiti.** Il riconoscimento vocale lo fa il telefono (su Android i server di Google), quindi il
+telefono deve avere internet; il Pi riceve solo testo. Il browser ascolta solo con la pagina aperta
+e lo schermo acceso: niente ascolto continuo in tasca. Firefox per Android non riconosce la voce:
+resta la tastiera. Se `openssl` manca la pagina gira in HTTP e il bottone è spento (il browser
+non dà il microfono): la casella con la dettatura della tastiera funziona lo stesso.
+
+**Con Tailscale** (telefono e Pi nella stessa tailnet, anche fuori casa) niente avvisi: un
+certificato vero si ottiene con `sudo tailscale cert <pi>.<tailnet>.ts.net`; poi in
+`config.local.json` `"voce": {"porta": 8443, "cert": "/percorso/<pi>.<tailnet>.ts.net.crt",
+"key": "/percorso/<pi>.<tailnet>.ts.net.key"}` (file leggibili dall'utente del servizio) e si apre
+`https://<pi>.<tailnet>.ts.net:8443/`. Il certificato autofirmato dura 825 giorni (il massimo per
+iOS): per rifarlo, ad esempio dopo un cambio di IP, cancella `out/voce/` e riavvia.
+
 ## 6. Comandi di tutti i giorni
 Nome del servizio: `pi-dash`.
 

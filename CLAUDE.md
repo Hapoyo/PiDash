@@ -32,6 +32,7 @@ dash/render/           tutto il disegno
   renderer.py          CyberRenderer: `render` (pagina base) e `compose` (fotogramma animato)
 dash/azioni.py         funzioni di Needle eseguibili (`AZIONI`): timer, sveglia, pagina, meteo, luci
 dash/frasi.py          interprete di frasi italiane (timer, sveglie, luci) e azioni personalizzate `needle.azioni`
+dash/voce.py           pagina "premi e parla" per il telefono (HTTPS, `voce.porta`): testo → `Frase` → Needle
 dash/hue.py            bridge Philips Hue: stanze, comandi, registrazione (`--hue-registra`)
 dash/wifi.py           credenziali Wi-Fi con nmcli (`--wifi`): profilo, collegamento, avvisi 5 GHz
 dash/layout.py         Box e nomi di giorni/mesi
@@ -76,6 +77,8 @@ tests/                 unittest
   `curl -s -X POST localhost:8090/complete -d '{"input":"timer 5 minuti"}'`
 - Wi-Fi del Pi: `.venv/bin/python -m dash --wifi [SSID]` (password chiesta nascosta, mai in config né
   nei log), guida [docs/installazione.md](docs/installazione.md) § 3.1
+- Voce dal telefono: `"voce": {"porta": 8443, "token": "…"}` in `config.local.json`, poi
+  `https://<pi>.local:8443/?t=…` dal telefono; guida [docs/installazione.md](docs/installazione.md) § 5.13
 - Calibrazione tocco: Impostazioni → calibra touch; a mano `.venv/bin/python -m dash --touch-debug`
 - Simulatore: un clic sull'anteprima web è un tocco (`POST /tap?x=…&y=…`)
 - Comandi: N pagina seguente · A azione (avvia/ferma timer, spegne sveglia) · B indietro/+preset
