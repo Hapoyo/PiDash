@@ -1091,6 +1091,47 @@ class TestHue(unittest.TestCase):
             rifiutata.stanze()
         self.assertEqual(str(chiave.exception), "chiave rifiutata dal bridge")
 
+    def test_a_moved_bridge_is_found_again_and_remembered(self) -> None:
+        b = BridgeFinto()
+        visti: list[str] = []
+        salvati: list[str] = []
+
+        def fabbrica(bridge: str, key: str, timeout: float) -> Any:
+            visti.append(bridge)
+            return b
+
+        def vecchio(metodo: str, percorso: str, corpo: Any) -> Any:
+            raise HueError("bridge non risponde")
+
+        clock = FakeClock()
+        hue = Hue({"bridge": "192.168.1.73", "key": "SEGRETO"}, send=vecchio, clock=clock,
+                  ritrova=lambda: "192.168.1.99", fabbrica=fabbrica, on_trovato=salvati.append)
+        self.assertEqual(hue.trova("soggiorno").nome, "Soggiorno")   # type: ignore[union-attr]
+        self.assertEqual((hue.bridge, salvati), ("192.168.1.99", ["192.168.1.99"]))
+
+    def test_bridge_search_does_not_repeat_and_ignores_foreign_bridges(self) -> None:
+        chiamate: list[int] = []
+
+        def vecchio(metodo: str, percorso: str, corpo: Any) -> Any:
+            raise HueError("bridge non risponde")
+
+        def ritrova() -> str:
+            chiamate.append(1)
+            return "10.0.0.5"
+
+        altro = lambda b, k, t: (lambda m, p, c: [{"error": {}}])   # chiave rifiutata: non è il nostro
+        clock = FakeClock()
+        hue = Hue({"bridge": "192.168.1.73", "key": "k"}, send=vecchio, clock=clock,
+                  ritrova=ritrova, fabbrica=altro)
+        for _ in range(2):
+            with self.assertRaises(HueError):
+                hue.imposta(None, True)
+        self.assertEqual((len(chiamate), hue.bridge), (1, "192.168.1.73"))   # pausa di un minuto
+        clock.t += 61
+        with self.assertRaises(HueError):
+            hue.imposta(None, True)
+        self.assertEqual(len(chiamate), 2)
+
     def test_the_key_never_appears_in_errors(self) -> None:
         from dash.hue import http_send
         with self.assertRaises(HueError) as err:
