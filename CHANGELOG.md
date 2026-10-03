@@ -1,5 +1,18 @@
 # Changelog
 
+## Da rilasciare
+- **Parlare a Needle dal telefono**: con `voce.porta` (es. 8443) pi-dash serve in HTTPS una pagina
+  con un bottone "premi e parla". Il browser del telefono riconosce la voce in italiano e manda al
+  Pi solo il testo, eseguito come una frase della scheda Needle; l'esito torna sul telefono.
+  Casella per scrivere o dettare con la tastiera e frasi di `needle.queries` come scorciatoie.
+  Certificato autofirmato creato da `openssl` in `out/voce/`, oppure quello di Tailscale
+  (`voce.cert`, `voce.key`); codice d'accesso facoltativo `voce.token`. Guida § 5.13.
+- **QR sulla scheda Needle**: con la pagina "premi e parla" accesa, un tocco sul bot mostra il QR
+  dell'indirizzo (con il codice d'accesso); un altro tocco riporta il bot. QR generato senza
+  dipendenze (`dash/qr.py`).
+- La pagina è **accesa di serie** (`voce.porta` 8443 in `config.json`): al primo avvio pi-dash
+  crea un codice d'accesso casuale e lo salva in `config.local.json`; il QR lo contiene già.
+
 ## 0.9.1 — 2026-09-29
 - **Accendere le luci a un livello**: "accendi il soggiorno al 100%", "…al 100 per cento" e "…al
   massimo" accendono la stanza a quella luminosità. Il modello, con queste frasi, risponde

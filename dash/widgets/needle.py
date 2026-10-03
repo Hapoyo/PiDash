@@ -3,6 +3,7 @@
 Il widget tiene solo lo stato: se il servizio risponde, la frase inviata e la funzione che il
 modello ha riconosciuto. Le richieste partono in un thread, così il disegno non aspetta mai la
 rete. Tocco su una frase (o A): la invia a `POST /complete`.  B: sceglie la frase seguente.
+Le frasi libere (dal telefono, `dash/voce.py`) passano da `chiedi`.
 """
 from __future__ import annotations
 
@@ -18,7 +19,7 @@ from typing import Any, Callable
 from urllib import error, request
 from urllib.parse import urlsplit
 
-from .. import azioni, frasi
+from .. import azioni, frasi, qr
 from .base import Widget
 
 log = logging.getLogger(__name__)
@@ -101,6 +102,9 @@ class NeedleWidget(Widget):
         self.azioni: list[dict[str, Any]] = [dict(a) for a in cfg.get("azioni") or []]
         self.stanze: frasi.Stanze | None = None       # nomi delle stanze Hue, li dà App
         self.umore_forzato = ""                       # anteprime e test: fissa la faccia del bot
+        self.voce_url = ""        # indirizzo della pagina "premi e parla" (lo dà App), "" se spenta
+        self.mostra_qr = False    # il pannello del bot mostra il QR di `voce_url`
+        self._qr: tuple[str, list[list[bool]]] = ("", [])
         self._pending: list[tuple[str, dict[str, Any], str]] = []
         self.idx = 0
         self._clock = clock
@@ -111,6 +115,8 @@ class NeedleWidget(Widget):
         self._checking = False
         self._checked = -CHECK_S * 2
         self._last: Risposta | None = None
+        self.risposte = 0          # risposte arrivate: il telefono capisce quando c'è la sua
+        self._in_corso = 0         # chiamate prese da App e non ancora concluse da `set_esito`
         self._hit = -1
         self._hit_at = -FLASH_S
         self.demo = False
@@ -162,9 +168,24 @@ class NeedleWidget(Widget):
         """Indice dell'ultima frase toccata, per un attimo; altrimenti -1."""
         return self._hit if self._clock() - self._hit_at < FLASH_S else -1
 
+    def qr_visibile(self) -> bool:
+        return self.mostra_qr and bool(self.voce_url)
+
+    def qr_moduli(self) -> list[list[bool]]:
+        """Moduli del QR di `voce_url` (calcolati una volta per indirizzo); [] se troppo lungo."""
+        if self._qr[0] != self.voce_url:
+            try:
+                moduli = qr.codifica(self.voce_url) if self.voce_url else []
+            except ValueError:
+                log.warning("needle: indirizzo troppo lungo per il QR: %d caratteri", len(self.voce_url))
+                moduli = []
+            self._qr = (self.voce_url, moduli)
+        return self._qr[1]
+
     def state_key(self, now: datetime) -> Hashable:
         online, busy, last = self.snapshot()
-        return (online, busy, last, self.idx, self.flashing(), self.umore())
+        return (online, busy, last, self.idx, self.flashing(), self.umore(), self.voce_url,
+                self.qr_visibile())
 
     # --- rete ------------------------------------------------------------
     def update(self, now: datetime) -> None:
@@ -188,18 +209,30 @@ class NeedleWidget(Widget):
 
     def ask(self, i: int) -> None:
         """Invia la frase `i` al modello (in un thread); ignorata se ce n'è una in corso."""
-        if not 0 <= i < len(self.queries):
-            return
+        if 0 <= i < len(self.queries) and self.chiedi(self.queries[i]):
+            self._hit, self._hit_at = i, self._clock()
+
+    def chiedi(self, domanda: str) -> bool:
+        """Invia una frase qualsiasi (in un thread); False se ce n'è già una in corso o se il
+        servizio è spento e la frase non la capisce l'interprete da solo."""
+        domanda = domanda.strip()
+        if not domanda:
+            return False
         # senza il servizio le frasi che l'interprete capisce da sole funzionano lo stesso
         fuori = self._online is False and not (self.regole and frasi.interpreta(
-            self.queries[i], self.azioni))
+            domanda, self.azioni))
         with self._lock:
             if self._busy or fuori:
-                return
+                return False
             self._busy = True
-        self._hit, self._hit_at = i, self._clock()
-        threading.Thread(target=self._run, args=(self.queries[i],), name="needle-ask",
+        threading.Thread(target=self._run, args=(domanda,), name="needle-ask",
                          daemon=True).start()
+        return True
+
+    def in_attesa(self) -> bool:
+        """True finché l'ultima frase non ha un esito completo (modello, poi azioni del dashboard)."""
+        with self._lock:
+            return self._busy or bool(self._pending) or self._in_corso > 0
 
     def _regole(self, domanda: str) -> list[tuple[str, dict[str, Any]]] | None:
         """Le chiamate che l'interprete di frasi ricava da solo; None se serve il modello."""
@@ -254,6 +287,7 @@ class NeedleWidget(Widget):
             # le esegue App nel ciclo principale, non questo thread; serve anche la frase detta
             self._pending.extend((nome, args, domanda) for nome, args in calls)
             self._last = replace(risposta, t=self._clock())
+            self.risposte += 1
             self._busy = False
             if risposta.errore == "servizio non risponde":
                 self._online = False
@@ -262,6 +296,7 @@ class NeedleWidget(Widget):
         """(funzione, argomenti, frase) riconosciuti e non ancora eseguiti; li svuota (App, a ogni giro)."""
         with self._lock:
             out, self._pending = self._pending, []
+            self._in_corso += len(out)
         return out
 
     def set_esito(self, text: str) -> None:
@@ -270,9 +305,13 @@ class NeedleWidget(Widget):
             if self._last is not None:
                 unite = f"{self._last.esito} · {text}" if self._last.esito else text
                 self._last = replace(self._last, esito=unite[:ESITO_MAX])
+            self._in_corso = max(0, self._in_corso - 1)
 
     # --- ingressi --------------------------------------------------------
     def on_hit(self, hit: str, now: datetime) -> None:
+        if hit == "qr":           # tocco sul bot: QR della pagina del telefono, e ritorno
+            self.mostra_qr = not self.mostra_qr and bool(self.voce_url)
+            return
         kind, _, arg = hit.partition(":")
         if kind == "q" and arg.isdigit() and self.queries:
             self.idx = int(arg) % len(self.queries)

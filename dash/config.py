@@ -35,6 +35,7 @@ DEFAULTS: dict[str, Any] = {
                "queries": ["meteo a ventotene", "timer 5 minuti", "apri la pagina sistema",
                            "vai alla home"]},
     "new": {"tipi": ["timer", "alarm", "needle"]},
+    "voce": {"porta": 0, "host": "0.0.0.0", "cert": "", "key": "", "token": ""},
     "motion": {"livello": "pieno", "fps": 8, "avvio": True},
     "backlight": {"level": 100, "mode": "auto"},
     "power": {"cmd": ["sudo", "-n", "/usr/bin/systemctl", "poweroff"], "monitor": True,
@@ -109,6 +110,15 @@ def validate(cfg: dict[str, Any], known_widgets: set[str]) -> None:
     qs = nd.get("queries")
     if not isinstance(qs, list) or not 1 <= len(qs) <= 6 or not all(isinstance(q, str) for q in qs):
         raise ConfigError("needle.queries deve essere una lista da 1 a 6 frasi")
+    vo = cfg["voce"]
+    if isinstance(vo.get("porta"), bool) or not isinstance(vo.get("porta"), int) \
+            or not 0 <= vo["porta"] <= 65535:
+        raise ConfigError("voce.porta deve essere un intero fra 0 (spento) e 65535")
+    for chiave in ("host", "cert", "key", "token"):
+        if not isinstance(vo.get(chiave), str):
+            raise ConfigError(f"voce.{chiave} deve essere una stringa")
+    if vo["key"] and not vo["cert"]:
+        raise ConfigError("voce.key senza voce.cert: servono entrambi (o nessuno, per l'autofirmato)")
     if cfg["clock"]["progress"] not in ("day", "daylight", "hour"):
         raise ConfigError("clock.progress deve essere 'day', 'daylight' o 'hour'")
     if not cfg["pages"]:
