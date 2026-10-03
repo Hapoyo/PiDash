@@ -13,7 +13,8 @@ le regole operative stanno in [CLAUDE.md](../CLAUDE.md).
   LAN no. Il widget non blocca mai il disegno: controllo TCP ogni 5 s e richieste a `/complete` in
   thread; `POST /reset` prima di ogni frase (`needle.reset`), altrimenti il server accumula i
   turni in un'unica conversazione. La scheda è opzionale (catalogo del "+", `new.tipi`).
-- Voce dal telefono (`dash/voce.py`, `voce.porta`, spenta di default): il microfono è quello del
+- Voce dal telefono (`dash/voce.py`, `voce.porta`: 8443 in `config.json`, 0 nei `DEFAULTS` così
+  test e anteprime non aprono porte): il microfono è quello del
   telefono e il riconoscimento lo fa il suo browser (Web Speech API, `it-IT`), non il Pi: un
   modello vocale sul Pi 3 accanto a Needle non ci sta in RAM né in tempo, e il Bluetooth dà audio
   scadente e abbinamenti fragili. Al Pi arriva solo testo (`POST /frase`, max 200 caratteri), che
@@ -22,8 +23,10 @@ le regole operative stanno in [CLAUDE.md](../CLAUDE.md).
   senza scheda (`App.needle`). Il browser dà il microfono solo in HTTPS: certificato indicato
   (Tailscale) o autofirmato con `openssl` in `out/voce/`, e senza openssl HTTP con la sola
   dettatura della tastiera. Premi e parla invece di ascolto continuo: con lo schermo bloccato il
-  browser smette di ascoltare, e servirebbe un'app nativa. `voce.token` facoltativo (header
-  `X-Token` o `?t=`), perché la pagina comanda le luci a chiunque sia in rete.
+  browser smette di ascoltare, e servirebbe un'app nativa. Codice d'accesso `voce.token` (header
+  `X-Token` o `?t=`), perché la pagina comanda le luci a chiunque sia in rete: se manca lo crea
+  `voce.codice` al primo avvio e lo salva in `config.local.json`, così la pagina accesa di serie
+  non è mai aperta a tutti e il QR resta valido dopo i riavvii.
   L'indirizzo (IP del Pi, porta e codice) si mostra in QR al posto del bot, con un tocco: il
   codice è leggibile da chi vede lo schermo, che è già in casa. QR generato in `dash/qr.py`
   (modo byte, versioni 1–10, correzione L) per non aggiungere dipendenze oltre Pillow; a 480×320

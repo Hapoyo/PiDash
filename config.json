@@ -145,6 +145,12 @@
       "needle"
     ]
   },
+  "voce": {
+    "porta": 8443,
+    "host": "0.0.0.0",
+    "cert": "",
+    "key": ""
+  },
   "motion": {
     "livello": "pieno",
     "fps": 8,

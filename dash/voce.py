@@ -16,6 +16,7 @@ import hmac
 import json
 import logging
 import queue
+import secrets
 import socket
 import ssl
 import subprocess
@@ -239,6 +240,20 @@ class VoceServer:
             self._server.shutdown()
             self._server.server_close()
             self._server = None
+
+
+def codice(cfg: dict[str, Any], salva: Callable[[dict[str, Any]], Any]) -> str:
+    """Codice d'accesso: quello di `voce.token`, altrimenti uno nuovo, salvato con `salva` (in
+    `config.local.json`, mai in Git) perché resti lo stesso del QR già inquadrato."""
+    token = str(cfg.get("token") or "")
+    if not token and cfg.get("porta"):
+        token = secrets.token_urlsafe(8)
+        try:
+            salva({"voce": {"token": token}})
+        except OSError as exc:      # vale fino al riavvio: il QR sullo schermo resta giusto
+            log.warning("voce: codice d'accesso non salvato: %s", exc)
+        cfg["token"] = token
+    return token
 
 
 def avvia(cfg: dict[str, Any], events: queue.Queue[Any], stato: Callable[[], dict[str, Any]],

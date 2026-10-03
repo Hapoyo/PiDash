@@ -21,7 +21,7 @@ from dash.app import App
 from dash.render.pages import needle as needle_page
 from dash.config import DEFAULTS, ConfigError, _merge, validate
 from dash.layout import Box
-from dash.voce import Frase, VoceServer, avvia, certificato, contesto_tls, pulisci
+from dash.voce import Frase, VoceServer, avvia, certificato, codice, contesto_tls, pulisci
 from dash.widgets import WIDGET_NAMES
 from dash.widgets.needle import NeedleWidget
 from tests import test_dash as td
@@ -98,6 +98,21 @@ class TestVoceServer(unittest.TestCase):
         s.https = True
         s.token = ""
         self.assertTrue(s.indirizzo("").endswith(".local:8443/"))
+
+    def test_access_code_is_generated_once_and_saved(self) -> None:
+        salvati: list[dict[str, Any]] = []
+        cfg = {"porta": 8443, "token": ""}
+        t = codice(cfg, salvati.append)
+        self.assertGreaterEqual(len(t), 10)
+        self.assertEqual((cfg["token"], salvati), (t, [{"voce": {"token": t}}]))
+        self.assertEqual(codice(cfg, salvati.append), t)            # già presente: non cambia
+        self.assertEqual(len(salvati), 1)
+        self.assertEqual(codice({"porta": 0, "token": ""}, salvati.append), "")   # pagina spenta
+
+    def test_project_config_turns_the_page_on(self) -> None:
+        cfg = json.loads((Path(__file__).resolve().parents[1] / "config.json").read_text("utf-8"))
+        self.assertEqual(cfg["voce"]["porta"], 8443)
+        self.assertNotIn("token", cfg["voce"])                      # il codice sta solo nel locale
 
     def test_off_by_default(self) -> None:
         self.assertIsNone(avvia(DEFAULTS["voce"], self.events, dict, Path("non-usata")))

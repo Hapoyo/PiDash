@@ -10,6 +10,8 @@
 - **QR sulla scheda Needle**: con la pagina "premi e parla" accesa, un tocco sul bot mostra il QR
   dell'indirizzo (con il codice d'accesso); un altro tocco riporta il bot. QR generato senza
   dipendenze (`dash/qr.py`).
+- La pagina è **accesa di serie** (`voce.porta` 8443 in `config.json`): al primo avvio pi-dash
+  crea un codice d'accesso casuale e lo salva in `config.local.json`; il QR lo contiene già.
 
 ## 0.9.1 — 2026-09-29
 - **Accendere le luci a un livello**: "accendi il soggiorno al 100%", "…al 100 per cento" e "…al

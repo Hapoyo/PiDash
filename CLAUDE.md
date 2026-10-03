@@ -78,8 +78,9 @@ tests/                 unittest
   `curl -s -X POST localhost:8090/complete -d '{"input":"timer 5 minuti"}'`
 - Wi-Fi del Pi: `.venv/bin/python -m dash --wifi [SSID]` (password chiesta nascosta, mai in config né
   nei log), guida [docs/installazione.md](docs/installazione.md) § 3.1
-- Voce dal telefono: `"voce": {"porta": 8443, "token": "…"}` in `config.local.json`, poi
-  `https://<pi>.local:8443/?t=…` dal telefono; guida [docs/installazione.md](docs/installazione.md) § 5.13
+- Voce dal telefono: accesa di serie (porta 8443 in `config.json`, codice creato al primo avvio in
+  `config.local.json`); tocco sul bot di Needle → QR dell'indirizzo; guida
+  [docs/installazione.md](docs/installazione.md) § 5.13
 - Calibrazione tocco: Impostazioni → calibra touch; a mano `.venv/bin/python -m dash --touch-debug`
 - Simulatore: un clic sull'anteprima web è un tocco (`POST /tap?x=…&y=…`)
 - Comandi: N pagina seguente · A azione (avvia/ferma timer, spegne sveglia) · B indietro/+preset

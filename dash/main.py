@@ -174,6 +174,8 @@ def main(argv: list[str] | None = None) -> int:
         signal.signal(signal.SIGTERM, on_term)
 
     # pagina "premi e parla" per il telefono (voce.porta, di norma spenta)
+    if not args.once:
+        voce.codice(cfg["voce"], lambda changes: save_local(args.config, changes))
     server = None if args.once else voce.avvia(cfg["voce"], events, app.voce_stato,
                                                 Path(cfg["sim"]["out_dir"]) / "voce")
     if server is not None:

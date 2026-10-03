@@ -490,17 +490,15 @@ bottone **premi e parla**; il browser del telefono riconosce la voce in italiano
 il testo, che Needle tratta come una frase toccata sullo schermo (stesse regole, soglie e azioni).
 Funziona anche senza la scheda Needle: l'esito si legge sul telefono.
 
-1. Accendi la pagina in `config.local.json` (§ 5.7) e riavvia (`sudo systemctl restart pi-dash`):
-   ```json
-   { "voce": { "porta": 8443, "token": "una-parola-a-caso" } }
-   ```
-   Il `token` è facoltativo ma consigliato: senza, chiunque sia sulla tua rete può accendere le luci.
-   Resta solo in `config.local.json`, mai in `config.json` né in Git.
-2. Al primo avvio pi-dash crea con `openssl` un certificato autofirmato in `out/voce/` (vale per
-   `<nome-del-pi>.local` e per l'IP di quel momento). Dal telefono, sulla stessa rete Wi-Fi, apri
-   `https://<nome-del-pi>.local:8443/?t=una-parola-a-caso` (oppure l'IP del Pi al posto del nome) e
-   aggiungi la pagina alla schermata Home. Più comodo: sulla scheda Needle **tocca il bot** e al
-   suo posto compare un QR con l'indirizzo completo (IP e codice); inquadralo con la fotocamera.
+1. La pagina è già accesa sulla porta 8443 (`voce` in `config.json`): basta aggiornare il Pi
+   (§ 7). Al primo avvio pi-dash crea da solo un codice d'accesso casuale e lo salva in
+   `config.local.json` (`voce.token`, mai in Git): senza il codice la pagina non accetta frasi,
+   così chi è sulla tua rete non comanda le luci. Per spegnerla: `"voce": {"porta": 0}` in
+   `config.local.json`.
+2. Al primo avvio pi-dash crea con `openssl` anche un certificato autofirmato in `out/voce/`
+   (vale per `<nome-del-pi>.local` e per l'IP di quel momento). Sulla scheda Needle **tocca il
+   bot**: al suo posto compare un QR con l'indirizzo completo (IP, porta e codice). Inquadralo con
+   la fotocamera del telefono, sulla stessa rete Wi-Fi, e aggiungi la pagina alla schermata Home.
    Un altro tocco riporta il bot.
 3. Il browser avvisa che il certificato non è fidato: è normale per un certificato fatto in casa.
    Su Android/Chrome tocca **Avanzate → Procedi**. Su iPhone/Safari tocca **Mostra dettagli →
