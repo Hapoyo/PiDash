@@ -31,6 +31,13 @@ le regole operative stanno in [CLAUDE.md](../CLAUDE.md).
   accenderebbe alla luminosità di prima.
   Chiamate sincrone con timeout di 2 s: un bridge spento rallenta il dashboard, non lo blocca; un
   thread avrebbe complicato l'esito mostrato in scheda per un caso raro.
+- Wi-Fi (`dash/wifi.py`, `--wifi`): da riga di comando, non dallo schermo. Su un 3,5" scrivere una
+  password è scomodo e una tastiera a video sarebbe codice grosso e poco provabile; il caso vero è
+  un Pi raggiunto via SSH con il cavo. Usa NetworkManager (`nmcli`) e non scrive mai la password in
+  un file del progetto: la tiene NetworkManager. Si forza WPA2 (`wpa-psk`), che il chip del Pi 3 gestisce
+  senza problemi anche sulle reti miste WPA2/WPA3. Un profilo esistente si aggiorna invece di
+  duplicarlo; se il collegamento fallisce il profilo resta (così basta rilanciare). Il comando gira
+  prima di caricare la configurazione, perché serve proprio quando il Pi è isolato.
 - Interprete di frasi (`dash/frasi.py`): per timer, sveglie e luci decide il codice, non il modello.
   Il modello da 35 MB copia male i numeri e confonde accendi e spegni; durate ("1 ora e 30",
   "un quarto d'ora"), orari ("alle 8 meno un quarto"), giorni, stanze e colori si leggono invece
