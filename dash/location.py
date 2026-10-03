@@ -64,6 +64,20 @@ def _valid(lat: Any, lon: Any) -> bool:
             and -90 <= lat <= 90 and -180 <= lon <= 180)
 
 
+def geocode(city: str, timeout: float = 10) -> tuple[str, float, float] | None:
+    """(nome, lat, lon) della città col geocoding di Open-Meteo; None se non esiste.
+
+    Gli errori di rete salgono come `NET_ERRORS`: "non trovata" e "rete assente" sono cose diverse.
+    """
+    q = urllib.parse.urlencode({"name": city, "count": 1, "language": "it", "format": "json"})
+    d = _get_json(f"{GEOCODING_URL}?{q}", timeout=timeout)
+    risultati = d.get("results") or []
+    if not risultati or not _valid(risultati[0].get("latitude"), risultati[0].get("longitude")):
+        return None
+    r = risultati[0]
+    return str(r.get("name") or city), float(r["latitude"]), float(r["longitude"])
+
+
 def distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Distanza sulla sfera terrestre (formula dell'emisenoverso)."""
     p1, p2 = math.radians(lat1), math.radians(lat2)
@@ -272,16 +286,12 @@ class Location:
     def _from_city(self) -> tuple[str, float, float, str] | None:
         if not self.city:
             return None
-        q = urllib.parse.urlencode({"name": self.city, "count": 1, "language": "it", "format": "json"})
         try:
-            d = _get_json(f"{GEOCODING_URL}?{q}")
-            r = d["results"][0]
-        except (*NET_ERRORS, KeyError, IndexError) as exc:
+            found = geocode(self.city)
+        except NET_ERRORS as exc:
             log.warning("geocoding di %r fallito: %s", self.city, exc)
             return None
-        if not _valid(r.get("latitude"), r.get("longitude")):
-            return None
-        return str(r.get("name", self.city)), float(r["latitude"]), float(r["longitude"]), "geocoding"
+        return (*found, "geocoding") if found else None
 
     def _from_gps(self) -> tuple[str, float, float, str] | None:
         fix = _from_gpsd()

@@ -324,7 +324,7 @@ class TestNeedleConRegole(unittest.TestCase):
     def _app(self, tmp: str, modello: Any, **needle: Any) -> tuple[App, NeedleWidget, BridgeFinto]:
         main = Path(tmp) / "config.json"
         main.write_text("{}", encoding="utf-8")
-        needle.setdefault("queries", ["timer 5 minuti", "accendi il soggiorno", "meteo a roma"])
+        needle.setdefault("queries", ["timer 5 minuti", "accendi il soggiorno", "che tempo fa a roma"])
         cfg = make_cfg(pages=[{"name": "Home", "widget": "clock"},
                               {"name": "Needle", "widget": "needle"},
                               {"name": "Meteo", "widget": "weather"}, {"name": "+", "widget": "new"}],
@@ -409,7 +409,7 @@ class TestNeedleConRegole(unittest.TestCase):
             app.step(self.NOW, 0.0, animate=False)
             self.assertIsNotNone(app.find_page("timer"))
             w._last = None
-            w.ask(2)                                  # "meteo a roma": serve il modello, che è spento
+            w.ask(2)                                  # "che tempo fa a roma": serve il modello, che è spento
             self._attendi(w)
             self.assertIsNone(w.snapshot()[2])
             app.close()

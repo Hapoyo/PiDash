@@ -31,7 +31,7 @@ dash/render/           tutto il disegno
   bot.py               faccia animata del bot di Needle (`draw` per un istante `t`, `MOODS`)
   renderer.py          CyberRenderer: `render` (pagina base) e `compose` (fotogramma animato)
 dash/azioni.py         funzioni di Needle eseguibili (`AZIONI`): timer, sveglia, pagina, meteo, luci
-dash/frasi.py          interprete di frasi italiane (timer, sveglie, luci) e azioni personalizzate `needle.azioni`
+dash/frasi.py          interprete di frasi italiane (timer, sveglie, luci, "meteo <città>") e azioni personalizzate `needle.azioni`
 dash/voce.py           pagina "premi e parla" per il telefono (HTTPS, `voce.porta`): testo → `Frase` → Needle
 dash/qr.py             QR code senza dipendenze (testo → moduli), per l'indirizzo della pagina voce
 dash/hue.py            bridge Philips Hue: stanze, comandi, registrazione (`--hue-registra`)

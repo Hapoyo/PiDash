@@ -1,6 +1,10 @@
 # Changelog
 
 ## Non rilasciato
+- **"Meteo <città>" dal telefono**: scrivendo o dicendo `meteo Roma` (anche tra virgolette) nella
+  pagina "premi e parla" la scheda meteo mostra quella città; `meteo qui` torna al luogo del
+  dashboard. Scelta temporanea (non tocca `location`, si azzera al riavvio); città non trovata o
+  rete assente → messaggio sul telefono e meteo invariato. Geocoding di Open-Meteo, senza chiavi.
 - **Trattino intermittente tolto**: era il cursore lampeggiante della console di testo, che con il
   framebuffer SPI restava acceso se `KDSETMODE` non andava a buon fine. Ora pi-dash lo nasconde
   anche con la sequenza `ESC[?25l`, segnala (warning) quando non riesce a fermare la console, e il

@@ -729,6 +729,7 @@ class TestNeedle(unittest.TestCase):
 
     def _widget(self, post: Any, **cfg: Any) -> NeedleWidget:
         base = copy.deepcopy(DEFAULTS["needle"])
+        base["regole"] = False     # qui si prova il modello: "meteo a ventotene" lo capirebbe il codice
         base.update(cfg)
         return NeedleWidget(base, clock=FakeClock(), post=post)
 

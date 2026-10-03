@@ -318,6 +318,36 @@ def luci(p: list[str], stanze: Stanze | None) -> list[Chiamata] | None:
     return [("lights", args)]
 
 
+# --- meteo di un'altra città -----------------------------------------------------------
+METEO_CITTA = re.compile(r"^\W*(?:il\s+)?meteo\s+(?:(?:a|ad|di|per|in|su|del|della|di)\s+)?(.+?)\W*$",
+                         re.IGNORECASE)
+CITTA_QUI = frozenset({"qui", "locale", "casa", "dashboard", "posizione", "attuale", "mio", "mia"})
+NON_CITTA = frozenset({"oggi", "domani", "adesso", "ora", "dopo", "stasera", "stamattina",
+                       "previsioni", "vento", "mare", "pioggia", "temperatura", "tempo"})
+CITTA_MAX = 60
+
+
+def meteo(frase: str) -> list[Chiamata] | None:
+    """"Meteo Roma", `meteo "New York"`, "meteo a Forlì": cambia la città; "meteo qui" torna al luogo.
+
+    Il nome resta com'è stato scritto (accenti compresi) per il geocoding. "meteo oggi" e simili
+    non sono città: vanno al modello come prima.
+    """
+    trovato = METEO_CITTA.match(frase.strip())
+    if not trovato:
+        return None
+    citta = re.sub(r"[\"“”«»'‘’]", " ", trovato.group(1))
+    citta = " ".join(citta.split())
+    p = parole(citta)
+    if not p or len(citta) > CITTA_MAX or len(p) > 5:
+        return None
+    if all(w in CITTA_QUI or w in ("a", "di", "da", "il", "mio", "mia") for w in p):
+        return [("set_weather_city", {"city": ""})]
+    if p[0] in NON_CITTA:
+        return None
+    return [("set_weather_city", {"city": citta})]
+
+
 # --- timer e sveglie -------------------------------------------------------------------
 def _verbi(p: list[str], radici: tuple[str, ...]) -> bool:
     return any(w.startswith(radici) for w in p)
@@ -409,6 +439,8 @@ def interpreta(frase: str, voci: list[dict[str, Any]] | None = None,
         return timer(p)
     if "cronometro" in p:
         return None
+    if p[0] == "meteo" or p[:2] == ["il", "meteo"]:
+        return meteo(frase)
     return luci(p, stanze)
 
 

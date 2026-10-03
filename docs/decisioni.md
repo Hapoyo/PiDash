@@ -130,6 +130,12 @@ le regole operative stanno in [CLAUDE.md](../CLAUDE.md).
   spazio a destra del numero.
 - Rete: byte/s da `/proc/net/dev` (tutte le schede tranne `lo`), differenza fra due campioni;
   il primo campione dopo l'avvio vale None. Storico nel widget sistema, grafico in scala sul picco.
+- Meteo di un'altra città ("meteo Roma", `azioni._citta_meteo`): la città sta nel `WeatherWidget`
+  (`set_city`/`clear_city`), non in `Location`, così orologio e alba/tramonto non cambiano e al
+  riavvio si torna al luogo configurato. Geocoding sincrono con attesa massima 6 s (come le
+  chiamate Hue nel ciclo principale): errore chiaro e meteo invariato se non trova la città.
+  Cambiando città i dati vecchi si scartano e il thread scarica subito (`_wake`). La cache su
+  disco resta valida solo per il luogo del dashboard (`_near`).
 - Meteo: Open-Meteo (nessuna chiave), `wind_speed_unit=kn`, `timezone=auto`, 2 giorni orari;
   cache in `out/weather_cache.json`, contatore di versione per il ridisegno. Fase lunare calcolata
   localmente (mese sinodico medio).

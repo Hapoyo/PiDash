@@ -353,7 +353,8 @@ controlli del § 5.10. Sotto soglia la scheda scrive "confidenza bassa: non eseg
 | `start_timer_minutes(minutes)`, `start_timer_seconds(seconds)` | imposta il timer e lo avvia (da 1 s a 180′), sostituendo il tempo in corso; se la pagina Timer non c'è la crea |
 | `set_alarm(time)` | sveglia `HH:MM` **ogni giorno**, salvata in `config.local.json`; la stessa ora non si duplica, al massimo 10; se la pagina Sveglia non c'è la crea |
 | `open_home`, `open_weather`, `open_timer`, `open_alarm`, `open_system`, `open_settings` | apre quella pagina, se c'è |
-| `get_weather(city)` | apre il meteo del luogo del dashboard (altre città non ancora) |
+| `get_weather(city)` | apre il meteo del luogo del dashboard; per un'altra città serve "meteo <città>" (§ 5.11) |
+| `set_weather_city(city)` | solo regole (§ 5.11): meteo di quella città, temporaneo; `city` vuota = luogo del dashboard |
 | `lights_on(room)`, `lights_off(room)`, `set_brightness(room, percent)` | luci Philips Hue di una stanza o di tutta la casa: § 5.10 |
 
 Il modello è piccolo (35 MB): copia i numeri della frase senza convertire le unità e capisce
@@ -432,7 +433,17 @@ del modello e senza sbagliare. Quello che non riconosce con certezza va al model
 | "accendi il soggiorno", "spegni tutte le luci", "soggiorno al 50", "soggiorno a metà", "corridoio al massimo" | accende, spegne, regola (§ 5.10) |
 | "luce rossa in terrazza", "soggiorno azzurro" | colore: rosso, arancione, giallo, verde, azzurro, blu, viola, rosa |
 | "luce calda in soggiorno", "luce fredda", "luce naturale", "luce bianca" | temperatura del bianco |
+| "meteo Roma", `meteo "New York"`, "meteo a Forlì", "il meteo di Genova" | la scheda meteo mostra quella città (si apre da sola; se manca la crea) |
+| "meteo qui", "meteo di casa", "meteo locale" | la scheda meteo torna al luogo del dashboard |
 | "alza la luce del corridoio", "abbassa il soggiorno", "abbassa il soggiorno di 30 percento" | più o meno luminosa di 20 punti (o di quanto dici) rispetto a com'è ora |
+
+**Meteo di un'altra città.** Scrivendo o dicendo "meteo Roma" (con o senza virgolette) dalla pagina
+"premi e parla" la scheda meteo del dashboard si aggiorna con i dati di quella città. Il nome si cerca
+con il geocoding di Open-Meteo (nessuna chiave); la scelta è **temporanea**: non cambia la posizione
+configurata (`location`, orologio e alba/tramonto restano quelli di prima) e dura fino al riavvio
+del dashboard o a "meteo qui". Se la città non esiste ("errore: città non trovata: …") o la rete
+manca ("ricerca di … non riuscita (rete)") il messaggio compare sul telefono e il meteo resta
+com'era. "meteo", "meteo oggi" e le altre frasi senza città vanno al modello come prima.
 
 Una frase con sveglia o timer che non si capisce non passa alle luci ("spegni la sveglia" non
 spegne una stanza). Con una negazione ("non accendere") non si esegue. Una stanza che non c'è dà
