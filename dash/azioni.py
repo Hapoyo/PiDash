@@ -18,14 +18,17 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, Any, Callable
 
+from .location import NET_ERRORS, geocode
 from .hue import COLORI, TEMPERATURE, HueError, Stanza
 from .widgets.alarm import AlarmWidget
 from .widgets.timer import TimerWidget
+from .widgets.weather import WeatherWidget
 
 if TYPE_CHECKING:
     from .app import App, Page
 
 MAX_TIMER_MIN = 180
+GEOCODING_S = 6   # attesa massima della ricerca di una città (gira nel ciclo principale)
 # Funzione open_<nome> → (tipo di widget, nome mostrato).
 PAGINE = {"home": ("clock", "home"), "weather": ("weather", "meteo"), "timer": ("timer", "timer"),
           "alarm": ("alarm", "sveglia"), "system": ("system", "sistema"),
@@ -148,6 +151,28 @@ def _meteo(app: App, args: dict[str, Any], frase: str) -> Esito:
     _pagina(app, "weather")
     # il meteo è quello del luogo del dashboard: per un'altra città si dice, non si finge
     return ("apro il meteo (luogo del dashboard)" if args.get("city") else "apro il meteo"), "weather"
+
+
+def _citta_meteo(app: App, args: dict[str, Any], frase: str) -> Esito:
+    """"Meteo Roma": la scheda meteo mostra quella città, senza toccare la posizione del dashboard.
+
+    Temporanea: dura fino al riavvio o a "meteo qui" (`city` vuota). Se la città non esiste o la
+    rete manca il meteo resta com'era e il motivo va sullo schermo.
+    """
+    citta = str(args.get("city") or "").strip()
+    widget = _pagina(app, "weather").widget
+    assert isinstance(widget, WeatherWidget)
+    if not citta:
+        widget.clear_city()
+        return "meteo del dashboard", "weather"
+    try:
+        trovata = geocode(citta, timeout=GEOCODING_S)
+    except NET_ERRORS as exc:
+        raise AzioneError(f"ricerca di {citta} non riuscita (rete)") from exc
+    if trovata is None:
+        raise AzioneError(f"città non trovata: {citta}")
+    widget.set_city(*trovata)
+    return f"meteo di {trovata[0].lower()}", "weather"
 
 
 # --- luci Philips Hue -------------------------------------------------------
@@ -292,6 +317,7 @@ AZIONI: dict[str, Azione] = {
     "lights": _luci_comando,
     "set_alarm": _sveglia,
     "get_weather": _meteo,
+    "set_weather_city": _citta_meteo,
     **{f"open_{chiave}": _apri(kind, nome) for chiave, (kind, nome) in PAGINE.items()},
 }
 
@@ -299,7 +325,7 @@ AZIONI: dict[str, Azione] = {
 # Funzioni che solo l'interprete di frasi (`frasi.py`) e le azioni personalizzate chiamano: il modello
 # non le conosce, quindi non stanno in needle/tools.json.
 SOLO_REGOLE = frozenset({"start_timer", "stop_timer", "pause_timer", "resume_timer", "delete_alarm",
-                         "lights"})
+                         "lights", "set_weather_city"})
 
 
 def categoria(nome: str) -> str:
@@ -309,7 +335,7 @@ def categoria(nome: str) -> str:
     casa ma si annulla con un comando, ed è protetto dai controlli sul verbo e sul numero.
     `stato`: timer e sveglia, dove un errore passa inosservato.
     """
-    if nome.startswith("open_") or nome == "get_weather":
+    if nome.startswith("open_") or nome in ("get_weather", "set_weather_city"):
         return "pagina"
     if nome in ("lights_on", "lights_off", "set_brightness", "lights"):
         return "luci"

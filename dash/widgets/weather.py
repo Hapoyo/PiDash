@@ -17,7 +17,7 @@ from pathlib import Path
 from collections.abc import Hashable
 from typing import Any
 
-from ..location import Location
+from ..location import Location, geocode
 from .base import Widget
 
 log = logging.getLogger(__name__)
@@ -124,7 +124,39 @@ class WeatherWidget(Widget):
         self._version = 0  # cambia a ogni nuovo scaricamento: usato da state_key
         self.error: str | None = None
         self._stop = threading.Event()
+        self._wake = threading.Event()   # scarica subito (città cambiata) invece di aspettare
+        self._city: tuple[str, float, float] | None = None   # città temporanea ("meteo roma")
         self._thread: threading.Thread | None = None
+
+    # --- città temporanea --------------------------------------------------
+    def place(self) -> tuple[str, float, float]:
+        """(nome, lat, lon) di cui si mostra il meteo: la città scelta, altrimenti il luogo del dashboard."""
+        with self._lock:
+            city = self._city
+        return city if city is not None else self.location.snapshot()
+
+    def city(self) -> str:
+        """Nome della città temporanea, "" se si segue il luogo del dashboard."""
+        with self._lock:
+            return self._city[0] if self._city else ""
+
+    def set_city(self, name: str, lat: float, lon: float) -> None:
+        """Mostra il meteo di un'altra città fino al riavvio o a `clear_city`; non tocca la posizione."""
+        self._switch((name, lat, lon))
+
+    def clear_city(self) -> None:
+        """Torna al luogo del dashboard."""
+        self._switch(None)
+
+    def _switch(self, city: tuple[str, float, float] | None) -> None:
+        with self._lock:
+            if city == self._city:
+                return
+            self._city = city
+            if not self.demo:   # i dati di un altro luogo non si mostrano: arrivano quelli nuovi
+                self._data = None
+            self._version += 1
+        self._wake.set()
 
     # --- dati ------------------------------------------------------------
     @staticmethod
@@ -140,7 +172,7 @@ class WeatherWidget(Widget):
             data = json.loads(self.cache_file.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             return None
-        _, lat, lon = self.location.snapshot()
+        _, lat, lon = self.place()
         return data if isinstance(data, dict) and self._near(data, lat, lon) else None
 
     def _save_cache(self, data: dict[str, Any]) -> None:
@@ -153,7 +185,7 @@ class WeatherWidget(Widget):
             log.warning("cache meteo non salvata: %s", exc)
 
     def build_url(self) -> str:
-        _, lat, lon = self.location.snapshot()
+        _, lat, lon = self.place()
         params = {
             "latitude": round(lat, 4),
             "longitude": round(lon, 4),
@@ -188,14 +220,17 @@ class WeatherWidget(Widget):
         retry = 60.0
         while not self._stop.is_set():
             if self.location.refresh():
-                # Posizione cambiata: i dati vecchi appartengono a un altro luogo.
+                # Posizione cambiata: i dati vecchi appartengono a un altro luogo
+                # (con una città scelta il meteo non dipende dalla posizione).
                 with self._lock:
-                    self._data, self._version = None, self._version + 1
+                    if self._city is None:
+                        self._data, self._version = None, self._version + 1
+            self._wake.clear()
             if self.fetch():
                 retry = 60.0
-                self._stop.wait(self.refresh_s)
+                self._wake.wait(self.refresh_s)
             else:  # rete non pronta: ritenta con attesa crescente fino al periodo normale
-                self._stop.wait(retry)
+                self._wake.wait(retry)
                 retry = min(retry * 2, self.refresh_s)
 
     def update(self, now: datetime) -> None:
@@ -206,6 +241,7 @@ class WeatherWidget(Widget):
 
     def close(self) -> None:
         self._stop.set()
+        self._wake.set()
 
     def state_key(self, now: datetime) -> Hashable:
         with self._lock:
