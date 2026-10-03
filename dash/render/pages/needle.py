@@ -3,7 +3,9 @@
 In alto una riga con cosa ha fatto il dashboard (a sinistra) e lo stato del servizio (a destra);
 sotto, a sinistra, il bot nel pannello colorato dallo stato e, a destra, i bottoni con le frasi
 di `needle.queries`. Il bot (`render/bot.py`) mostra l'umore del widget: pronto, penso, fatto,
-dubbio, errore, offline. `hits` restituisce gli stessi rettangoli del disegno.
+dubbio, errore, offline. Con la pagina "premi e parla" accesa (`voce.porta`) un tocco sul bot
+mostra al suo posto il QR dell'indirizzo, da inquadrare con il telefono; un altro tocco lo
+nasconde. `hits` restituisce gli stessi rettangoli del disegno.
 """
 from __future__ import annotations
 
@@ -34,10 +36,12 @@ def _geometry(b: Box, u: float) -> tuple[Box, Box]:
 
 
 def hits(b: Box, widget: Any, u: float) -> list[tuple[Box, str]]:
-    """Un bottone per frase: una colonna fino a quattro frasi, poi due per riga."""
-    grid = _geometry(b, u)[1]
+    """Un bottone per frase: una colonna fino a quattro frasi, poi due per riga; il pannello del
+    bot è un bottone (QR del telefono) solo se la pagina "premi e parla" è accesa."""
+    panel, grid = _geometry(b, u)
     n = len(widget.queries)
-    return [(cb, f"q:{i}") for i, cb in enumerate(chips(grid, n, u, per_row=1 if n <= 4 else 2))]
+    out = [(cb, f"q:{i}") for i, cb in enumerate(chips(grid, n, u, per_row=1 if n <= 4 else 2))]
+    return out + ([(panel, "qr")] if widget.voce_url else [])
 
 
 def draw(cv: Canvas, b: Box, app: App, now: datetime) -> None:
@@ -47,25 +51,32 @@ def draw(cv: Canvas, b: Box, app: App, now: datetime) -> None:
     pad = cv.pad
     # intestazione: a sinistra cosa ha fatto il dashboard con l'ultima frase, a destra lo stato
     esito = last.esito if last else ""
-    if esito:
+    qr = w.qr_moduli() if w.qr_visibile() else []
+    if qr:
+        cv.label((b.x, b.y), "inquadra con il telefono e parla", "cream", bold=True)
+    elif esito:
         cv.label((b.x, b.y), "→ " + esito, "cream", bold=True)
     elif last is None:
         cv.label((b.x, b.y), "servizio spento: systemctl start needle" if online is False else
+                 "tocca il bot: qr per il telefono" if w.voce_url else
                  "tocca una frase per provare", "tan")
     else:
         cv.label((b.x, b.y), "needle · function calling", "tan")
     cv.label((b.right, b.y), w.stato(), "cream", "ra", bold=True)
-    # il bot, quadrato e centrato nel pannello colorato dallo stato
-    bg = "orange" if busy else ("cream" if online else "tan")
-    cv.rect(panel, bg)
-    lato = min(panel.w, panel.h) - 2 * pad
-    mascotte = Box(round(panel.x + (panel.w - lato) / 2), round(panel.y + (panel.h - lato) / 2),
-                   lato, lato)
-    umore = w.umore()
-    bot.draw(cv, mascotte, umore, 0.0, bg)
-    cv.add_fx("bot", mascotte.rect, bg=bg, extra=(float(bot.MOODS.index(umore)),))
+    if qr:   # al posto del bot, su crema perché la fotocamera vuole scuro su chiaro
+        cv.rect(panel, "cream")
+        cv.qr(panel, qr)
+    else:    # il bot, quadrato e centrato nel pannello colorato dallo stato
+        bg = "orange" if busy else ("cream" if online else "tan")
+        cv.rect(panel, bg)
+        lato = min(panel.w, panel.h) - 2 * pad
+        mascotte = Box(round(panel.x + (panel.w - lato) / 2), round(panel.y + (panel.h - lato) / 2),
+                       lato, lato)
+        umore = w.umore()
+        bot.draw(cv, mascotte, umore, 0.0, bg)
+        cv.add_fx("bot", mascotte.rect, bg=bg, extra=(float(bot.MOODS.index(umore)),))
     # frasi da provare: la scelta da tastiera ha il bordo ambra, l'ultima toccata è rosa
-    boxes = hits(b, w, cv.u)
+    boxes = [h for h in hits(b, w, cv.u) if h[1] != "qr"]
     if not boxes:
         return
     cw, ch = boxes[0][0].w, boxes[0][0].h

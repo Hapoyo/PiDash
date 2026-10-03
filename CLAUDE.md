@@ -33,6 +33,7 @@ dash/render/           tutto il disegno
 dash/azioni.py         funzioni di Needle eseguibili (`AZIONI`): timer, sveglia, pagina, meteo, luci
 dash/frasi.py          interprete di frasi italiane (timer, sveglie, luci) e azioni personalizzate `needle.azioni`
 dash/voce.py           pagina "premi e parla" per il telefono (HTTPS, `voce.porta`): testo → `Frase` → Needle
+dash/qr.py             QR code senza dipendenze (testo → moduli), per l'indirizzo della pagina voce
 dash/hue.py            bridge Philips Hue: stanze, comandi, registrazione (`--hue-registra`)
 dash/wifi.py           credenziali Wi-Fi con nmcli (`--wifi`): profilo, collegamento, avvisi 5 GHz
 dash/layout.py         Box e nomi di giorni/mesi

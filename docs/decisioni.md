@@ -24,6 +24,10 @@ le regole operative stanno in [CLAUDE.md](../CLAUDE.md).
   dettatura della tastiera. Premi e parla invece di ascolto continuo: con lo schermo bloccato il
   browser smette di ascoltare, e servirebbe un'app nativa. `voce.token` facoltativo (header
   `X-Token` o `?t=`), perché la pagina comanda le luci a chiunque sia in rete.
+  L'indirizzo (IP del Pi, porta e codice) si mostra in QR al posto del bot, con un tocco: il
+  codice è leggibile da chi vede lo schermo, che è già in casa. QR generato in `dash/qr.py`
+  (modo byte, versioni 1–10, correzione L) per non aggiungere dipendenze oltre Pillow; a 480×320
+  un indirizzo da 50 caratteri è una versione 3, 4 px per modulo nel pannello del bot.
 - Luci Hue (`dash/hue.py`, funzioni `lights_on/off` e `set_brightness` in `azioni.py`): API v1 del
   bridge su HTTPS, che basta per stanze e luminosità; certificato autofirmato non verificato (rete
   locale, indirizzo scritto in configurazione), chiave solo in `config.local.json` a 600

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import http.client
 import json
 import queue
@@ -15,8 +16,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from dash import qr
 from dash.app import App
+from dash.render.pages import needle as needle_page
 from dash.config import DEFAULTS, ConfigError, _merge, validate
+from dash.layout import Box
 from dash.voce import Frase, VoceServer, avvia, certificato, contesto_tls, pulisci
 from dash.widgets import WIDGET_NAMES
 from dash.widgets.needle import NeedleWidget
@@ -87,6 +91,14 @@ class TestVoceServer(unittest.TestCase):
                                    {"X-Token": "segreto"})[0], 202)
         self.assertEqual(self.events.qsize(), 1)
 
+    def test_address_for_the_qr(self) -> None:
+        s = VoceServer({"token": "a b"}, self.events, dict)
+        s.porta = 8443
+        self.assertEqual(s.indirizzo("192.168.1.20"), "http://192.168.1.20:8443/?t=a%20b")
+        s.https = True
+        s.token = ""
+        self.assertTrue(s.indirizzo("").endswith(".local:8443/"))
+
     def test_off_by_default(self) -> None:
         self.assertIsNone(avvia(DEFAULTS["voce"], self.events, dict, Path("non-usata")))
 
@@ -133,6 +145,38 @@ class TestVoceServer(unittest.TestCase):
             self.assertEqual(r.status, 200)
             self.assertTrue(json.loads(r.read())["https"])
             c.close()
+
+
+def _impronta(m: list[list[bool]]) -> str:
+    return hashlib.sha1("".join("1" if c else "0" for r in m for c in r).encode()).hexdigest()
+
+
+class TestQr(unittest.TestCase):
+    """Matrici confrontate una volta con una libreria QR di riferimento e con un lettore (OpenCV)."""
+
+    URL = "https://192.168.1.20:8443/?t=una-parola-a-caso"
+
+    def test_known_matrices(self) -> None:
+        self.assertEqual(_impronta(qr.codifica(self.URL)), "7075f834d73a1ef30b2450f67710132e23090687")
+        self.assertEqual(_impronta(qr.codifica("pi-dash")), "f2258447cb431a523103afa962783a09f7048571")
+
+    def test_smallest_version_and_finder_patterns(self) -> None:
+        self.assertEqual(len(qr.codifica("pi-dash")), 21)          # versione 1
+        self.assertEqual(len(qr.codifica(self.URL)), 29)           # versione 3
+        self.assertEqual(len(qr.codifica("x" * 200, "M")), 57)     # versione 10
+        m = qr.codifica(self.URL, "M")
+        n = len(m)
+        for cx, cy in ((0, 0), (n - 7, 0), (0, n - 7)):
+            self.assertTrue(all(m[cy][cx + i] and m[cy + 6][cx + i] for i in range(7)))
+            self.assertFalse(m[cy + 1][cx + 1])
+            self.assertTrue(m[cy + 3][cx + 3])
+        self.assertTrue(m[n - 8][8])                                 # modulo sempre scuro
+
+    def test_too_long_or_bad_level(self) -> None:
+        with self.assertRaises(ValueError):
+            qr.codifica("x" * 400)
+        with self.assertRaises(ValueError):
+            qr.codifica("x", "H")
 
 
 class TestVoceConfig(unittest.TestCase):
@@ -213,6 +257,28 @@ class TestVoceApp(unittest.TestCase):
         app.step(NOW, 0.0, animate=False)
         self.assertEqual((app.voce_stato()["id"], app.voce_stato()["accettata"]), (3, False))
         w._busy = False
+
+    def test_tap_on_the_bot_shows_the_qr_of_the_page(self) -> None:
+        app = self._app([{"name": "Needle", "widget": "needle"}, {"name": "+", "widget": "new"}])
+        w = app.needle()
+        w.load_demo()
+        box = Box(0, 0, 480, 200)
+        self.assertNotIn("qr", [h for _, h in needle_page.hits(box, w, 1.0)])   # senza indirizzo
+        w.on_hit("qr", NOW)
+        self.assertFalse(w.qr_visibile())
+        app.imposta_voce_url(TestQr.URL)
+        app.add_page("needle")                             # anche le schede nuove lo ricevono
+        self.assertEqual(app.pages[1].widget.voce_url, TestQr.URL)
+        self.assertEqual(needle_page.hits(box, w, 1.0)[-1][1], "qr")
+        bot = app.step(NOW, 0.0, animate=False)
+        w.on_hit("qr", NOW)
+        self.assertTrue(w.qr_visibile())
+        self.assertEqual(len(w.qr_moduli()), 29)
+        con_qr = app.step(NOW, 0.1, animate=False)
+        assert bot is not None and con_qr is not None
+        self.assertNotEqual(bot.tobytes(), con_qr.tobytes())
+        w.on_hit("qr", NOW)                                 # secondo tocco: torna il bot
+        self.assertFalse(w.qr_visibile())
 
     def test_off_by_default_no_hidden_widget(self) -> None:
         cfg = copy.deepcopy(DEFAULTS)

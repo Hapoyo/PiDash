@@ -176,6 +176,8 @@ def main(argv: list[str] | None = None) -> int:
     # pagina "premi e parla" per il telefono (voce.porta, di norma spenta)
     server = None if args.once else voce.avvia(cfg["voce"], events, app.voce_stato,
                                                 Path(cfg["sim"]["out_dir"]) / "voce")
+    if server is not None:
+        app.imposta_voce_url(server.indirizzo())   # QR sulla scheda Needle
     try:
         app.run(once=args.once)
     except KeyboardInterrupt:

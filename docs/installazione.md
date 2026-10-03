@@ -499,7 +499,9 @@ Funziona anche senza la scheda Needle: l'esito si legge sul telefono.
 2. Al primo avvio pi-dash crea con `openssl` un certificato autofirmato in `out/voce/` (vale per
    `<nome-del-pi>.local` e per l'IP di quel momento). Dal telefono, sulla stessa rete Wi-Fi, apri
    `https://<nome-del-pi>.local:8443/?t=una-parola-a-caso` (oppure l'IP del Pi al posto del nome) e
-   aggiungi la pagina alla schermata Home.
+   aggiungi la pagina alla schermata Home. Più comodo: sulla scheda Needle **tocca il bot** e al
+   suo posto compare un QR con l'indirizzo completo (IP e codice); inquadralo con la fotocamera.
+   Un altro tocco riporta il bot.
 3. Il browser avvisa che il certificato non è fidato: è normale per un certificato fatto in casa.
    Su Android/Chrome tocca **Avanzate → Procedi**. Su iPhone/Safari tocca **Mostra dettagli →
    visita questo sito web**; se poi il microfono non parte, installa il certificato

@@ -69,6 +69,7 @@ class App:
         self._power_thread: threading.Thread | None = None
         self._power_sent = False                  # comando di spegnimento già lanciato
         self._notice = ("", 0.0)
+        self.voce_url = ""     # pagina "premi e parla" (`dash/voce.py`): le schede Needle la mostrano in QR
         self.pages: list[Page] = []
         self.widgets: dict[str, Widget] = {}
         for p in cfg["pages"]:
@@ -116,6 +117,7 @@ class App:
             page.widget.alimentazione = lambda: self.power
         if isinstance(page.widget, NeedleWidget):   # per capire "luce del soggiorno" servono i nomi
             page.widget.stanze = self._nomi_stanze
+            page.widget.voce_url = self.voce_url
         self.pages.insert(len(self.pages) if at is None else at, page)
         self.widgets[key] = page.widget
         return page
@@ -138,6 +140,13 @@ class App:
             widget.stanze = self._nomi_stanze
             self._needle_voce = widget
         return self._needle_voce
+
+    def imposta_voce_url(self, url: str) -> None:
+        """Indirizzo della pagina "premi e parla": le schede Needle lo mostrano in QR."""
+        self.voce_url = url
+        for widget in list(self.widgets.values()) + ([self._needle_voce] if self._needle_voce else []):
+            if isinstance(widget, NeedleWidget):
+                widget.voce_url = url
 
     def handle_frase(self, frase: Frase) -> None:
         """Frase dal telefono: a Needle, come un tocco su una frase della scheda."""

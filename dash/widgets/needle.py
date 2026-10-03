@@ -19,7 +19,7 @@ from typing import Any, Callable
 from urllib import error, request
 from urllib.parse import urlsplit
 
-from .. import azioni, frasi
+from .. import azioni, frasi, qr
 from .base import Widget
 
 log = logging.getLogger(__name__)
@@ -102,6 +102,9 @@ class NeedleWidget(Widget):
         self.azioni: list[dict[str, Any]] = [dict(a) for a in cfg.get("azioni") or []]
         self.stanze: frasi.Stanze | None = None       # nomi delle stanze Hue, li dà App
         self.umore_forzato = ""                       # anteprime e test: fissa la faccia del bot
+        self.voce_url = ""        # indirizzo della pagina "premi e parla" (lo dà App), "" se spenta
+        self.mostra_qr = False    # il pannello del bot mostra il QR di `voce_url`
+        self._qr: tuple[str, list[list[bool]]] = ("", [])
         self._pending: list[tuple[str, dict[str, Any], str]] = []
         self.idx = 0
         self._clock = clock
@@ -165,9 +168,24 @@ class NeedleWidget(Widget):
         """Indice dell'ultima frase toccata, per un attimo; altrimenti -1."""
         return self._hit if self._clock() - self._hit_at < FLASH_S else -1
 
+    def qr_visibile(self) -> bool:
+        return self.mostra_qr and bool(self.voce_url)
+
+    def qr_moduli(self) -> list[list[bool]]:
+        """Moduli del QR di `voce_url` (calcolati una volta per indirizzo); [] se troppo lungo."""
+        if self._qr[0] != self.voce_url:
+            try:
+                moduli = qr.codifica(self.voce_url) if self.voce_url else []
+            except ValueError:
+                log.warning("needle: indirizzo troppo lungo per il QR: %d caratteri", len(self.voce_url))
+                moduli = []
+            self._qr = (self.voce_url, moduli)
+        return self._qr[1]
+
     def state_key(self, now: datetime) -> Hashable:
         online, busy, last = self.snapshot()
-        return (online, busy, last, self.idx, self.flashing(), self.umore())
+        return (online, busy, last, self.idx, self.flashing(), self.umore(), self.voce_url,
+                self.qr_visibile())
 
     # --- rete ------------------------------------------------------------
     def update(self, now: datetime) -> None:
@@ -291,6 +309,9 @@ class NeedleWidget(Widget):
 
     # --- ingressi --------------------------------------------------------
     def on_hit(self, hit: str, now: datetime) -> None:
+        if hit == "qr":           # tocco sul bot: QR della pagina del telefono, e ritorno
+            self.mostra_qr = not self.mostra_qr and bool(self.voce_url)
+            return
         kind, _, arg = hit.partition(":")
         if kind == "q" and arg.isdigit() and self.queries:
             self.idx = int(arg) % len(self.queries)

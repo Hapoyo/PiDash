@@ -7,6 +7,9 @@
   Casella per scrivere o dettare con la tastiera e frasi di `needle.queries` come scorciatoie.
   Certificato autofirmato creato da `openssl` in `out/voce/`, oppure quello di Tailscale
   (`voce.cert`, `voce.key`); codice d'accesso facoltativo `voce.token`. Guida § 5.13.
+- **QR sulla scheda Needle**: con la pagina "premi e parla" accesa, un tocco sul bot mostra il QR
+  dell'indirizzo (con il codice d'accesso); un altro tocco riporta il bot. QR generato senza
+  dipendenze (`dash/qr.py`).
 
 ## 0.9.1 — 2026-09-29
 - **Accendere le luci a un livello**: "accendi il soggiorno al 100%", "…al 100 per cento" e "…al

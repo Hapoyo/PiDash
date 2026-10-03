@@ -65,6 +65,25 @@ class Canvas:
                                  outline=None if outline is None else self.rgb(outline),
                                  width=self.line if width is None else width)
 
+    def qr(self, box: Box, moduli: list[list[bool]], dark: Color = "ink",
+           light: Color = "cream") -> None:
+        """QR code centrato in `box`: moduli interi di pixel, su fondo `light` con due moduli di
+        margine (il bianco attorno serve alla fotocamera); niente se non ci sta a 2 px per modulo."""
+        n = len(moduli)
+        lato = min(box.w, box.h) // (n + 4)
+        if lato < 2:
+            return
+        tot = lato * (n + 4)
+        x0, y0 = box.x + (box.w - tot) // 2, box.y + (box.h - tot) // 2
+        self.d.rectangle((x0, y0, x0 + tot - 1, y0 + tot - 1), fill=self.rgb(light))
+        x0, y0 = x0 + 2 * lato, y0 + 2 * lato
+        scuro = self.rgb(dark)
+        for y, riga in enumerate(moduli):
+            for x, pieno in enumerate(riga):
+                if pieno:
+                    self.d.rectangle((x0 + x * lato, y0 + y * lato, x0 + (x + 1) * lato - 1,
+                                      y0 + (y + 1) * lato - 1), fill=scuro)
+
     def progress(self, bar: Box, frac: float, color: str, track: str = "line",
                  outline: str | None = None, show_empty: bool = True) -> None:
         """Barra arrotondata: fondo `track`, parte piena `color` proporzionale a `frac`."""

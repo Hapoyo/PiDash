@@ -23,7 +23,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable, NamedTuple
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, quote, urlsplit
 
 log = logging.getLogger(__name__)
 
@@ -205,6 +205,7 @@ class VoceServer:
         self._handler = Handler
         self._tls = tls
         self._server: _Server | None = None
+        self.porta = 0
 
     def invia(self, testo: str) -> int:
         """Mette la frase nella coda del dashboard e ne restituisce il numero."""
@@ -220,10 +221,18 @@ class VoceServer:
         self._server = _Server((host, porta), self._handler)
         self._server.tls = self._tls
         threading.Thread(target=self._server.serve_forever, name="voce", daemon=True).start()
-        vera = int(self._server.server_address[1])
+        vera = self.porta = int(self._server.server_address[1])
         log.info("voce: pagina \"premi e parla\" su %s://<pi>:%d/", "https" if self.https else "http",
                  vera)
         return vera
+
+    def indirizzo(self, ip: str | None = None) -> str:
+        """Indirizzo da aprire sul telefono (per il QR): IP del Pi, o `<nome>.local` se manca,
+        con il codice d'accesso se c'è."""
+        ip = _ip_locale() if ip is None else ip
+        host = ip or f"{socket.gethostname()}.local"
+        url = f"{'https' if self.https else 'http'}://{host}:{self.porta}/"
+        return url + (f"?t={quote(self.token, safe='')}" if self.token else "")
 
     def close(self) -> None:
         if self._server is not None:
