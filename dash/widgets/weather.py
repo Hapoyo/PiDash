@@ -117,6 +117,7 @@ class WeatherWidget(Widget):
         self.demo = bool(cfg.get("demo", False))
         self.cache_file = Path(cfg.get("cache_dir", "out")) / "weather_cache.json"
         self._lock = threading.Lock()
+        self._city: tuple[str, float, float] | None = None   # serve a place(), quindi prima di _load_cache: città temporanea ("meteo roma")
         self._data: dict[str, Any] | None = self._load_cache()
         if self.demo:
             from ..demo import weather_data  # solo con `weather.demo` o --demo
@@ -125,7 +126,6 @@ class WeatherWidget(Widget):
         self.error: str | None = None
         self._stop = threading.Event()
         self._wake = threading.Event()   # scarica subito (città cambiata) invece di aspettare
-        self._city: tuple[str, float, float] | None = None   # città temporanea ("meteo roma")
         self._thread: threading.Thread | None = None
 
     # --- città temporanea --------------------------------------------------

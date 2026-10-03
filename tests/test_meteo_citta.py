@@ -137,6 +137,21 @@ class TestAzioneMeteo(unittest.TestCase):
         self.assertIn("set_weather_city", azioni.SOLO_REGOLE)
 
 
+class TestWeatherInit(unittest.TestCase):
+    def test_builds_without_demo_and_with_a_cache_file(self) -> None:
+        """Con la cache su disco (come sul Pi) il costruttore legge già `place()`."""
+        cfg = td.make_cfg()
+        for demo in (False, True):
+            with tempfile.TemporaryDirectory() as tmp:
+                Path(tmp, "weather_cache.json").write_text(
+                    '{"latitude": 40.8, "longitude": 13.4, "current": {}}', encoding="utf-8")
+                cfg["weather"].update(demo=demo, cache_dir=tmp)
+                loc = location.Location(cfg["location"], tmp)
+                wx = WeatherWidget(cfg["weather"], loc)
+                self.assertEqual(wx.city(), "")
+                self.assertEqual(wx.place(), loc.snapshot())
+
+
 class TestGeocode(unittest.TestCase):
     def test_result_and_missing(self) -> None:
         with mock.patch.object(location, "_get_json", return_value={"results": [
