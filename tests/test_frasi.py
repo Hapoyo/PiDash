@@ -50,7 +50,6 @@ class TestNumeriEDurate(unittest.TestCase):
             "timer un minuto e 30 secondi": 90, "timer 5 minuti e 30 secondi": 330,
             "timer venticinque minuti": 1500, "timer 5": 300, "timer di dieci": 600,
             "avvisami tra dieci minuti": 600, "ricordami tra 3 minuti": 180,
-            "partenza regata timer 5 minuti": 300,
         }
         for frase, secondi in casi.items():
             self.assertEqual(chiama(frase), [("start_timer", {"seconds": secondi})], frase)

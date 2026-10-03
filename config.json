@@ -43,10 +43,7 @@
       600,
       900
     ],
-    "step_s": 1,
-    "labels": {
-      "300": "PARTENZA"
-    }
+    "step_s": 1
   },
   "alarm": {
     "ring_max_min": 10,

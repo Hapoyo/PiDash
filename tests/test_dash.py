@@ -140,12 +140,12 @@ class TestTimer(unittest.TestCase):
     def test_buttons_add_subtract_and_clear(self) -> None:
         clk = FakeClock()
         now = datetime(2026, 9, 24, 7, 42)
-        t = TimerWidget({"presets_s": [900, 60, 300, 600], "labels": {"300": "partenza"}},
+        t = TimerWidget({"presets_s": [900, 60, 300, 600], "labels": {"300": "pasta"}},
                         clock=clk)
         self.assertEqual([h for h, _ in t.buttons()],
                          ["sub", "add:60", "add:300", "add:600", "add:900", "clear"])
         self.assertEqual(dict(t.buttons())["sub"], "−1'")
-        self.assertEqual((t.duration, t.label()), (300, "PARTENZA"))  # parte dalla partenza
+        self.assertEqual((t.duration, t.label()), (300, "PASTA"))  # parte dalla durata con nome
         t.on_hit("add:300", now)
         t.on_hit("add:300", now)
         self.assertEqual(t.shown_remaining(), 900)                     # si sommano
@@ -576,7 +576,7 @@ class TestPages(unittest.TestCase):
 
     def _app(self, w: int = 960, h: int = 540) -> App:
         cfg = make_cfg(display={"width": w, "height": h},
-                       timer={"presets_s": [300], "labels": {"300": "partenza"}},
+                       timer={"presets_s": [300], "labels": {"300": "pasta"}},
                        alarm={"alarms": [{"time": "06:30", "days": [0, 1, 2, 3, 4, 5, 6]}]})
         return App(cfg, MemDisplay(w, h), queue.Queue())
 

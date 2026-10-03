@@ -125,7 +125,7 @@ le regole operative stanno in [CLAUDE.md](../CLAUDE.md).
   comando `power.cmd` (predefinito `sudo -n /usr/bin/systemctl poweroff`, permesso da
   `/etc/sudoers.d/pi-dash` e da nient'altro). Fuori dal driver `fb` è solo simulato.
 - Meteo: direzione del vento come anello della home (`pages/weather._wind_ring` → `cv.ring`): arco
-  da nord in senso orario fino alla direzione **da cui** soffia il vento (uso nautico), sfera in
+  da nord in senso orario fino alla direzione **da cui** soffia il vento (convenzione meteorologica), sfera in
   testa, gradi al centro, tacca sul nord. Niente aghi né radar. `cv.panel(reserve=...)` libera lo
   spazio a destra del numero.
 - Rete: byte/s da `/proc/net/dev` (tutte le schede tranne `lo`), differenza fra due campioni;
@@ -145,7 +145,7 @@ le regole operative stanno in [CLAUDE.md](../CLAUDE.md).
 - Timer: il tempo si compone con i bottoni: `presets_s` ordinati diventano "+N" che si sommano
   (anche in corsa, spostando la scadenza), "−1'" toglie un minuto senza scendere sotto zero, "C"
   azzera. Tocco sul pannello del tempo = avvia/pausa; B somma il preset più corto. All'avvio il
-  primo preset con etichetta (`timer.labels`, 300 s → "PARTENZA"), altrimenti il primo. La barra
+  primo preset con etichetta (`timer.labels`, per esempio 300 s → "PASTA"), altrimenti il primo. La barra
   si misura sul tempo impostato.
 - Avvio: 5 s (la sigla "Pi-Dash" si scrive in circa 1,75 s); un tocco lo salta.
 - Sistema: campioni ogni `system.sample_s`, storici di CPU e rete su 48 colonne a larghezza fissa.

@@ -4,7 +4,7 @@ Versione 0.10.0 · 2026-10-03
 
 ## 1. Scopo
 Dashboard da tavolo per Raspberry Pi 3 Model B con schermo SPI 3,5" 480×320 (ILI9486 + touch
-XPT2046): orologio, meteo e vento in nodi, timer di partenza regata, sveglia, statistiche del
+XPT2046): orologio, meteo e vento in nodi, timer, sveglia, statistiche del
 sistema. Schedario componibile: le pagine si aggiungono e si tolgono dalle Impostazioni
 (scheda `new`, linguetta con l'ingranaggio), che regolano anche luminosità, touch e spegnimento.
 Unico stile: pannelli arrotondati a colori su fondo scuro, numeri in Space Grotesk,
@@ -18,6 +18,7 @@ config.local.json      impostazioni del singolo Pi, fuori da Git, fuse sopra con
 dash/main.py           riga di comando: configurazione, schermo, ingressi, avvio
 dash/app.py            App: pagine dello schedario, eventi, ciclo (`step`, `run`)
 dash/preview.py        anteprime del README: PNG per pagina e GIF animata
+dash/demo.py           dati dimostrativi (meteo, sistema), importati solo con `--demo`/anteprime/test
 dash/config.py         default + validazione (ConfigError)
 dash/motion.py         tempi delle animazioni: livelli, curve, avvio, scansione, decodifica
 dash/render/           tutto il disegno
@@ -148,7 +149,6 @@ Scelte prese e motivi (schedario, meteo, posizione, animazioni, configurazione, 
 - **Rosa dei venti**: 16 quarte (N…NNW) e 8 venti (Tramontana…Maestrale).
 - **Fase lunare**: 0 = luna nuova, 0,5 = piena; illuminazione in % del disco.
 - **SoC**: System on Chip del Raspberry (temperatura mostrata come "temp").
-- **Partenza**: sequenza di partenza di regata (conto alla rovescia di 5').
 - **Framebuffer**: `/dev/fb1`, memoria dello schermo scritta direttamente, senza desktop.
 - **Impostazioni**: pagina `new` (nome "+" nei config): schede, luminosità, touch, spegnimento.
 - **BeaconDB**: servizio libero di posizione da reti Wi-Fi (formato Mozilla Location Service).

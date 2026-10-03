@@ -4,7 +4,7 @@ Versione 0.10.0 · 2026-10-03
 
 Guida passo passo per chi è nuovo del Raspberry Pi. Si lavora dal PC Windows: il Raspberry non
 ha bisogno di monitor né di tastiera ("headless"). Le parti in `grassetto monospazio` si scrivono
-esattamente così; `marinaio` e `dashboard` sono esempi di nome utente e nome del Raspberry.
+esattamente così; `mario` e `dashboard` sono esempi di nome utente e nome del Raspberry.
 
 ## 0. Prima di iniziare
 
@@ -25,8 +25,8 @@ esattamente così; `marinaio` e `dashboard` sono esempi di nome utente e nome de
 | Terminale / PowerShell | finestra dove si scrivono i comandi; Invio li esegue |
 | SSH | collegamento al terminale del Raspberry dal PC, attraverso la rete |
 | `sudo` | esegue il comando come amministratore; può chiedere la password |
-| `~` | la cartella personale sul Raspberry (`/home/marinaio`) |
-| Prompt | la riga che aspetta un comando: `marinaio@dashboard:~ $` = sei sul Raspberry |
+| `~` | la cartella personale sul Raspberry (`/home/mario`) |
+| Prompt | la riga che aspetta un comando: `mario@dashboard:~ $` = sei sul Raspberry |
 | `nano` | editor di testo nel terminale: frecce per muoversi, Ctrl+O e Invio salva, Ctrl+X esce |
 
 Regole utili:
@@ -48,7 +48,7 @@ Regole utili:
    |---|---|
    | Hostname | `dashboard` (solo lettere, cifre e trattino) |
    | Localizzazione | Roma: imposta da solo fuso orario Europe/Rome, tastiera e paese del Wi-Fi |
-   | Utente | nome (es. `marinaio`) e password: **annotali**, non esiste più l'utente `pi` |
+   | Utente | nome (es. `mario`) e password: **annotali**, non esiste più l'utente `pi` |
    | Wi-Fi | nome della rete (SSID, attenzione a maiuscole/minuscole) e password |
    | Accesso remoto | attiva **SSH** con autenticazione a password |
    | Raspberry Pi Connect | lascia spento |
@@ -67,11 +67,11 @@ dello schermo allineato al bordo della scheda. Controlla che nessun pin resti sc
 2. Sul PC: Start → scrivi `PowerShell` → apri **Windows PowerShell**.
 3. Collegati:
    ```
-   ssh marinaio@dashboard.local
+   ssh mario@dashboard.local
    ```
    - La prima volta chiede se fidarsi del dispositivo: scrivi `yes` e Invio.
    - Poi la password dell'utente (non si vede mentre scrivi).
-   - Il prompt diventa `marinaio@dashboard:~ $`: da qui in poi i comandi girano sul Raspberry.
+   - Il prompt diventa `mario@dashboard:~ $`: da qui in poi i comandi girano sul Raspberry.
 4. Aggiorna il sistema (5–15 minuti):
    ```
    sudo apt update && sudo apt full-upgrade -y
@@ -81,7 +81,7 @@ dello schermo allineato al bordo della scheda. Controlla che nessun pin resti sc
 5. Per uscire da SSH: `exit`.
 
 Se `dashboard.local` non viene trovato: cerca l'indirizzo IP del Raspberry nella pagina del router
-(dispositivi collegati, nome `dashboard`) e usa `ssh marinaio@192.168.1.23` (il tuo numero).
+(dispositivi collegati, nome `dashboard`) e usa `ssh mario@192.168.1.23` (il tuo numero).
 
 ### 3.1 Cambiare rete Wi-Fi o password
 Se il router cambia nome o password, o il Raspberry non si collega più, collegalo al router con il
@@ -110,7 +110,7 @@ Il progetto arriva come `pi-dash.zip`. Supponiamo che sia nella cartella Downloa
 1. Apri una **seconda** finestra PowerShell (non collegata al Raspberry) e scrivi:
    ```
    cd $HOME\Downloads
-   scp .\pi-dash.zip marinaio@dashboard.local:~/
+   scp .\pi-dash.zip mario@dashboard.local:~/
    ```
    Chiede la password del Raspberry, poi copia il file.
 2. Nella finestra collegata al Raspberry:
@@ -127,7 +127,7 @@ App → Funzionalità facoltative → Aggiungi → **Client OpenSSH**.
 ### 4.2 Metodo B: con finestre e trascinamento (WinSCP o FileZilla)
 1. Installa **WinSCP** (winscp.net) e crea una connessione: protocollo **SFTP**, host
    `dashboard.local`, porta 22, nome utente e password del Raspberry.
-2. Trascina `pi-dash.zip` nella cartella `/home/marinaio` a destra. Non nella radice `/`:
+2. Trascina `pi-dash.zip` nella cartella `/home/mario` a destra. Non nella radice `/`:
    lì scrivere è vietato e compare `Permission denied`.
 3. Estrai dal terminale SSH come al punto 2 del metodo A.
 
@@ -569,7 +569,7 @@ Se non c'è niente di nuovo scrive "già all'ultima versione" e non riavvia null
 
 Aggiornamento dal PC, senza aprire una sessione SSH:
 ```
-ssh marinaio@dashboard.local ~/pi-dash/scripts/aggiorna.sh
+ssh mario@dashboard.local ~/pi-dash/scripts/aggiorna.sh
 ```
 
 ### 7.1 Passare dallo zip (o dalla copia dal PC) a GitHub
