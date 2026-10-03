@@ -23,6 +23,9 @@ le regole operative stanno in [CLAUDE.md](../CLAUDE.md).
   ("accendi tutte le luci" → `lights_off`) e la confidenza sta fra 0,4 e 0,6 anche per risposte
   corrette. Perciò il verbo della frase decide accendere o spegnere, la negazione blocca, la
   luminosità deve essere nel testo, e le luci hanno una soglia propria (0,4) invece di 0,6.
+  Se il bridge non risponde (il router può dargli un altro IP) `Hue` lo cerca con `scopri`
+  (discovery.meethue.com), controlla che la stessa chiave vi funzioni, ritenta il comando e salva
+  il nuovo indirizzo in `config.local.json`; la ricerca non si ripete prima di un minuto.
   Per lo stesso motivo "accendi il soggiorno al 100%" (per il modello `lights_off`, 0,52) prende
   il livello dal testo (`azioni._livello`: "N%", "N per cento", "al massimo"), altrimenti
   accenderebbe alla luminosità di prima.

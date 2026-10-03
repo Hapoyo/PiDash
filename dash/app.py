@@ -52,7 +52,7 @@ class App:
         self.events = events
         self.config_path = config_path  # dove salvare le pagine create dalla scheda "+"
         self.factory = WidgetFactory(cfg)
-        self.hue = Hue(cfg.get("hue") or {})   # luci di casa, comandate da Needle
+        self.hue = Hue(cfg.get("hue") or {}, on_trovato=self._bridge_trovato)   # luci di casa, comandate da Needle
         # la retroilluminazione vera solo sul Pi: nel simulatore si scurisce l'immagine
         bl = dict(cfg.get("backlight") or {})
         if cfg["display"]["driver"] != "fb":
@@ -198,6 +198,11 @@ class App:
         level = self.backlight.step(delta)
         self.cfg.setdefault("backlight", {})["level"] = level
         self._save_local({"backlight": {"level": level}}, "luminosità")
+
+    def _bridge_trovato(self, bridge: str) -> None:
+        """Il bridge Hue ha cambiato indirizzo: lo ricorda anche dopo il riavvio."""
+        self.cfg.setdefault("hue", {})["bridge"] = bridge
+        self._save_local({"hue": {"bridge": bridge}}, "indirizzo del bridge")
 
     def _save_local(self, changes: dict[str, Any], what: str) -> None:
         if self.config_path is None:

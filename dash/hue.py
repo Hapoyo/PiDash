@@ -9,6 +9,7 @@ spento rallenta il dashboard di quel tempo, non lo blocca.
 from __future__ import annotations
 
 import json
+import logging
 import re
 import ssl
 import threading
@@ -18,7 +19,10 @@ from dataclasses import dataclass
 from typing import Any, Callable
 from urllib import error, request
 
+log = logging.getLogger(__name__)
+
 CACHE_S = 300.0          # le stanze cambiano di rado: si rileggono ogni 5 minuti
+RICERCA_S = 60.0         # pausa tra due ricerche del bridge: un bridge spento non rallenta ogni comando
 LINK_TIMEOUT_S = 30.0    # tempo per premere il tasto del bridge durante la registrazione
 # Parole che il modello può lasciare nel nome della stanza ("la luce del soggiorno").
 ARTICOLI = frozenset({"il", "lo", "la", "l", "le", "i", "gli", "di", "del", "della", "dello", "dei",
@@ -74,10 +78,20 @@ class Hue:
     """Stanze e comandi del bridge; `send` si sostituisce nei test."""
 
     def __init__(self, cfg: dict[str, Any], send: Send | None = None,
-                 clock: Callable[[], float] = time.monotonic) -> None:
+                 clock: Callable[[], float] = time.monotonic,
+                 ritrova: Callable[[], str] | None = None,
+                 fabbrica: Callable[[str, str, float], Send] = http_send,
+                 on_trovato: Callable[[str], None] | None = None) -> None:
+        """`ritrova` dà l'indirizzo attuale del bridge quando quello salvato non risponde (di norma
+        `scopri`; senza `send` di prova è attivo da solo); `on_trovato` salva il nuovo indirizzo."""
         self.bridge = str(cfg.get("bridge") or "")
         self.key = str(cfg.get("key") or "")
-        self._send = send or http_send(self.bridge, self.key, max(0.5, float(cfg.get("timeout_s", 2))))
+        self._timeout = max(0.5, float(cfg.get("timeout_s", 2)))
+        self._fabbrica = fabbrica
+        self._send = send or fabbrica(self.bridge, self.key, self._timeout)
+        self._ritrova = ritrova if ritrova is not None or send is not None else scopri
+        self._on_trovato = on_trovato
+        self._cercato = -RICERCA_S * 2
         self._clock = clock
         self._lock = threading.Lock()
         self._stanze: list[Stanza] = []
@@ -87,13 +101,46 @@ class Hue:
     def configurato(self) -> bool:
         return bool(self.bridge and self.key)
 
+    # --- indirizzo -------------------------------------------------------
+    def _chiama(self, metodo: str, percorso: str, corpo: dict[str, Any] | None) -> Any:
+        """Una chiamata al bridge; se non risponde ne cerca il nuovo indirizzo (l'IP può cambiare)."""
+        try:
+            return self._send(metodo, percorso, corpo)
+        except HueError:
+            if not self._cerca_bridge():
+                raise
+        return self._send(metodo, percorso, corpo)
+
+    def _cerca_bridge(self) -> bool:
+        """Ritrova il bridge dopo un silenzio; True se l'indirizzo è cambiato e la chiave vale ancora."""
+        if self._ritrova is None or not self.configurato:
+            return False
+        with self._lock:
+            if self._clock() - self._cercato < RICERCA_S:
+                return False
+            self._cercato = self._clock()
+        try:
+            nuovo = self._ritrova()
+            if not nuovo or nuovo == self.bridge:
+                return False
+            prova = self._fabbrica(nuovo, self.key, self._timeout)
+            if not isinstance(prova("GET", "lights", None), dict):   # altra chiave: non è il nostro bridge
+                return False
+        except HueError:
+            return False
+        self.bridge, self._send = nuovo, prova
+        log.info("bridge hue ritrovato a un nuovo indirizzo: %s", nuovo)
+        if self._on_trovato is not None:
+            self._on_trovato(nuovo)
+        return True
+
     # --- stanze ----------------------------------------------------------
     def stanze(self, forza: bool = False) -> list[Stanza]:
         """Stanze del bridge con quante luci sono raggiungibili (in cache per 5 minuti)."""
         with self._lock:
             if not forza and self._clock() - self._letto < CACHE_S:
                 return self._stanze
-        luci, gruppi = self._send("GET", "lights", None), self._send("GET", "groups", None)
+        luci, gruppi = self._chiama("GET", "lights", None), self._chiama("GET", "groups", None)
         if not isinstance(luci, dict) or not isinstance(gruppi, dict):
             raise HueError("chiave rifiutata dal bridge")  # il bridge risponde con una lista di errori
         stanze = [Stanza(gid, str(g.get("name", gid)), len(g.get("lights") or []),
@@ -128,7 +175,7 @@ class Hue:
         corpo: dict[str, Any] = {"on": acceso}
         if percentuale is not None:
             corpo["bri"] = max(1, min(254, round(percentuale * 254 / 100)))
-        risposta = self._send("PUT", f"groups/{'0' if stanza is None else stanza.id}/action", corpo)
+        risposta = self._chiama("PUT", f"groups/{'0' if stanza is None else stanza.id}/action", corpo)
         errori = [r["error"].get("description", "errore") for r in risposta
                   if isinstance(r, dict) and isinstance(r.get("error"), dict)] \
             if isinstance(risposta, list) else []
