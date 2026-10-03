@@ -85,8 +85,8 @@ def draw(cv: Canvas, b: Box, app: App, now: datetime) -> None:
     attivo = online and not busy
     for i, (cb, _) in enumerate(boxes):
         toccata = i == lampo
-        cv.rect(cb, "pink" if toccata else "panel",
-                "cream" if toccata else ("amber" if i == w.idx else "line"),
-                cv.stroke if toccata else cv.line)
+        cv.key(cb, "pink" if toccata else "panel",
+               "cream" if toccata else ("amber" if i == w.idx else "line"),
+               cv.stroke if toccata else cv.line)
         cv.text((cb.x + cb.w / 2, cb.y + cb.h / 2), w.queries[i], f,
                 "paper" if toccata else ("cream" if attivo else "tan"), "mm")

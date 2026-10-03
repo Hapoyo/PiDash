@@ -23,6 +23,7 @@ log = logging.getLogger(__name__)
 
 KDSETMODE = 0x4B3A
 KD_TEXT, KD_GRAPHICS = 0x00, 0x01
+HIDE_CURSOR, SHOW_CURSOR = b"\x1b[?25l", b"\x1b[?25h"
 SYS_FB = Path("/sys/class/graphics")
 DEV_DIR = Path("/dev")
 PANEL_NAMES = ("ili9486", "ili9341", "st7796", "hx8357", "fb_")  # driver SPI noti
@@ -127,8 +128,11 @@ class FramebufferDisplay(Display):
                 except PermissionError:  # gruppo tty: solo scrittura
                     self._tty = os.open("/dev/tty0", os.O_WRONLY)
             fcntl.ioctl(self._tty, KDSETMODE, mode)
+            # cursore lampeggiante della console (il "-" sullo schermo): nascosto anche a parte,
+            # perché con KD_GRAPHICS non sempre fbcon smette di disegnarlo
+            os.write(self._tty, HIDE_CURSOR if mode == KD_GRAPHICS else SHOW_CURSOR)
         except OSError as exc:
-            log.debug("console non gestita (%s): vedi docs/hardware.md", exc)
+            log.warning("console non fermata (%s): può comparire il cursore, vedi docs/installazione.md § 5.5", exc)
             if self._tty is not None:
                 os.close(self._tty)
                 self._tty = None
