@@ -51,6 +51,8 @@ le regole operative stanno in [CLAUDE.md](../CLAUDE.md).
 - Bot di Needle (`render/bot.py`): una funzione disegna la faccia sia ferma (pagina base, `t = 0`)
   sia animata (effetto `bot` di `effects.draw_fx`), così la geometria è una sola. L'umore viene
   da `NeedleWidget.umore()` e fa parte di `state_key`; la faccia dell'esito dura 6 s (`RECENTE_S`).
+  La scheda non mostra più frase, funzione e confidenza: lo spazio va al bot (a sinistra, alto
+  quanto la pagina) e ai bottoni delle frasi (a destra); resta una riga con esito e stato.
 - Azioni di Needle (`dash/azioni.py`): il modello propone, il dashboard decide. Il thread della
   richiesta non tocca mai il dashboard: mette le chiamate in coda (`NeedleWidget.take_calls`) e le
   esegue `App.step` nel ciclo principale, dove si cambiano pagine e widget. Solo le funzioni di
