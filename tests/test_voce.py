@@ -283,7 +283,11 @@ class TestVoceApp(unittest.TestCase):
         self.assertFalse(w.qr_visibile())
         app.imposta_voce_url(TestQr.URL)
         app.add_page("needle")                             # anche le schede nuove lo ricevono
-        self.assertEqual(app.pages[1].widget.voce_url, TestQr.URL)
+        nuova = app.pages[1].widget
+        assert isinstance(nuova, NeedleWidget)
+        self.assertEqual(nuova.voce_url, TestQr.URL)
+        nuova.load_demo()                                   # niente controlli di rete fra i fotogrammi
+        app.page_idx = 0                                    # add_page apre la scheda nuova: si torna a w
         self.assertEqual(needle_page.hits(box, w, 1.0)[-1][1], "qr")
         bot = app.step(NOW, 0.0, animate=False)
         w.on_hit("qr", NOW)
@@ -294,6 +298,9 @@ class TestVoceApp(unittest.TestCase):
         self.assertNotEqual(bot.tobytes(), con_qr.tobytes())
         w.on_hit("qr", NOW)                                 # secondo tocco: torna il bot
         self.assertFalse(w.qr_visibile())
+        di_nuovo = app.step(NOW, 0.2, animate=False)
+        assert di_nuovo is not None
+        self.assertEqual(bot.tobytes(), di_nuovo.tobytes())
 
     def test_off_by_default_no_hidden_widget(self) -> None:
         cfg = copy.deepcopy(DEFAULTS)
