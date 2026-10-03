@@ -1,6 +1,6 @@
-"""Home: ora, data, luogo, anelli di settimana/mese/anno, alba/tramonto, avanzamento del giorno.
+"""Home: ora, data, anelli di settimana/mese/anno, alba/tramonto, avanzamento del giorno.
 
-Colonna sinistra allineata sul bordo: luogo, ora, data, righe in basso; anelli a destra.
+Colonna sinistra allineata sul bordo: ora, data, righe in basso; anelli a destra.
 """
 from __future__ import annotations
 
@@ -21,21 +21,14 @@ CLOCK_RAISE = 5  # pixel a 480×320 di cui l'ora sale rispetto al suo riquadro
 
 def draw(cv: Canvas, b: Box, app: App, now: datetime) -> None:
     clock: Any = app.page.widget
-    loc = getattr(clock, "location", None)
-    name, lat, lon = loc.snapshot() if loc is not None else ("", 0.0, 0.0)
     gap, lab_h, step = cv.gap, cv.height(cv.f_label), cv.row_step()
     # dal basso: due righe di dati, barra della giornata, data
     rows_y = b.bottom - step - lab_h
     bar = Box(b.x, rows_y - gap - cv.px(6), b.w, cv.px(6))
     date_h = cv.px(20)
     date_top = bar.y - gap - date_h
-    # in alto: luogo e coordinate
-    cv.label((b.x, b.y), f"loc // {name or 'n/d'}", "cream")
-    fonte = loc.kind() if loc is not None else ""  # gps / wifi / ip: quanto è affidabile
-    coord = f"{lat:.3f}n {lon:.3f}e" + (f" · {fonte}" if fonte in ("gps", "wifi", "ip") else "")
-    cv.label((b.right, b.y), coord, "tan", "ra", small=True)
     # in mezzo: ora a sinistra, anelli a destra (alti quanto ora + data)
-    band = Box(b.x, b.y + lab_h + gap, b.w, date_top - gap - (b.y + lab_h + gap))
+    band = Box(b.x, b.y, b.w, date_top - gap - b.y)
     side = min(band.h + gap + date_h, round(b.w * 0.30))
     # Mezzo passo di griglia in meno sotto l'ora: le cifre tonde scendono un filo sotto la linea
     # di base e la data (ancora "ld") sale un filo sopra la sua riga, e con il riquadro pieno

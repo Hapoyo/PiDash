@@ -12,7 +12,9 @@
 - Cursore: `dash/display/fb.py` ora lo nasconde (`ESC[?25l` su tty0 e tty1, ripetuto ogni 20 s)
   anche quando `KDSETMODE` non è permesso; nuovo `scripts/console-silenziosa.sh` (da lanciare una
   volta sul Pi) per togliere login, messaggi e cursore dalla console dello schermo. Guida § 5.5.
-- **Grafica con più rilievo**: pannelli con ombra, sfumatura e filo di luce (`Canvas.solid`),
+- **Località sulla scheda meteo**: il nome del luogo sta in fondo alla pagina meteo, accanto
+  all'alba; la home non lo mostra più e l'ora ha più spazio.
+- **Grafica con più rilievo**: pannelli con sfumatura e filo di luce, senza ombre (`Canvas.solid`),
   bottoni in rilievo (`Canvas.key`), riflesso sulle barre, icona del tempo sulla pagina meteo
   (`Canvas.icon`). Le funzioni non cambiano; anteprime rigenerate.
 
