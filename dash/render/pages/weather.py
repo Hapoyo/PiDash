@@ -56,7 +56,8 @@ def draw(cv: Canvas, b: Box, app: App, now: datetime) -> None:
         cb = Box(round(mid.x + i * (cw + g)), mid.y, round(cw), mid.h)
         cv.panel(cb, col, k, v, ref="1013", slot=f"weather.{k}")
     # riga 4 (in fondo): sole e luna
-    cv.label((b.x, b.bottom), f"alba {_hhmm(wx.daily(data, 'sunrise'))} · "
+    name = wx.location.snapshot()[0]
+    cv.label((b.x, b.bottom), f"{name or 'n/d'} · alba {_hhmm(wx.daily(data, 'sunrise'))} · "
              f"tramonto {_hhmm(wx.daily(data, 'sunset'))}", "cream", "ld", small=True)
     phase = moon_phase(now)
     cv.label((b.right, b.bottom), f"luna {moon_name(phase).lower()} "

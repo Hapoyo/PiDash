@@ -241,7 +241,8 @@ class WeatherWidget(Widget):
 
     def state_key(self, now: datetime) -> Hashable:
         with self._lock:
-            return (self._version, self.error, now.strftime("%Y%m%d%H"))
+            return (self._version, self.error, now.strftime("%Y%m%d%H"),
+                    self.location.snapshot(), self.location.kind())
 
     def snapshot(self) -> dict[str, Any] | None:
         with self._lock:

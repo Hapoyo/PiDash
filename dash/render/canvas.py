@@ -67,11 +67,10 @@ class Canvas:
                                  width=self.line if width is None else width)
 
     def solid(self, box: Box | tuple[float, float, float, float], fill: str, r: int | None = None,
-              depth: bool = True) -> None:
-        """Pannello a rilievo: ombra morbida sotto, sfumatura leggera dall'alto, filo di luce.
+) -> None:
+        """Pannello a rilievo: sfumatura leggera dall'alto e filo di luce, senza ombre.
 
-        Stesso ingombro di `rect`: l'ombra cade nello spazio fra pannelli (`gap`). Con `depth`
-        falso (cartelle, linguette) disegna solo la sfumatura e il filo di luce.
+        Stesso ingombro di `rect`.
         """
         xy = tuple(round(v) for v in (box.rect if isinstance(box, Box) else box))
         r = self.radius if r is None else r
@@ -79,10 +78,6 @@ class Canvas:
         if w < 4 or h < 4:
             self.rect(xy, fill, r=r)
             return
-        if depth:
-            dy = self.px(2)
-            self.d.rounded_rectangle((xy[0], xy[1] + dy, xy[2], xy[3] + dy), radius=r,
-                                     fill=self.mix(fill, "bg", 0.62))
         top, bottom = self.mix(fill, "paper", 0.12), self.mix(fill, "ink", 0.10)
         key = (w + 1, h + 1, r, top, bottom)
         body = _GRADIENTS.get(key)
@@ -102,7 +97,7 @@ class Canvas:
 
     def key(self, box: Box, fill: str, outline: Color | None, width: int | None = None) -> None:
         """Bottone in rilievo: sfumatura, contorno e un'ombra sottile lungo il bordo basso."""
-        self.solid(box, fill, depth=False)
+        self.solid(box, fill)
         self.rect(box, None, outline, width)
         r, y = self.radius, round(box.y + box.h) - 2
         self.d.line((round(box.x) + r, y, round(box.x + box.w) - r, y),
