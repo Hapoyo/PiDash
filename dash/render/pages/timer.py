@@ -43,7 +43,7 @@ def draw(cv: Canvas, b: Box, app: App, now: datetime) -> None:
     bg = "orange" if running else "cream"
     top, bar, _ = _geometry(b, cv.u)
     # pannello del tempo: nome della durata e stato in alto, minuti:secondi al centro
-    cv.rect(top, bg)
+    cv.solid(top, bg)
     cv.label((top.x + pad, top.y + pad), t.labels.get(t.duration, "timer"), "ink")
     stato = t.state.value.lower()
     if t.state in (TimerState.IDLE, TimerState.PAUSED) and t.remaining() > 0:
@@ -68,7 +68,7 @@ def draw(cv: Canvas, b: Box, app: App, now: datetime) -> None:
     for cb, hit in boxes:
         active = hit == lampo
         tenue = hit in ("sub", "clear")
-        cv.rect(cb, "pink" if active else "panel", "cream" if active else "line",
-                cv.stroke if active else cv.line)
+        cv.key(cb, "pink" if active else "panel", "cream" if active else "line",
+               cv.stroke if active else cv.line)
         cv.text((cb.x + cb.w / 2, cb.y + cb.h / 2), testi[hit], font,
                 "paper" if active else ("tan" if tenue else "cream"), "mm")

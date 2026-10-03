@@ -75,7 +75,7 @@ def hits(b: Box, widget: Any, u: float) -> list[tuple[Box, str]]:
 
 def _button(cv: Canvas, box: Box, text: str, f: Any, fill: str = "panel", ink: str = "cream",
             outline: str = "line") -> None:
-    cv.rect(box, fill, outline, cv.line)
+    cv.key(box, fill, outline, cv.line)
     cv.text((box.x + box.w / 2, box.y + box.h / 2), text, f, ink, "mm")
 
 

@@ -17,6 +17,7 @@ from ..motion import Fx, Slot
 from .theme import GRID, fit, font, px, text_mask
 
 Color = str | tuple[int, int, int]
+_GRADIENTS: dict[tuple, tuple[Image.Image, Image.Image]] = {}  # sfumature dei pannelli già pronte
 
 
 class Canvas:
@@ -65,6 +66,92 @@ class Canvas:
                                  outline=None if outline is None else self.rgb(outline),
                                  width=self.line if width is None else width)
 
+    def solid(self, box: Box | tuple[float, float, float, float], fill: str, r: int | None = None,
+              depth: bool = True) -> None:
+        """Pannello a rilievo: ombra morbida sotto, sfumatura leggera dall'alto, filo di luce.
+
+        Stesso ingombro di `rect`: l'ombra cade nello spazio fra pannelli (`gap`). Con `depth`
+        falso (cartelle, linguette) disegna solo la sfumatura e il filo di luce.
+        """
+        xy = tuple(round(v) for v in (box.rect if isinstance(box, Box) else box))
+        r = self.radius if r is None else r
+        w, h = xy[2] - xy[0], xy[3] - xy[1]
+        if w < 4 or h < 4:
+            self.rect(xy, fill, r=r)
+            return
+        if depth:
+            dy = self.px(2)
+            self.d.rounded_rectangle((xy[0], xy[1] + dy, xy[2], xy[3] + dy), radius=r,
+                                     fill=self.mix(fill, "bg", 0.62))
+        top, bottom = self.mix(fill, "paper", 0.12), self.mix(fill, "ink", 0.10)
+        key = (w + 1, h + 1, r, top, bottom)
+        body = _GRADIENTS.get(key)
+        if body is None:
+            strip = Image.new("RGB", (1, h + 1))
+            for y in range(h + 1):
+                f = y / max(1, h)
+                strip.putpixel((0, y), tuple(round(a + (b - a) * f) for a, b in zip(top, bottom)))
+            mask = Image.new("L", (w + 1, h + 1))
+            ImageDraw.Draw(mask).rounded_rectangle((0, 0, w, h), radius=r, fill=255)
+            body = _GRADIENTS[key] = (strip.resize((w + 1, h + 1)), mask)
+            if len(_GRADIENTS) > 64:
+                _GRADIENTS.pop(next(iter(_GRADIENTS)))
+        self.img.paste(body[0], (xy[0], xy[1]), body[1])
+        light = self.mix(fill, "paper", 0.42)
+        self.d.line((xy[0] + r, xy[1] + 1, xy[2] - r, xy[1] + 1), fill=light, width=1)
+
+    def key(self, box: Box, fill: str, outline: Color | None, width: int | None = None) -> None:
+        """Bottone in rilievo: sfumatura, contorno e un'ombra sottile lungo il bordo basso."""
+        self.solid(box, fill, depth=False)
+        self.rect(box, None, outline, width)
+        r, y = self.radius, round(box.y + box.h) - 2
+        self.d.line((round(box.x) + r, y, round(box.x + box.w) - r, y),
+                    fill=self.mix(fill, "ink", 0.45), width=1)
+
+    def icon(self, kind: str, box: Box, color: Color, bg: Color) -> None:
+        """Icona meteo a linee piene (sole, nuvola, pioggia, neve, temporale, nebbia) in `box`."""
+        s = min(box.w, box.h)
+        cx, cy = box.x + box.w / 2, box.y + box.h / 2
+        col, d = self.rgb(color), self.d
+        lw = max(1, round(s / 14))
+
+        def sun(x: float, y: float, r: float) -> None:
+            for i in range(8):
+                a = i * math.pi / 4
+                d.line((x + math.cos(a) * r * 1.45, y + math.sin(a) * r * 1.45,
+                        x + math.cos(a) * r * 1.95, y + math.sin(a) * r * 1.95), fill=col, width=lw)
+            d.ellipse((x - r, y - r, x + r, y + r), fill=col)
+
+        def cloud(x: float, y: float, w: float) -> None:
+            h = w * 0.34
+            d.ellipse((x - w * .5, y - h * .2, x - w * .1, y + h * .6), fill=col)
+            d.ellipse((x - w * .28, y - h * .9, x + w * .18, y + h * .6), fill=col)
+            d.ellipse((x - w * .02, y - h * .5, x + w * .5, y + h * .6), fill=col)
+            d.rectangle((x - w * .3, y, x + w * .3, y + h * .6), fill=col)
+
+        if kind == "sun":
+            sun(cx, cy, s * 0.22)
+        elif kind == "partly":
+            sun(cx + s * .12, cy - s * .14, s * .16)
+            cloud(cx - s * .04, cy + s * .12, s * .8)
+        elif kind == "fog":
+            for i in range(4):
+                y = cy - s * .27 + i * s * .18
+                d.line((cx - s * .4 + (i % 2) * s * .1, y, cx + s * .4 - (i % 2) * s * .1, y),
+                       fill=col, width=lw)
+        else:
+            cloud(cx, cy - s * .12, s * .86)
+            for i in range(3):
+                x, y = cx - s * .25 + i * s * .25, cy + s * .3
+                if kind == "snow":
+                    d.ellipse((x - lw, y - lw, x + lw, y + lw), fill=col)
+                elif kind == "storm" and i == 1:
+                    d.polygon([(x + lw, y - s * .1), (x - lw * 1.5, y + s * .06), (x, y + s * .06),
+                               (x - lw, y + s * .22), (x + lw * 1.8, y + s * .02), (x + lw * .3, y + s * .02)],
+                              fill=self.rgb("amber"))
+                elif kind != "cloud":
+                    d.line((x + lw, y - s * .06, x - lw, y + s * .14), fill=col, width=lw)
+
     def qr(self, box: Box, moduli: list[list[bool]], dark: Color = "ink",
            light: Color = "cream") -> None:
         """QR code centrato in `box`: moduli interi di pixel, su fondo `light` con due moduli di
@@ -89,8 +176,11 @@ class Canvas:
         """Barra arrotondata: fondo `track`, parte piena `color` proporzionale a `frac`."""
         self.rect(bar, track, outline, r=bar.h // 2)
         if frac > 0 or show_empty:
-            self.rect((bar.x, bar.y, bar.x + max(bar.h, round(bar.w * min(1.0, frac))), bar.bottom - 1),
-                      color, r=bar.h // 2)
+            end = bar.x + max(bar.h, round(bar.w * min(1.0, frac)))
+            self.rect((bar.x, bar.y, end, bar.bottom - 1), color, r=bar.h // 2)
+            if bar.h >= 5:  # riflesso sul bordo alto della parte piena
+                self.d.line((bar.x + bar.h // 2, bar.y + 1, end - bar.h // 2, bar.y + 1),
+                            fill=self.mix(color, "paper", 0.45), width=1)
 
     def ring(self, box: Box, frac: float, color: str, lw: int, dot: float,
              track: Color = "line", bg: str = "panel") -> None:
@@ -157,7 +247,7 @@ class Canvas:
         `ref` dà la taglia del numero (serie allineate: 7% e 100% uguali); `reserve` lascia
         libera quella larghezza a destra, per tutta l'altezza (anello del vento).
         """
-        self.rect(box, fill)
+        self.solid(box, fill)
         pad = self.pad
         lab_h = self.height(self.f_label)
         if box.h < 2 * pad + 2 * lab_h + self.gap:  # riga unica: etichetta … numero

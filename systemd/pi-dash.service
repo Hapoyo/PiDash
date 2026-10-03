@@ -13,6 +13,8 @@ AmbientCapabilities=CAP_SYS_TTY_CONFIG
 # luminosità dalle Impostazioni: la retroilluminazione (se il pannello la espone) scrivibile
 # dal servizio; "+" = eseguito come root, "|| true" = nessun errore se non c'è
 ExecStartPre=+/bin/sh -c 'chmod a+w /sys/class/backlight/*/brightness 2>/dev/null || true'
+# cursore lampeggiante della console (il "-" sullo schermo): spento prima di partire
+ExecStartPre=+/bin/sh -c 'echo 0 > /sys/class/graphics/fbcon/cursor_blink 2>/dev/null; printf "\\033[?25l" > /dev/tty1 2>/dev/null || true'
 WorkingDirectory=/home/pi/pi-dash
 ExecStart=/home/pi/pi-dash/.venv/bin/python -m dash
 Environment=PYTHONUNBUFFERED=1

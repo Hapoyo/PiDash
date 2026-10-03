@@ -45,13 +45,25 @@ def draw_fx(cv: Canvas, e: Fx, t: float) -> None:
                                width=round(lw))
 
 
-def draw_decode(cv: Canvas, slot: Slot, p: float, keep: str, frame_no: int) -> None:
+def clear(cv: Canvas, box: tuple[int, int, int, int], bg: str, base: Image.Image | None) -> None:
+    """Cancella `box` con il fondo: riga per riga dalla pagina base (i pannelli a rilievo hanno
+    una sfumatura verticale), altrimenti con il colore piatto `bg`."""
+    x0, y0, x1, y1 = box
+    if base is None or not (0 <= x0 - 1 and x1 < base.width):
+        cv.d.rectangle(box, fill=cv.c[bg])
+        return
+    for y in range(max(0, y0), min(base.height, y1 + 1)):
+        cv.d.line((x0, y, x1, y), fill=base.getpixel((x0 - 1, y)))
+
+
+def draw_decode(cv: Canvas, slot: Slot, p: float, keep: str, frame_no: int,
+                base: Image.Image | None = None) -> None:
     """Cifre che scorrono e si fermano da sinistra a destra, ognuna al suo posto finale."""
     seed = zlib.crc32(slot.key.encode()) ^ frame_no  # riproducibile fra esecuzioni
     text = scramble(slot.text, p, seed, keep)
     if text == slot.text:
         return
-    cv.d.rectangle(slot.box, fill=cv.c[slot.bg])
+    clear(cv, slot.box, slot.bg, base)
     x = cv.left(slot.text, slot.font, slot.xy[0], slot.anchor)
     for i, c in enumerate(text):
         cx = x + slot.font.getlength(slot.text[:i])

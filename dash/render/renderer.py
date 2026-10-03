@@ -105,7 +105,7 @@ class CyberRenderer:
             effects.draw_fx(cv, e, t)
         frame_no = int(t * motion.fps)
         for slot, progress, keep in decodes:
-            effects.draw_decode(cv, slot, progress, keep, frame_no)
+            effects.draw_decode(cv, slot, progress, keep, frame_no, base)
         if wipe is not None and motion.wipe_from is not None:
             return effects.wipe(motion.wipe_from, cv.img, wipe, self.c, u)
         return cv.img
