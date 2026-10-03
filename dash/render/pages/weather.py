@@ -23,7 +23,7 @@ def draw(cv: Canvas, b: Box, app: App, now: datetime) -> None:
     cur = data["current"]
     idx = wx.hour_index(data)
     g, pad = cv.gap, cv.pad
-    text, _ = describe(int(cur.get("weather_code", -1)))
+    text, icon = describe(int(cur.get("weather_code", -1)))
     kn = float(cur.get("wind_speed_10m", 0.0))
     deg = float(cur.get("wind_direction_10m", 0.0))
     gust = float(cur.get("wind_gusts_10m", 0.0))
@@ -33,9 +33,12 @@ def draw(cv: Canvas, b: Box, app: App, now: datetime) -> None:
     top_h = round(b.h * 0.44)
     left = Box(b.x, b.y, round((b.w - g) * 0.45), top_h)
     right = Box(left.right + g, b.y, b.right - left.right - g, top_h)
+    ic = min(left.h - 2 * pad, round(left.w * 0.34))  # icona a destra, nello spazio libero
     cv.panel(left, "cream", SHORT.get(text, text), f"{float(cur.get('temperature_2m', 0)):.0f}°",
              f"percepita {float(cur.get('apparent_temperature', 0)):.0f}°", ref="-00°",
-             slot="weather.temp")
+             reserve=ic + g if ic > cv.px(30) else 0, slot="weather.temp")
+    if ic > cv.px(30):
+        cv.icon(icon, Box(left.right - pad - ic, left.y + (left.h - ic) // 2, ic, ic), "ink", "cream")
     side = min(right.h - 2 * pad, round(right.w * 0.36))
     mostra = side > cv.px(34)
     cv.panel(right, "orange", f"vento {vento_nome(deg).lower()}", f"{kn:.0f} kn",

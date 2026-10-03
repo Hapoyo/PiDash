@@ -1,5 +1,14 @@
 # Changelog
 
+## Non rilasciato
+- **Trattino intermittente tolto**: era il cursore lampeggiante della console di testo, che con il
+  framebuffer SPI restava acceso se `KDSETMODE` non andava a buon fine. Ora pi-dash lo nasconde
+  anche con la sequenza `ESC[?25l`, segnala (warning) quando non riesce a fermare la console, e il
+  servizio spegne `fbcon/cursor_blink` prima di partire. Dopo l'aggiornamento: `scripts/installa-servizio.sh`.
+- **Grafica con più rilievo**: pannelli con ombra, sfumatura e filo di luce (`Canvas.solid`),
+  bottoni in rilievo (`Canvas.key`), riflesso sulle barre, icona del tempo sulla pagina meteo
+  (`Canvas.icon`). Le funzioni non cambiano; anteprime rigenerate.
+
 ## 0.10.0 — 2026-10-03
 - **Parlare a Needle dal telefono**: con `voce.porta` (es. 8443) pi-dash serve in HTTPS una pagina
   con un bottone "premi e parla". Il browser del telefono riconosce la voce in italiano e manda al

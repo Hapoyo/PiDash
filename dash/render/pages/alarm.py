@@ -19,7 +19,10 @@ def draw(cv: Canvas, b: Box, app: App, now: datetime) -> None:
     bg, col = ("cream", "ink") if armed else ("panel", "cream")
     # pannello dell'ora: acceso se armata, solo contorno se disarmata
     top = Box(b.x, b.y, b.w, round(b.h * 0.54))
-    cv.rect(top, bg, None if armed else "cream", cv.stroke)
+    if armed:
+        cv.solid(top, bg)
+    else:
+        cv.rect(top, bg, "cream", cv.stroke)
     cv.label((top.x + pad, top.y + pad), "sveglia", col)
     cv.label((top.right - pad, top.y + pad), "armata" if armed else "disarmata", col, "ra", bold=True)
     head = cv.height(cv.f_label) + g
