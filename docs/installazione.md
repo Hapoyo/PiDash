@@ -83,6 +83,26 @@ dello schermo allineato al bordo della scheda. Controlla che nessun pin resti sc
 Se `dashboard.local` non viene trovato: cerca l'indirizzo IP del Raspberry nella pagina del router
 (dispositivi collegati, nome `dashboard`) e usa `ssh marinaio@192.168.1.23` (il tuo numero).
 
+### 3.1 Cambiare rete Wi-Fi o password
+Se il router cambia nome o password, o il Raspberry non si collega più, collegalo al router con il
+cavo Ethernet, entra con SSH e lancia:
+
+```
+cd ~/pi-dash && .venv/bin/python -m dash --wifi
+```
+
+Mostra le reti visibili (quelle a 2,4 GHz vanno bene, quelle a 5 GHz no: il Pi 3 non le vede), chiede il
+nome della rete (SSID, maiuscole comprese) e la password, **nascosta e da scrivere due volte**.
+Poi aggiorna il profilo di quella rete, o lo crea, e si collega: alla fine scrive l'indirizzo IP.
+Con `--wifi NOME` il nome è già dato. La password è tenuta da NetworkManager, non finisce in
+`config.local.json`, nei log né su GitHub; se serve `sudo` ti chiede la password dell'utente.
+
+La rete si salva anche quando non si vede ancora (router spento): il Pi si collega appena compare.
+Se scrivi una password sbagliata il profilo resta salvato e il comando lo dice: rilancialo. Con
+cavo e Wi-Fi insieme il cavo ha la precedenza: per provare il Wi-Fi davvero scollega il cavo, aspetta
+30 secondi e collegati all'indirizzo che ti ha scritto (`hostname -I`). Il comando funziona anche se
+`config.json` è rotto, perché non lo legge.
+
 ## 4. Trasferire il progetto dal PC al Raspberry
 Il progetto arriva come `pi-dash.zip`. Supponiamo che sia nella cartella Download del PC.
 
@@ -406,6 +426,7 @@ Nome del servizio: `pi-dash`.
 | Aggiungere o togliere una pagina | Impostazioni sul dashboard (§ 5.6) |
 | Luminosità, calibrazione, spegnimento | Impostazioni sul dashboard (§ 5.6) |
 | Modificare le impostazioni | `nano ~/pi-dash/config.local.json`, poi riavviare il dashboard (§ 5.7) |
+| Cambiare rete Wi-Fi o password | `cd ~/pi-dash && .venv/bin/python -m dash --wifi` (§ 3.1) |
 | Aggiornare dal repository | `~/pi-dash/scripts/aggiorna.sh` (§ 7) |
 | Indirizzo IP | `hostname -I` |
 | Temperatura del processore | `vcgencmd measure_temp` |
@@ -471,7 +492,7 @@ Se continui a installare dallo zip:
 | `Could not resolve hostname dashboard.local` | usa l'indirizzo IP (§ 3); aspetta 2–3 minuti dopo l'accensione |
 | `Permission denied, please try again` | nome utente o password errati: sono quelli scelti in Imager |
 | `REMOTE HOST IDENTIFICATION HAS CHANGED` dopo aver riscritto la microSD | sul PC: `ssh-keygen -R dashboard.local`, poi ricollegati |
-| Il Raspberry non compare nella rete | rete a 5 GHz (serve 2,4 GHz) o password Wi-Fi errata; prova con il cavo Ethernet e controlla il § 1 |
+| Il Raspberry non compare nella rete | rete a 5 GHz (serve 2,4 GHz) o password Wi-Fi errata; collegalo con il cavo Ethernet, poi `python -m dash --wifi` (§ 3.1) |
 | Schermo 3,5" bianco | righe mancanti o scritte male in `config.txt` (§ 5.2) |
 | `aggiorna.sh`: "ci sono file modificati a mano" | l'elenco dice quali; salva le modifiche che ti servono in `config.local.json`, poi `git checkout -- <file>` |
 | Animazioni a scatti o processore caldo | abbassa `motion.fps` o usa `"livello": "eventi"` (§ 9.1) |

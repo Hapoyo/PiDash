@@ -31,6 +31,7 @@ dash/render/           tutto il disegno
   renderer.py          CyberRenderer: `render` (pagina base) e `compose` (fotogramma animato)
 dash/azioni.py         funzioni di Needle eseguibili (`AZIONI`): timer, sveglia, pagina, meteo, luci
 dash/hue.py            bridge Philips Hue: stanze, comandi, registrazione (`--hue-registra`)
+dash/wifi.py           credenziali Wi-Fi con nmcli (`--wifi`): profilo, collegamento, avvisi 5 GHz
 dash/layout.py         Box e nomi di giorni/mesi
 dash/location.py       posizione condivisa: "auto" (GPS → Wi-Fi → IP), "ip", "city", "fixed"
 dash/backlight.py      luminosità: /sys/class/backlight se regolabile, altrimenti immagine scurita
@@ -71,6 +72,8 @@ tests/                 unittest
 - Needle (modello per function calling): `scripts/installa-needle.sh [~/needle]`, guida in
   [docs/installazione.md](docs/installazione.md) § 5.9; provare a mano:
   `curl -s -X POST localhost:8090/complete -d '{"input":"timer 5 minuti"}'`
+- Wi-Fi del Pi: `.venv/bin/python -m dash --wifi [SSID]` (password chiesta nascosta, mai in config né
+  nei log), guida [docs/installazione.md](docs/installazione.md) § 3.1
 - Calibrazione tocco: Impostazioni → calibra touch; a mano `.venv/bin/python -m dash --touch-debug`
 - Simulatore: un clic sull'anteprima web è un tocco (`POST /tap?x=…&y=…`)
 - Comandi: N pagina seguente · A azione (avvia/ferma timer, spegne sveglia) · B indietro/+preset
