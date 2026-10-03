@@ -335,7 +335,7 @@ dalla rete locale.
    `function_calls`, `confidence` e i tempi. Controllo: `systemctl status needle`.
 4. Nelle Impostazioni tocca `+ needle`: compare la scheda **Needle**, con lo stato del servizio
    (pronto, penso…, offline) e quattro bottoni, uno per frase di `needle.queries`. Il tocco invia
-   la frase, mostra la funzione riconosciuta con la confidenza e la esegue (vedi sotto). Con i
+   la frase, la esegue (vedi sotto) e scrive in alto cosa ha fatto; il bot ne mostra l'esito. Con i
    pulsanti GPIO: B sceglie la frase, A la invia.
 
 **Cosa fa il dashboard con la risposta.** Se la confidenza è sufficiente la funzione riconosciuta

@@ -53,7 +53,7 @@ computer di bordo.
 | 003 | Timer | a scelta | conto alla rovescia composto con i bottoni; 5′ = sequenza di partenza |
 | 004 | Sveglia | a scelta | prossima sveglia, stato, sveglie per giorno della settimana |
 | 005 | Sistema | sempre | CPU, RAM, disco, storici di CPU e rete, host, IP, temperatura, uptime |
-| 006 | Needle | a scelta | modello locale [Needle](https://github.com/cactus-compute/needle) (function calling): frasi da provare, funzione riconosciuta con la confidenza ed esecuzione (avvia il timer, imposta la sveglia, apre una pagina, accende e regola le luci Philips Hue) |
+| 006 | Needle | a scelta | modello locale [Needle](https://github.com/cactus-compute/needle) (function calling): bot che mostra lo stato del modello, frasi da provare ed esecuzione (avvia il timer, imposta la sveglia, apre una pagina, accende e regola le luci Philips Hue) |
 | ⚙ | Impostazioni | sempre | schede opzionali, luminosità, calibrazione del tocco, spegnimento, grafico della tensione di alimentazione |
 
 | 001 · Home | 002 · Meteo |

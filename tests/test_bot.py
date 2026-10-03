@@ -119,8 +119,13 @@ class TestPaginaNeedle(unittest.TestCase):
         app.renderer.render(app, NOW)
         boxes = needle.hits(app.renderer.content_inner(app), w, unit(480, 320))
         self.assertEqual(len(boxes), len(w.queries))
-        panel_bottom = needle._geometry(app.renderer.content_inner(app), unit(480, 320))[0].bottom
-        self.assertTrue(all(b.y >= panel_bottom for b, _ in boxes))
+        page = app.renderer.content_inner(app)
+        panel = needle._geometry(page, unit(480, 320))[0]
+        # i bottoni stanno a destra del pannello del bot, dentro la pagina
+        self.assertTrue(all(b.x >= panel.right and b.right <= page.right and b.bottom <= page.bottom
+                            for b, _ in boxes))
+        bot_box = next(e.box for e in app.renderer.fx if e.kind == "bot")
+        self.assertGreater(bot_box[3] - bot_box[1], page.h * 0.6)    # il bot è grande
         app.close()
 
 
