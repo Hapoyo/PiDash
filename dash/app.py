@@ -31,6 +31,7 @@ from .widgets.new import NewWidget
 log = logging.getLogger("dash")
 
 TAP_TOLERANCE = 12  # pixel a 480×320: un tocco appena fuori da un bottone vale per il più vicino
+VOCE_IP_S = 60.0    # ogni quanto si ricontrolla l'IP del QR (Wi-Fi lento all'avvio, DHCP)
 NOTICE_S = 4.0      # durata dei messaggi brevi nelle Impostazioni
 
 
@@ -70,6 +71,8 @@ class App:
         self._power_sent = False                  # comando di spegnimento già lanciato
         self._notice = ("", 0.0)
         self.voce_url = ""     # pagina "premi e parla" (`dash/voce.py`): le schede Needle la mostrano in QR
+        self.voce_indirizzo: Any = None   # funzione che ricalcola l'indirizzo (l'IP può cambiare)
+        self._voce_t = -VOCE_IP_S
         self.pages: list[Page] = []
         self.widgets: dict[str, Widget] = {}
         for p in cfg["pages"]:
@@ -421,6 +424,11 @@ class App:
                     widget.set_esito(azioni.esegui(self, nome, args, widget.naviga, frase))
         for widget in list(self.widgets.values()) + extra:
             widget.update(now)
+        if self.voce_indirizzo is not None and t - self._voce_t >= VOCE_IP_S:
+            self._voce_t = t
+            url = self.voce_indirizzo()
+            if url != self.voce_url:
+                self.imposta_voce_url(url)
         self.power.sample(now, t)
         if self.calib is not None and self.calib.expired():
             self.calib = None

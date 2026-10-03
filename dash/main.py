@@ -179,7 +179,7 @@ def main(argv: list[str] | None = None) -> int:
     server = None if args.once else voce.avvia(cfg["voce"], events, app.voce_stato,
                                                 Path(cfg["sim"]["out_dir"]) / "voce")
     if server is not None:
-        app.imposta_voce_url(server.indirizzo())   # QR sulla scheda Needle
+        app.voce_indirizzo = server.indirizzo      # QR sulla scheda Needle, ricalcolato ogni minuto
     try:
         app.run(once=args.once)
     except KeyboardInterrupt:

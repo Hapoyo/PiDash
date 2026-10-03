@@ -302,6 +302,20 @@ class TestVoceApp(unittest.TestCase):
         assert di_nuovo is not None
         self.assertEqual(bot.tobytes(), di_nuovo.tobytes())
 
+    def test_qr_address_follows_the_ip(self) -> None:
+        app = self._app([{"name": "Needle", "widget": "needle"}, {"name": "+", "widget": "new"}])
+        w = app.needle()
+        self._prepara(w)
+        ips = ["", "192.168.1.20"]        # all'avvio il Wi-Fi può non essere ancora collegato
+        app.voce_indirizzo = lambda: f"https://{ips[0] or 'pidash.local'}:8443/"
+        app.step(NOW, 0.0, animate=False)
+        self.assertEqual(w.voce_url, "https://pidash.local:8443/")
+        ips.pop(0)
+        app.step(NOW, 30.0, animate=False)                 # non prima di un minuto
+        self.assertEqual(w.voce_url, "https://pidash.local:8443/")
+        app.step(NOW, 61.0, animate=False)
+        self.assertEqual(w.voce_url, "https://192.168.1.20:8443/")
+
     def test_off_by_default_no_hidden_widget(self) -> None:
         cfg = copy.deepcopy(DEFAULTS)
         cfg = _merge(cfg, {"pages": [{"name": "Home", "widget": "clock"}], "weather": {"demo": True}})
