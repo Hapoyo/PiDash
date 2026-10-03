@@ -28,8 +28,10 @@ dash/render/           tutto il disegno
                        `hits(box, widget, u)` per le pagine con bottoni (registro `HITS`);
                        `calibrate.py` schermo della calibrazione del touch
   effects.py           animazioni sopra la base, sequenza di avvio, riquadro di allarme
+  bot.py               faccia animata del bot di Needle (`draw` per un istante `t`, `MOODS`)
   renderer.py          CyberRenderer: `render` (pagina base) e `compose` (fotogramma animato)
 dash/azioni.py         funzioni di Needle eseguibili (`AZIONI`): timer, sveglia, pagina, meteo, luci
+dash/frasi.py          interprete di frasi italiane (timer, sveglie, luci) e azioni personalizzate `needle.azioni`
 dash/hue.py            bridge Philips Hue: stanze, comandi, registrazione (`--hue-registra`)
 dash/wifi.py           credenziali Wi-Fi con nmcli (`--wifi`): profilo, collegamento, avvisi 5 GHz
 dash/layout.py         Box e nomi di giorni/mesi

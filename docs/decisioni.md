@@ -38,6 +38,19 @@ le regole operative stanno in [CLAUDE.md](../CLAUDE.md).
   senza problemi anche sulle reti miste WPA2/WPA3. Un profilo esistente si aggiorna invece di
   duplicarlo; se il collegamento fallisce il profilo resta (così basta rilanciare). Il comando gira
   prima di caricare la configurazione, perché serve proprio quando il Pi è isolato.
+- Interprete di frasi (`dash/frasi.py`): per timer, sveglie e luci decide il codice, non il modello.
+  Il modello da 35 MB copia male i numeri e confonde accendi e spegni; durate ("1 ora e 30",
+  "un quarto d'ora"), orari ("alle 8 meno un quarto"), giorni, stanze e colori si leggono invece
+  con regole sicure, in pochi millisecondi invece di 2 s, e funzionano anche con il servizio
+  spento. Principio: ciò che non è certo non si esegue e va al modello (nessuna regola indovina).
+  Cancellare tutte le sveglie vuole una parola che lo dica; "alza il volume" non è una luce; senza
+  stanza non si accende casa. Le azioni personalizzate (`needle.azioni`) vincono sulle regole,
+  perché sono scritte dall'utente, e usano le stesse funzioni (`start_timer`, `set_alarm`, `lights`,
+  `open_*`): il modello non le conosce (`azioni.SOLO_REGOLE`), quindi non stanno in `tools.json`.
+  Non c'è "domani" per le sveglie: non hanno ancora un "una volta sola".
+- Bot di Needle (`render/bot.py`): una funzione disegna la faccia sia ferma (pagina base, `t = 0`)
+  sia animata (effetto `bot` di `effects.draw_fx`), così la geometria è una sola. L'umore viene
+  da `NeedleWidget.umore()` e fa parte di `state_key`; la faccia dell'esito dura 6 s (`RECENTE_S`).
 - Azioni di Needle (`dash/azioni.py`): il modello propone, il dashboard decide. Il thread della
   richiesta non tocca mai il dashboard: mette le chiamate in coda (`NeedleWidget.take_calls`) e le
   esegue `App.step` nel ciclo principale, dove si cambiano pagine e widget. Solo le funzioni di

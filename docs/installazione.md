@@ -412,6 +412,78 @@ Con "accendi tutte le luci" si accende davvero tutta la casa: la frase è propri
 Il bridge è raggiunto in HTTPS senza verificare il certificato (è autofirmato) e solo sulla rete
 locale; se il bridge è spento il dashboard rallenta di `hue.timeout_s` (2 s) e lo dice.
 
+### 5.11 Frasi, timer, sveglie e azioni personalizzate
+Il modello da 35 MB sbaglia i numeri e le unità, quindi per timer, sveglie e luci il dashboard ha un
+**interprete di frasi in italiano** (`dash/frasi.py`) che decide da solo, senza aspettare i 2 secondi
+del modello e senza sbagliare. Quello che non riconosce con certezza va al modello come prima
+(meteo, apri una pagina…). Funziona anche con il servizio Needle spento. Per disattivarlo:
+`"needle": {"regole": false}`.
+
+| Dici | Succede |
+|---|---|
+| "timer 5 minuti", "timer di 90 secondi", "timer 1h 15min", "timer un'ora e mezza", "timer 1 ora e 30", "timer mezz'ora", "timer un quarto d'ora", "timer due minuti e mezzo", "timer venticinque minuti", "avvisami tra dieci minuti" | timer di quella durata, avviato (da 1 s a 180′) |
+| "ferma il timer", "metti in pausa il timer", "riprendi il timer" | ferma (torna al tempo impostato), pausa, riprende |
+| "svegliami alle 7", "alle 7:30", "alle sette e mezza", "alle 7 e un quarto", "alle 8 meno un quarto", "alle 9 di sera", "all'una", "a mezzogiorno" | sveglia a quell'ora, ogni giorno |
+| "… dal lunedì al venerdì", "… nei giorni feriali", "… nel weekend", "… sabato e domenica", "… il lunedì e il giovedì" | la stessa sveglia solo in quei giorni |
+| "cancella la sveglia delle 7", "cancella tutte le sveglie" | toglie quella sveglia, o tutte solo se lo dici ("cancella la sveglia" da sola non fa nulla) |
+| "accendi il soggiorno", "spegni tutte le luci", "soggiorno al 50", "soggiorno a metà", "corridoio al massimo" | accende, spegne, regola (§ 5.10) |
+| "luce rossa in terrazza", "soggiorno azzurro" | colore: rosso, arancione, giallo, verde, azzurro, blu, viola, rosa |
+| "luce calda in soggiorno", "luce fredda", "luce naturale", "luce bianca" | temperatura del bianco |
+| "alza la luce del corridoio", "abbassa il soggiorno", "abbassa il soggiorno di 30 percento" | più o meno luminosa di 20 punti (o di quanto dici) rispetto a com'è ora |
+
+Una frase con sveglia o timer che non si capisce non passa alle luci ("spegni la sveglia" non
+spegne una stanza). Con una negazione ("non accendere") non si esegue. Una stanza che non c'è dà
+"stanza sconosciuta: cucina"; senza stanza ("accendi la luce") la scheda chiede "di quale stanza?":
+non si accende mai tutta la casa per un equivoco. Cambiare colore o luminosità accende le luci;
+spegnendo, il resto della frase è ignorato.
+
+**Azioni personalizzate.** In `config.local.json`, sezione `needle`, `azioni` è una lista (fino a 30
+voci) di comandi che scegli tu e richiami con una parola. Ogni voce ha un `nome`, le `frasi` che la
+attivano (basta che la parola compaia nella frase: vince la più lunga) e, da sole o insieme, queste
+azioni, eseguite nell'ordine timer, sveglia, luci, pagina:
+
+```json
+"needle": {
+  "azioni": [
+    {"nome": "pasta", "frasi": ["pasta", "spaghetti"], "timer": {"minuti": 9}},
+    {"nome": "buonanotte", "frasi": ["buonanotte", "vado a dormire"],
+     "sveglia": "07:00", "giorni": [0, 1, 2, 3, 4],
+     "luci": [{"stanza": "tutte", "acceso": false}], "pagina": "alarm"},
+    {"nome": "cinema", "frasi": ["cinema", "film"],
+     "luci": [{"stanza": "soggiorno", "percentuale": 15, "temperatura": "calda"},
+              {"stanza": "corridoio", "acceso": false}]}
+  ]
+}
+```
+- `timer`: `ore`, `minuti`, `secondi` (interi, da 1 s a 180′);
+- `sveglia`: `"HH:MM"`, con `giorni` (0 = lunedì … 6 = domenica; senza, ogni giorno);
+- `luci`: elenco di comandi con `stanza` ("tutte" per casa) e, a scelta, `acceso` (true/false),
+  `percentuale` (1–100), `colore` (rosso, arancione, giallo, verde, azzurro, blu, viola, rosa)
+  oppure `temperatura` (fredda, bianca, naturale, calda), non insieme;
+- `pagina`: home, weather, timer, alarm, system, settings.
+
+Una voce sbagliata (colore che non esiste, ora 25:00…) ferma il dashboard all'avvio con un messaggio
+che dice quale voce e cosa correggere; il file resta com'è. Per usarle bisogna dire la frase: aggiungila
+a `needle.queries` (i bottoni della scheda, da 1 a 6; con B scegli e con A invii). Una voce con più
+azioni le esegue una dopo l'altra: l'esito le riassume (troncato a 40 caratteri) e se un passo fallisce
+(bridge spento) gli altri partono comunque.
+
+### 5.12 Il bot di Needle
+Sulla scheda Needle una testa di robot mostra cosa sta facendo il modello. Con `motion.livello`
+`pieno` si muove; con `eventi` o `off` resta ferma ma cambia faccia.
+
+| Faccia | Quando |
+|---|---|
+| zzz, occhi chiusi, antenna spenta | servizio spento (`systemctl start needle`), a meno che la frase sia una che l'interprete capisce da solo |
+| occhi stretti che scorrono | controllo se il servizio è acceso (primi secondi) |
+| occhi aperti che sbattono, antenna che pulsa | pronto |
+| occhi in alto, tre puntini, antenna che lampeggia, fondo arancio | sta pensando (richiesta in corso) |
+| occhi sorridenti e sorriso, saltello | frase eseguita |
+| un occhio grande, sopracciglio, "?" | nessuna funzione riconosciuta o confidenza troppo bassa |
+| occhi a croce rosa, bocca a zig-zag, scossa | errore (servizio che non risponde, bridge Hue spento, argomento rifiutato) |
+
+Dopo una risposta la faccia dell'esito dura 6 secondi, poi il bot torna "pronto".
+
 ## 6. Comandi di tutti i giorni
 Nome del servizio: `pi-dash`.
 

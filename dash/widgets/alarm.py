@@ -56,11 +56,16 @@ class AlarmWidget(Widget):
         self._ring_start: datetime | None = None
         self._handled: set[str] = set()
 
-    def add_alarm(self, hour: int, minute: int) -> Alarm:
-        """Sveglia ogni giorno a quell'ora (comando di Needle): se c'è già la riattiva, e arma tutto."""
+    def add_alarm(self, hour: int, minute: int, days: frozenset[int] | None = None) -> Alarm:
+        """Sveglia a quell'ora (comando di Needle), ogni giorno se `days` manca (0 = lunedì).
+
+        Se c'è già una sveglia alla stessa ora la sostituisce, e arma tutto.
+        """
         if not (0 <= hour < 24 and 0 <= minute < 60):
             raise ValueError(f"orario fuori range: {hour:02d}:{minute:02d}")
-        alarm = Alarm(hour, minute, frozenset(range(7)))
+        if days is not None and (not days or not days <= frozenset(range(7))):
+            raise ValueError("giorni non validi")
+        alarm = Alarm(hour, minute, days if days is not None else frozenset(range(7)))
         same = [i for i, a in enumerate(self.alarms) if (a.hour, a.minute) == (hour, minute)]
         if same:
             self.alarms[same[0]] = alarm
@@ -70,6 +75,16 @@ class AlarmWidget(Widget):
             self.alarms.append(alarm)
         self.armed = True
         return alarm
+
+    def remove_alarms(self, hour: int | None = None, minute: int | None = None) -> int:
+        """Toglie la sveglia a quell'ora, o tutte se l'ora manca (comando di Needle); quante ne ha tolte."""
+        tenute = [a for a in self.alarms
+                  if hour is not None and (a.hour, a.minute) != (hour, minute)]
+        tolte = len(self.alarms) - len(tenute)
+        self.alarms = tenute
+        if self.ringing is not None and self.ringing not in tenute:
+            self.ringing = None
+        return tolte
 
     @staticmethod
     def _key(a: Alarm, now: datetime) -> str:

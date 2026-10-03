@@ -29,7 +29,15 @@ ARTICOLI = frozenset({"il", "lo", "la", "l", "le", "i", "gli", "di", "del", "del
                       "delle", "in", "nel", "nella", "al", "alla", "luce", "luci", "stanza"})
 TUTTE = frozenset({"", "tutte", "tutto", "tutti", "all", "casa", "ovunque"})
 
-Send = Callable[[str, str, "dict[str, Any] | None"], Any]  # (metodo, percorso, corpo) → JSON
+# Colori (tinta 0–65535, saturazione 0–254) e temperature (ct in mired: 153 fredda … 500 calda)
+# dell'API v1; le parole italiane che li nominano stanno in `frasi.py` e in `needle.azioni`.
+COLORI: dict[str, tuple[int, int]] = {
+    "rosso": (0, 254), "arancione": (6000, 254), "giallo": (12750, 254), "verde": (25500, 254),
+    "azzurro": (36000, 200), "blu": (46920, 254), "viola": (50000, 254), "rosa": (56100, 140),
+}
+TEMPERATURE: dict[str, int] = {"fredda": 200, "bianca": 250, "naturale": 300, "calda": 400}
+
+Send = Callable[[str, str, "dict[str, Any] | None"], Any]  # (metodo, percorso, corpo) → JSON[str, str, "dict[str, Any] | None"], Any]  # (metodo, percorso, corpo) → JSON
 
 
 class HueError(RuntimeError):
@@ -170,11 +178,23 @@ class Hue:
         raise HueError(f"stanza sconosciuta: {nome.strip()}")
 
     # --- comandi ---------------------------------------------------------
-    def imposta(self, stanza: Stanza | None, acceso: bool, percentuale: int | None = None) -> None:
-        """Accende o spegne una stanza (None = tutte le luci), con luminosità 1–100 % se data."""
+    def imposta(self, stanza: Stanza | None, acceso: bool, percentuale: int | None = None,
+                colore: str | None = None, temperatura: str | None = None,
+                delta: int | None = None) -> None:
+        """Accende o spegne una stanza (None = tutte le luci), con luminosità 1–100 % se data.
+
+        `colore` e `temperatura` sono chiavi di `COLORI` e `TEMPERATURE`; `delta` (−100…100) alza
+        o abbassa la luminosità di quei punti percentuali rispetto a com'è ora.
+        """
         corpo: dict[str, Any] = {"on": acceso}
         if percentuale is not None:
             corpo["bri"] = max(1, min(254, round(percentuale * 254 / 100)))
+        elif delta:
+            corpo["bri_inc"] = max(-254, min(254, round(delta * 254 / 100)))
+        if colore is not None:
+            corpo["hue"], corpo["sat"] = COLORI[colore]
+        elif temperatura is not None:
+            corpo["ct"] = TEMPERATURE[temperatura]
         risposta = self._chiama("PUT", f"groups/{'0' if stanza is None else stanza.id}/action", corpo)
         errori = [r["error"].get("description", "errore") for r in risposta
                   if isinstance(r, dict) and isinstance(r.get("error"), dict)] \

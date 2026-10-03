@@ -819,7 +819,9 @@ class TestNeedle(unittest.TestCase):
         tools = json.loads((radice / "needle" / "tools.json").read_text(encoding="utf-8"))
         self.assertTrue(all({"name", "description", "parameters"} <= set(t) for t in tools))
         # il modello può proporre solo ciò che il dashboard sa eseguire, e viceversa
-        self.assertEqual({t["name"] for t in tools}, set(azioni.AZIONI))
+        # (l'interprete di frasi ne usa altre, che il modello non conosce: `SOLO_REGOLE`)
+        self.assertEqual({t["name"] for t in tools} | azioni.SOLO_REGOLE, set(azioni.AZIONI))
+        self.assertFalse({t["name"] for t in tools} & azioni.SOLO_REGOLE)
         unit = (radice / "systemd" / "needle.service").read_text(encoding="utf-8")
         porta = DEFAULTS["needle"]["url"].rsplit(":", 1)[1]
         self.assertIn(f"--serve --port {porta}", unit)
@@ -928,6 +930,7 @@ class TestNeedleActions(unittest.TestCase):
 
     def _needle_app(self, tmp: str, confidenza: float, calls: list[dict[str, Any]] | None = None,
                     **needle: Any) -> tuple[App, NeedleWidget]:
+        needle.setdefault("regole", False)    # queste prove sono sul percorso del modello
         app = self._app(tmp, [{"name": "Home", "widget": "clock"},
                               {"name": "Needle", "widget": "needle"},
                               {"name": "+", "widget": "new"}], **needle)

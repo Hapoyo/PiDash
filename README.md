@@ -133,6 +133,7 @@ La configurazione è su due livelli:
 | `backlight.level`, `backlight.mode` | luminosità 10–100; `auto`, `hw` (LED), `sw` (immagine) | 100, `auto` |
 | `alarm.alarms` | sveglie: ora, giorni (0 = lunedì), attiva | 07:00, lunedì–venerdì |
 | `needle.url`, `needle.queries` | servizio Needle locale e frasi dei bottoni (1–6); `needle.reset`: ogni frase è indipendente | `http://127.0.0.1:8090`, 4 frasi, `true` |
+| `needle.regole`, `needle.azioni` | timer, sveglie e luci capiti dal codice (senza modello); azioni personalizzate: frasi chiave che avviano timer, sveglia, luci e pagina | `true`, 3 esempi |
 | `needle.esegui`, `soglia`, `soglia_pagine`, `soglia_luci`, `naviga` | esegue le funzioni riconosciute; confidenza minima per timer e sveglia, per le sole pagine, per le luci; apre la pagina interessata | `true`, 0,6, 0,35, 0,4, `true` |
 | `hue.bridge`, `hue.key`, `hue.timeout_s` | bridge Philips Hue: indirizzo, chiave (solo in `config.local.json`, la scrive `--hue-registra`), attesa massima | vuoti, 2 s |
 | `motion.livello`, `motion.fps` | animazioni: `pieno`, `eventi`, `off`; fotogrammi al secondo | `pieno`, 8 |

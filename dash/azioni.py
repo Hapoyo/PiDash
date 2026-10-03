@@ -18,7 +18,7 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, Any, Callable
 
-from .hue import HueError, Stanza
+from .hue import COLORI, TEMPERATURE, HueError, Stanza
 from .widgets.alarm import AlarmWidget
 from .widgets.timer import TimerWidget
 
@@ -73,21 +73,66 @@ def _timer(campo: str, secondi: int) -> Azione:
     return azione
 
 
-def _sveglia(app: App, args: dict[str, Any], frase: str) -> Esito:
+def _orario(args: dict[str, Any]) -> tuple[int, int]:
     try:
         hh, mm = (int(p) for p in str(args["time"]).split(":"))
     except (KeyError, ValueError) as exc:
         raise AzioneError("orario non valido (serve HH:MM)") from exc
-    if not (0 <= hh < 24 and 0 <= mm < 60):   # prima di creare la pagina: un rifiuto non lascia tracce
+    if not (0 <= hh < 24 and 0 <= mm < 60):
         raise AzioneError("orario non valido (serve HH:MM)")
+    return hh, mm
+
+
+def _sveglia(app: App, args: dict[str, Any], frase: str) -> Esito:
+    hh, mm = _orario(args)      # prima di creare la pagina: un rifiuto non lascia tracce
+    giorni: frozenset[int] | None = None
+    if args.get("days") is not None:
+        try:
+            giorni = frozenset(int(d) for d in args["days"])
+        except (TypeError, ValueError) as exc:
+            raise AzioneError("giorni non validi") from exc
+        if not giorni or not giorni <= frozenset(range(7)):
+            raise AzioneError("giorni non validi")
     widget = _pagina(app, "alarm").widget
     assert isinstance(widget, AlarmWidget)
     try:
-        widget.add_alarm(hh, mm)
+        sveglia = widget.add_alarm(hh, mm, giorni)
     except ValueError as exc:   # per esempio troppe sveglie
         raise AzioneError(str(exc)) from exc
     app.save_alarms(widget)
-    return f"sveglia {hh:02d}:{mm:02d} ogni giorno", "alarm"
+    quando = "ogni giorno" if sveglia.days == frozenset(range(7)) else sveglia.label_days().lower()
+    return f"sveglia {hh:02d}:{mm:02d} {quando}", "alarm"
+
+
+def _togli_sveglia(app: App, args: dict[str, Any], frase: str) -> Esito:
+    """Toglie la sveglia a quell'ora, o tutte se l'orario non c'è."""
+    pagina = app.find_page("alarm")
+    if pagina is None:
+        raise AzioneError("nessuna sveglia")
+    widget = pagina.widget
+    assert isinstance(widget, AlarmWidget)
+    hh, mm = _orario(args) if args.get("time") else (None, None)
+    tolte = widget.remove_alarms(hh, mm)
+    if not tolte:
+        raise AzioneError(f"nessuna sveglia alle {hh:02d}:{mm:02d}" if hh is not None else "nessuna sveglia")
+    app.save_alarms(widget)
+    if hh is not None:
+        return f"sveglia {hh:02d}:{mm:02d} tolta", "alarm"
+    return ("sveglia tolta" if tolte == 1 else f"{tolte} sveglie tolte"), "alarm"
+
+
+def _comando_timer(metodo: str, testo: str, vuoto: str) -> Azione:
+    """Ferma, mette in pausa o riprende il timer (`TimerWidget.<metodo>`)."""
+    def azione(app: App, args: dict[str, Any], frase: str) -> Esito:
+        pagina = app.find_page("timer")
+        if pagina is None:
+            raise AzioneError("nessun timer")
+        widget = pagina.widget
+        assert isinstance(widget, TimerWidget)
+        if not getattr(widget, metodo)():
+            raise AzioneError(vuoto)
+        return testo, "timer"
+    return azione
 
 
 def _apri(kind: str, nome: str) -> Azione:
@@ -192,16 +237,69 @@ def _luminosita(app: App, args: dict[str, Any], frase: str) -> Esito:
     return _frase(stanza, f"al {percento}%"), ""
 
 
+def _luci_comando(app: App, args: dict[str, Any], frase: str) -> Esito:
+    """Luci con argomenti espliciti: stanza, acceso, percentuale, colore, temperatura, variazione.
+
+    Viene dall'interprete di frasi o da una azione personalizzata, non dal modello: gli argomenti
+    sono già quelli voluti e non si rileggono dal testo. Cambiare luminosità o colore accende.
+    """
+    stanza_detta = str(args.get("room", "")).strip()
+    if not stanza_detta:
+        raise AzioneError("di quale stanza?")      # "" non vale "tutte": mai accendere casa per un equivoco
+    colore, temp = args.get("color"), args.get("temp")
+    if colore is not None and colore not in COLORI:
+        raise AzioneError(f"colore sconosciuto: {colore}")
+    if temp is not None and temp not in TEMPERATURE:
+        raise AzioneError(f"temperatura sconosciuta: {temp}")
+    try:
+        percento = None if args.get("percent") is None else round(float(args["percent"]))
+        delta = None if args.get("delta") is None else round(float(args["delta"]))
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise AzioneError("luminosità non valida") from exc
+    if percento is not None and not 1 <= percento <= 100:
+        raise AzioneError("luminosità da 1 a 100")
+    if delta is not None and not -100 <= delta <= 100:
+        raise AzioneError("variazione da −100 a 100")
+    stanza = _stanza(app, {"room": stanza_detta})
+    acceso = bool(args["on"]) if args.get("on") is not None else True
+    if not acceso:
+        percento = colore = temp = delta = None
+    try:
+        app.hue.imposta(stanza, acceso, percento, colore, temp, delta)
+    except HueError as exc:
+        raise AzioneError(str(exc)) from exc
+    cosa = ["accese" if acceso else "spente"]
+    if percento is not None:
+        cosa.append(f"al {percento}%")
+    if delta:
+        cosa.append(f"{'+' if delta > 0 else '−'}{abs(delta)}%")
+    if colore or temp:
+        cosa.append(colore or f"luce {temp}")
+    return _frase(stanza, " ".join(cosa)), ""
+
+
 AZIONI: dict[str, Azione] = {
     "lights_on": _luci,
     "lights_off": _luci,
     "set_brightness": _luminosita,
     "start_timer_minutes": _timer("minutes", 60),
     "start_timer_seconds": _timer("seconds", 1),
+    "start_timer": _timer("seconds", 1),
+    "stop_timer": _comando_timer("cancel", "timer fermato", "timer già fermo"),
+    "pause_timer": _comando_timer("pause", "timer in pausa", "il timer non sta scorrendo"),
+    "resume_timer": _comando_timer("resume", "timer riparte", "il timer non è in pausa"),
+    "delete_alarm": _togli_sveglia,
+    "lights": _luci_comando,
     "set_alarm": _sveglia,
     "get_weather": _meteo,
     **{f"open_{chiave}": _apri(kind, nome) for chiave, (kind, nome) in PAGINE.items()},
 }
+
+
+# Funzioni che solo l'interprete di frasi (`frasi.py`) e le azioni personalizzate chiamano: il modello
+# non le conosce, quindi non stanno in needle/tools.json.
+SOLO_REGOLE = frozenset({"start_timer", "stop_timer", "pause_timer", "resume_timer", "delete_alarm",
+                         "lights"})
 
 
 def categoria(nome: str) -> str:
@@ -213,7 +311,7 @@ def categoria(nome: str) -> str:
     """
     if nome.startswith("open_") or nome == "get_weather":
         return "pagina"
-    if nome in ("lights_on", "lights_off", "set_brightness"):
+    if nome in ("lights_on", "lights_off", "set_brightness", "lights"):
         return "luci"
     return "stato"
 
