@@ -3,12 +3,13 @@ from __future__ import annotations
 
 import argparse
 import copy
+import getpass
 import logging
 import queue
 import signal
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from . import __version__
 from .app import App
@@ -17,6 +18,7 @@ from .hue import LINK_TIMEOUT_S, HueError, registra, scopri
 from .display import make_display
 from .inputs import Event, Tap, start_gpio, start_keyboard, start_touch
 from .preview import save_animation, save_screenshots, save_system_screens
+from . import wifi
 from .widgets import WIDGET_NAMES
 
 log = logging.getLogger("dash")
@@ -36,6 +38,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--hue-registra", nargs="?", const="", metavar="IP",
                    help="registra PiDash sul bridge Hue (premi il suo tasto) e salva la chiave "
                         "in config.local.json; senza IP lo cerca in rete")
+    p.add_argument("--wifi", nargs="?", const="", metavar="SSID",
+                   help="cambia le credenziali Wi-Fi del Pi (SSID e password, chieste qui) ed esci")
     p.add_argument("--motion", choices=("off", "eventi", "pieno"),
                    help="sovrascrive motion.livello (animazioni)")
     p.add_argument("--web", type=int, help="porta del simulatore web (0 = off)")
@@ -59,6 +63,41 @@ def registra_hue(bridge: str, config: Path, send: Any = None) -> int:
     return 0
 
 
+def aggiorna_wifi(ssid: str, chiedi: Callable[[str], str] = input,
+                  chiedi_segreto: Callable[[str], str] = getpass.getpass,
+                  esegui: wifi.Esegui | None = None, root: bool | None = None) -> int:
+    """Chiede SSID (se manca) e password (nascosta, due volte) e li salva con `wifi.aggiorna`."""
+    esegui = esegui or wifi._esegui
+    try:
+        try:
+            elenco = wifi.reti(esegui)
+        except wifi.WifiError as exc:           # senza elenco si può comunque salvare
+            log.warning("wifi: %s", exc)
+            elenco = []
+        if not ssid:
+            if elenco:
+                print("reti visibili (2,4 GHz = ok per il Pi 3, 5 GHz = no):")
+                visti: set[str] = set()
+                for nome, mhz, segnale, sicurezza in elenco:
+                    if nome not in visti:
+                        visti.add(nome)
+                        print(f"  {nome}  ({'5' if mhz >= wifi.GHZ5_MHZ else '2,4'} GHz, segnale {segnale}, "
+                              f"{sicurezza or 'aperta'})")
+            ssid = chiedi("SSID (nome della rete): ")
+        for riga in wifi.avvisi(ssid, elenco) if elenco else []:
+            print("attenzione:", riga)
+        password = chiedi_segreto(f"password di «{ssid}» (non si vede): ")
+        if password != chiedi_segreto("ripeti la password: "):
+            print("le due password non coincidono: non ho cambiato nulla")
+            return 5
+        ip = wifi.aggiorna(ssid, password, esegui, root)
+    except wifi.WifiError as exc:
+        log.error("wifi: %s", exc)
+        return 5
+    print(f"collegato a «{ssid}»" + (f", indirizzo {ip}" if ip else "") + ": le credenziali restano salvate")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     handlers: list[logging.Handler] = []
@@ -70,6 +109,8 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
                         format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
                         datefmt="%H:%M:%S", handlers=handlers or [logging.NullHandler()])
+    if args.wifi is not None:    # prima della configurazione: serve proprio a recuperare un Pi isolato
+        return aggiorna_wifi(args.wifi)
     try:
         cfg = load_config(args.config, WIDGET_NAMES)
     except ConfigError as exc:
