@@ -141,6 +141,27 @@ class TimerWidget(Widget):
         self._deadline = self._clock() + self._remaining
         self.state = TimerState.RUNNING
 
+    def pause(self) -> bool:
+        """Mette in pausa un timer che scorre (comando di Needle); False se non scorre."""
+        if self.state is not TimerState.RUNNING:
+            return False
+        self.on_action(datetime.min)
+        return True
+
+    def resume(self) -> bool:
+        """Fa ripartire un timer in pausa (comando di Needle); False se non è in pausa."""
+        if self.state is not TimerState.PAUSED or self._remaining <= 0:
+            return False
+        self.on_action(datetime.min)
+        return True
+
+    def cancel(self) -> bool:
+        """Ferma il timer e torna al tempo impostato (comando di Needle); False se era già fermo."""
+        if self.state is TimerState.IDLE:
+            return False
+        self._reset()
+        return True
+
     def on_back(self, now: datetime) -> None:
         self.on_hit(f"add:{self.presets[0]}", now)
 

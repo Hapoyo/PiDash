@@ -7,7 +7,13 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from .hue import COLORI, TEMPERATURE
+
 log = logging.getLogger(__name__)
+
+MAX_AZIONI = 30                # voci di needle.azioni
+MAX_TIMER_S = 180 * 60         # come `azioni.MAX_TIMER_MIN`
+PAGINE_APRIBILI = ("home", "weather", "timer", "alarm", "system", "settings")   # chiavi di `azioni.PAGINE`
 
 DEFAULTS: dict[str, Any] = {
     "display": {"driver": "sim", "width": 480, "height": 320, "rotate": 0, "tick_s": 0.5},
@@ -25,7 +31,7 @@ DEFAULTS: dict[str, Any] = {
     "hue": {"bridge": "", "key": "", "timeout_s": 2},
     "needle": {"url": "http://127.0.0.1:8090", "timeout_s": 15, "reset": True,
                "esegui": True, "soglia": 0.6, "soglia_pagine": 0.35, "soglia_luci": 0.4,
-               "naviga": True,
+               "naviga": True, "regole": True, "azioni": [],
                "queries": ["meteo a ventotene", "timer 5 minuti", "apri la pagina sistema",
                            "vai alla home"]},
     "new": {"tipi": ["timer", "alarm", "needle"]},
@@ -97,6 +103,9 @@ def validate(cfg: dict[str, Any], known_widgets: set[str]) -> None:
     for chiave in ("soglia", "soglia_pagine", "soglia_luci"):
         if not isinstance(nd.get(chiave), (int, float)) or not 0 <= nd[chiave] <= 1:
             raise ConfigError(f"needle.{chiave} deve essere un numero fra 0 e 1")
+    if not isinstance(nd.get("regole"), bool):
+        raise ConfigError("needle.regole deve essere true o false")
+    _valida_azioni(nd.get("azioni"))
     qs = nd.get("queries")
     if not isinstance(qs, list) or not 1 <= len(qs) <= 6 or not all(isinstance(q, str) for q in qs):
         raise ConfigError("needle.queries deve essere una lista da 1 a 6 frasi")
@@ -173,3 +182,67 @@ def load_config(path: str | Path, known_widgets: set[str]) -> dict[str, Any]:
         log.warning('nessuna scheda "+" in pages: aggiungi {"name": "+", "widget": "new"} '
                     "in %s per gestire le schede dallo schermo", local if local.exists() else p)
     return cfg
+
+
+def _intero(v: Any, minimo: int, massimo: int) -> bool:
+    return isinstance(v, int) and not isinstance(v, bool) and minimo <= v <= massimo
+
+
+def _valida_azioni(azioni: Any) -> None:
+    """`needle.azioni`: voci con frasi chiave e, da sole o insieme, timer, sveglia, luci e pagina."""
+    if not isinstance(azioni, list) or len(azioni) > MAX_AZIONI:
+        raise ConfigError(f"needle.azioni deve essere una lista di al massimo {MAX_AZIONI} voci")
+    for i, a in enumerate(azioni, 1):
+        dove = f"needle.azioni[{i}]"
+        if not isinstance(a, dict):
+            raise ConfigError(f"{dove} deve essere un oggetto")
+        if not isinstance(a.get("nome"), str) or not a["nome"].strip():
+            raise ConfigError(f"{dove}.nome manca")
+        frasi = a.get("frasi")
+        if (not isinstance(frasi, list) or not 1 <= len(frasi) <= 8
+                or not all(isinstance(f, str) and f.strip() for f in frasi)):
+            raise ConfigError(f"{dove}.frasi deve essere una lista da 1 a 8 frasi non vuote")
+        if not any(a.get(k) for k in ("timer", "sveglia", "luci", "pagina")):
+            raise ConfigError(f"{dove} non fa nulla: serve timer, sveglia, luci o pagina")
+        t = a.get("timer")
+        if t is not None:
+            if not isinstance(t, dict) or not set(t) <= {"ore", "minuti", "secondi"} or not all(
+                    _intero(v, 0, MAX_TIMER_S) for v in t.values()):
+                raise ConfigError(f"{dove}.timer vuole ore, minuti, secondi (interi)")
+            totale = t.get("ore", 0) * 3600 + t.get("minuti", 0) * 60 + t.get("secondi", 0)
+            if not 1 <= totale <= MAX_TIMER_S:
+                raise ConfigError(f"{dove}.timer da 1 s a 180 minuti")
+        s = a.get("sveglia")
+        if s is not None:
+            try:
+                hh, mm = (int(x) for x in str(s).split(":"))
+                valido = isinstance(s, str) and 0 <= hh < 24 and 0 <= mm < 60
+            except ValueError:
+                valido = False
+            if not valido:
+                raise ConfigError(f"{dove}.sveglia deve essere un orario HH:MM")
+        g = a.get("giorni")
+        if g is not None and (not isinstance(g, list) or not g or not all(_intero(d, 0, 6) for d in g)):
+            raise ConfigError(f"{dove}.giorni deve essere una lista di numeri da 0 (lunedì) a 6")
+        if g is not None and s is None:
+            raise ConfigError(f"{dove}.giorni serve solo con una sveglia")
+        if a.get("pagina") is not None and a["pagina"] not in PAGINE_APRIBILI:
+            raise ConfigError(f"{dove}.pagina deve essere una tra {', '.join(PAGINE_APRIBILI)}")
+        luci = a.get("luci")
+        if luci is not None:
+            if not isinstance(luci, list) or not 1 <= len(luci) <= 10:
+                raise ConfigError(f"{dove}.luci deve essere una lista da 1 a 10 comandi")
+            for luce in luci:
+                if (not isinstance(luce, dict) or not isinstance(luce.get("stanza"), str)
+                        or not luce["stanza"].strip()):
+                    raise ConfigError(f"{dove}.luci: ogni comando vuole la stanza ('tutte' per casa)")
+                if "acceso" in luce and not isinstance(luce["acceso"], bool):
+                    raise ConfigError(f"{dove}.luci: acceso deve essere true o false")
+                if "percentuale" in luce and not _intero(luce["percentuale"], 1, 100):
+                    raise ConfigError(f"{dove}.luci: percentuale da 1 a 100")
+                if "colore" in luce and luce["colore"] not in COLORI:
+                    raise ConfigError(f"{dove}.luci: colore tra {', '.join(COLORI)}")
+                if "temperatura" in luce and luce["temperatura"] not in TEMPERATURE:
+                    raise ConfigError(f"{dove}.luci: temperatura tra {', '.join(TEMPERATURE)}")
+                if "colore" in luce and "temperatura" in luce:
+                    raise ConfigError(f"{dove}.luci: colore e temperatura non insieme")

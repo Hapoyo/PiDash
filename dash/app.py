@@ -109,9 +109,17 @@ class App:
             page.widget.avviso = self.notice
             page.widget.info = self.info
             page.widget.alimentazione = lambda: self.power
+        if isinstance(page.widget, NeedleWidget):   # per capire "luce del soggiorno" servono i nomi
+            page.widget.stanze = self._nomi_stanze
         self.pages.insert(len(self.pages) if at is None else at, page)
         self.widgets[key] = page.widget
         return page
+
+    def _nomi_stanze(self) -> list[str] | None:
+        """Stanze del bridge Hue per l'interprete di frasi; None se Hue non c'è (HueError: bridge muto)."""
+        if not self.hue.configurato:
+            return None
+        return [s.nome for s in self.hue.stanze()]
 
     def page_kinds(self) -> dict[str, str]:
         """{tipo: chiave} delle pagine presenti, per l'interruttore della scheda "+"."""

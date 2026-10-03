@@ -18,7 +18,7 @@ from typing import Any, Callable
 from urllib import error, request
 from urllib.parse import urlsplit
 
-from .. import azioni
+from .. import azioni, frasi
 from .base import Widget
 
 log = logging.getLogger(__name__)
@@ -26,6 +26,7 @@ log = logging.getLogger(__name__)
 CHECK_S = 5.0   # ogni quanto si controlla che il servizio sia raggiungibile
 FLASH_S = 0.3   # evidenza dell'ultima frase toccata
 ESITO_MAX = 40  # caratteri dell'esito che stanno nell'intestazione a 480 px
+RECENTE_S = 6.0  # quanto dura la faccia del bot dopo una risposta (contento, errore, dubbio)
 
 PostJson = Callable[[str, dict[str, Any], float], dict[str, Any]]
 
@@ -39,6 +40,7 @@ class Risposta:
     ms: int = 0
     errore: str = ""
     esito: str = ""   # cosa ha fatto il dashboard ("timer 5' avviato"), scritto da App
+    t: float = 0.0    # quando è arrivata (orologio del widget): il bot ricorda l'esito per poco
 
 
 def post_json(url: str, payload: dict[str, Any], timeout: float) -> dict[str, Any]:
@@ -95,6 +97,10 @@ class NeedleWidget(Widget):
         self.soglia_pagine = float(cfg.get("soglia_pagine", 0.35))  # come sopra, se apre solo una pagina
         self.soglia_luci = float(cfg.get("soglia_luci", 0.4))       # e per le luci (con controlli sul testo)
         self.naviga = bool(cfg.get("naviga", True))   # dopo l'azione si apre la pagina interessata
+        self.regole = bool(cfg.get("regole", True))   # timer, sveglie e luci capiti dal codice, non dal modello
+        self.azioni: list[dict[str, Any]] = [dict(a) for a in cfg.get("azioni") or []]
+        self.stanze: frasi.Stanze | None = None       # nomi delle stanze Hue, li dà App
+        self.umore_forzato = ""                       # anteprime e test: fissa la faccia del bot
         self._pending: list[tuple[str, dict[str, Any], str]] = []
         self.idx = 0
         self._clock = clock
@@ -115,7 +121,7 @@ class NeedleWidget(Widget):
         with self._lock:
             self._online = True
             self._last = Risposta(self.queries[0] if self.queries else "", ("get_weather(city=Ventotene)",),
-                                  0.95, 2210, esito="apro il meteo")
+                                  0.95, 2210, esito="apro il meteo", t=self._clock())
 
     # --- stato -----------------------------------------------------------
     def snapshot(self) -> tuple[bool | None, bool, Risposta | None]:
@@ -129,13 +135,36 @@ class NeedleWidget(Widget):
             return "penso…"
         return "pronto" if online else ("offline" if online is False else "controllo…")
 
+    def umore(self) -> str:
+        """Faccia del bot: offline, controllo, penso, pronto, fatto, dubbio o errore.
+
+        L'esito (fatto, dubbio, errore) si vede per `RECENTE_S` secondi dopo la risposta; poi il
+        bot torna "pronto". Nelle anteprime (`demo`) resta quello dell'ultima risposta.
+        """
+        if self.umore_forzato:
+            return self.umore_forzato
+        online, busy, last = self.snapshot()
+        if online is False:
+            return "offline"
+        if online is None:
+            return "controllo"
+        if busy:
+            return "penso"
+        if last is None or (not self.demo and self._clock() - last.t >= RECENTE_S):
+            return "pronto"
+        if last.errore or last.esito.startswith("errore"):
+            return "errore"
+        if not last.chiamate or last.esito.startswith("confidenza bassa"):
+            return "dubbio"
+        return "fatto"
+
     def flashing(self) -> int:
         """Indice dell'ultima frase toccata, per un attimo; altrimenti -1."""
         return self._hit if self._clock() - self._hit_at < FLASH_S else -1
 
     def state_key(self, now: datetime) -> Hashable:
         online, busy, last = self.snapshot()
-        return (online, busy, last, self.idx, self.flashing())
+        return (online, busy, last, self.idx, self.flashing(), self.umore())
 
     # --- rete ------------------------------------------------------------
     def update(self, now: datetime) -> None:
@@ -161,25 +190,54 @@ class NeedleWidget(Widget):
         """Invia la frase `i` al modello (in un thread); ignorata se ce n'è una in corso."""
         if not 0 <= i < len(self.queries):
             return
+        # senza il servizio le frasi che l'interprete capisce da sole funzionano lo stesso
+        fuori = self._online is False and not (self.regole and frasi.interpreta(
+            self.queries[i], self.azioni))
         with self._lock:
-            if self._busy or self._online is False:
+            if self._busy or fuori:
                 return
             self._busy = True
         self._hit, self._hit_at = i, self._clock()
         threading.Thread(target=self._run, args=(self.queries[i],), name="needle-ask",
                          daemon=True).start()
 
+    def _regole(self, domanda: str) -> list[tuple[str, dict[str, Any]]] | None:
+        """Le chiamate che l'interprete di frasi ricava da solo; None se serve il modello."""
+        if not self.regole:
+            return None
+        try:
+            return frasi.interpreta(domanda, self.azioni, self._nomi_stanze)
+        except (OSError, RuntimeError, ValueError) as exc:   # Hue spento: l'azione lo dirà
+            log.debug("needle: regole non applicabili: %s", exc)
+            return None
+
+    def _nomi_stanze(self) -> list[str] | None:
+        """Nomi delle stanze Hue; None se il bridge non c'è o non risponde."""
+        if self.stanze is None:
+            return None
+        try:
+            return self.stanze()
+        except (OSError, RuntimeError, ValueError):
+            return None
+
     def _run(self, domanda: str) -> None:
         t0 = self._clock()
         try:
-            if self.reset:
-                try:
-                    self._post(f"{self.url}/reset", {}, self.timeout_s)
-                except (OSError, ValueError, error.URLError) as exc:
-                    log.debug("needle: reset non riuscito: %s", exc)
-            data = self._post(f"{self.url}/complete", {"input": domanda}, self.timeout_s)
-            risposta = parse(domanda, data, round((self._clock() - t0) * 1000))
-            calls = raw_calls(data)
+            regole = self._regole(domanda)
+            if regole:      # capita dal codice: niente modello, nessuna attesa
+                data = {"function_calls": [{"name": n, "arguments": a} for n, a in regole],
+                        "confidence": 1.0, "success": True}
+                risposta = parse(domanda, data, round((self._clock() - t0) * 1000))
+                calls = raw_calls(data)
+            else:
+                if self.reset:
+                    try:
+                        self._post(f"{self.url}/reset", {}, self.timeout_s)
+                    except (OSError, ValueError, error.URLError) as exc:
+                        log.debug("needle: reset non riuscito: %s", exc)
+                data = self._post(f"{self.url}/complete", {"input": domanda}, self.timeout_s)
+                risposta = parse(domanda, data, round((self._clock() - t0) * 1000))
+                calls = raw_calls(data)
         except (OSError, ValueError, error.URLError) as exc:  # timeout, rifiuto, JSON rotto
             log.warning("needle: %s", exc)
             risposta, calls = Risposta(domanda, errore="servizio non risponde"), []
@@ -195,7 +253,7 @@ class NeedleWidget(Widget):
         with self._lock:
             # le esegue App nel ciclo principale, non questo thread; serve anche la frase detta
             self._pending.extend((nome, args, domanda) for nome, args in calls)
-            self._last = risposta
+            self._last = replace(risposta, t=self._clock())
             self._busy = False
             if risposta.errore == "servizio non risponde":
                 self._online = False
