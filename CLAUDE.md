@@ -51,6 +51,7 @@ docs/                  installazione.md (guida), hardware.md (pin, overlay, SPI)
 fonts/                 Space Grotesk, Space Mono (OFL) + licenze
 scripts/aggiorna.sh    aggiornamento sul Pi: pull, dipendenze, test, riavvio, rollback
 scripts/installa-servizio.sh  installa systemd/pi-dash.service con utente e cartella reali
+scripts/console-silenziosa.sh  toglie la console di testo dallo schermo (cmdline.txt, getty@tty1), una volta sul Pi
 scripts/installa-needle.sh    installa systemd/needle.service (servizio del modello Needle)
 systemd/pi-dash.service  avvio automatico (modello: User=pi, /home/pi/pi-dash)
 systemd/needle.service   API locale di Needle sulla porta 8090 (modello: /home/pi/needle)

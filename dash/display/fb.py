@@ -12,6 +12,7 @@ from __future__ import annotations
 import fcntl
 import logging
 import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,7 @@ log = logging.getLogger(__name__)
 
 KDSETMODE = 0x4B3A
 KD_TEXT, KD_GRAPHICS = 0x00, 0x01
+HIDE_EVERY_S = 20.0  # ogni quanto si ripete "cursore nascosto"
 HIDE_CURSOR, SHOW_CURSOR = b"\x1b[?25l", b"\x1b[?25h"
 SYS_FB = Path("/sys/class/graphics")
 DEV_DIR = Path("/dev")
@@ -114,7 +116,9 @@ class FramebufferDisplay(Display):
             raise RuntimeError(f"{path}: permesso negato (l'utente deve essere nel gruppo 'video')") from exc
         self._tty: int | None = None
         self._prev: Image.Image | None = None  # ultimo fotogramma scritto, per le fasce cambiate
-        if cfg.get("console_off", True):
+        self._console_off = bool(cfg.get("console_off", True))
+        self._next_hide = time.monotonic() + HIDE_EVERY_S
+        if self._console_off:
             self._console(KD_GRAPHICS)
         log.info("framebuffer %s (%s) %d×%d %d bpp, disegno %d×%d",
                  path, name, self.fb_w, self.fb_h, self.bpp, self.width, self.height)
@@ -124,20 +128,39 @@ class FramebufferDisplay(Display):
         try:
             if self._tty is None:
                 try:
-                    self._tty = os.open("/dev/tty0", os.O_RDWR)
+                    self._tty = os.open("/dev/tty0", os.O_RDWR | os.O_NOCTTY)
                 except PermissionError:  # gruppo tty: solo scrittura
-                    self._tty = os.open("/dev/tty0", os.O_WRONLY)
+                    self._tty = os.open("/dev/tty0", os.O_WRONLY | os.O_NOCTTY)
             fcntl.ioctl(self._tty, KDSETMODE, mode)
-            # cursore lampeggiante della console (il "-" sullo schermo): nascosto anche a parte,
-            # perché con KD_GRAPHICS non sempre fbcon smette di disegnarlo
-            os.write(self._tty, HIDE_CURSOR if mode == KD_GRAPHICS else SHOW_CURSOR)
         except OSError as exc:
             log.warning("console non fermata (%s): può comparire il cursore, vedi docs/installazione.md § 5.5", exc)
             if self._tty is not None:
                 os.close(self._tty)
                 self._tty = None
+        self._cursor(mode == KD_TEXT)  # anche se KDSETMODE è fallito: non serve il permesso
+
+    @staticmethod
+    def _cursor(show: bool) -> None:
+        """Mostra o nasconde il cursore lampeggiante (il "-" sullo schermo) su tty0 e tty1.
+
+        Scrive solo la sequenza ESC[?25l / ESC[?25h: basta il gruppo `tty`, niente capability.
+        """
+        for tty in ("/dev/tty0", "/dev/tty1"):
+            try:
+                fd = os.open(tty, os.O_WRONLY | os.O_NOCTTY | os.O_NONBLOCK)
+            except OSError:
+                continue
+            try:
+                os.write(fd, SHOW_CURSOR if show else HIDE_CURSOR)
+            except OSError as exc:
+                log.debug("cursore su %s non gestito (%s)", tty, exc)
+            finally:
+                os.close(fd)
 
     def show(self, img: Image.Image) -> None:
+        if self._console_off and time.monotonic() >= self._next_hide:
+            self._next_hide = time.monotonic() + HIDE_EVERY_S
+            self._cursor(False)  # un login o un reset del terminale lo riaccenderebbero
         if img.size != (self.fb_w, self.fb_h):
             img = img.resize((self.fb_w, self.fb_h), Image.Resampling.NEAREST)
         img = img.convert("RGB")
@@ -159,6 +182,8 @@ class FramebufferDisplay(Display):
             log.error("scrittura framebuffer fallita: %s", exc)
 
     def close(self) -> None:
+        if self._tty is None and self._console_off:
+            self._cursor(True)  # KDSETMODE non era riuscito: si restituisce comunque il cursore
         if self._tty is not None:
             self._console(KD_TEXT)          # può chiudere il descrittore in caso di errore
             tty, self._tty = self._tty, None
